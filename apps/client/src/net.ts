@@ -28,8 +28,10 @@ function serverUrl(): string {
   if (fromQuery) return fromQuery;
   const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
   if (fromEnv) return fromEnv;
-  const protocol = location.protocol === 'https:' ? 'https' : 'http';
-  return `${protocol}://${location.hostname}:2567`;
+  // Production: the page and the game server share one origin (behind Caddy, or the game
+  // server serving the client itself). Development: the Vite page is on :5173, server on :2567.
+  if (!import.meta.env.DEV) return location.origin;
+  return `${location.protocol}//${location.hostname}:2567`;
 }
 
 export interface NetHandlers {

@@ -1,0 +1,23 @@
+# Public entry point: HTTPS (automatic certificates) → game server and API.
+# SITE_ADDRESS: your domain for real deploys (e.g. play.example.com: Caddy gets a Let's Encrypt
+# certificate automatically), or http://localhost:8080 for a local production-like run.
+{$SITE_ADDRESS:http://localhost:8080} {
+	encode zstd gzip
+
+	# API: /api/profiles/… → api:8787/profiles/…
+	handle_path /api/* {
+		reverse_proxy api:8787
+	}
+
+	# Everything else: the game page, its assets, matchmaking and the game WebSocket.
+	handle {
+		reverse_proxy game:2567
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

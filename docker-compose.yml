@@ -1,12 +1,29 @@
-# Local production-like run: `docker compose up --build`, then open http://localhost:2567
-# Requires SENTINEL_API_SECRET (32+ random characters), e.g. in a .env file next to this one:
+# Production-like stack: Caddy (HTTPS) → game server (+ built client) and API.
+#
 #   echo "SENTINEL_API_SECRET=$(openssl rand -hex 32)" > .env
+#   docker compose up -d --build            # local: http://localhost:8080
+#
+# On a server with a domain pointing at it, also set SITE_ADDRESS=play.example.com in .env;
+# Caddy then serves https://play.example.com with an automatic certificate.
 services:
+  caddy:
+    image: caddy:2
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8080:8080'
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-http://localhost:8080}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - game
+      - api
+    restart: unless-stopped
   game:
     build: .
     image: sentinel-strike
-    ports:
-      - '2567:2567'
     environment:
       SENTINEL_API_URL: http://api:8787
       SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?Set SENTINEL_API_SECRET to a random value of 32+ characters (see README)}
@@ -16,13 +33,13 @@ services:
   api:
     image: sentinel-strike
     command: ['node', 'apps/api/dist/index.mjs']
-    ports:
-      - '8787:8787'
     environment:
       SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?Set SENTINEL_API_SECRET to a random value of 32+ characters (see README)}
       SENTINEL_DB: /data/sentinel.db
+      TRUST_PROXY: '1'
     volumes:
       - sentinel-data:/data
     restart: unless-stopped
 volumes:
   sentinel-data:
+  caddy-data:

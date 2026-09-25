@@ -4,6 +4,7 @@ import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
 import type { Store } from './db.ts';
+import { counters, metrics } from './ops.ts';
 import { levelFor, xpForMatch } from './xp.ts';
 
 const GUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -55,6 +56,14 @@ export interface AppOptions {
 export function createApp(store: Store, secret: string, opts: AppOptions = {}): Hono {
   const app = new Hono();
   app.use('*', cors());
+  app.use('*', async (_c, next) => {
+    counters.requests.inc();
+    await next();
+  });
+
+  app.get('/metrics', (c) =>
+    c.text(metrics.render(), 200, { 'content-type': 'text/plain; version=0.0.4' }),
+  );
   const ipOf = opts.clientIp ?? (() => 'local');
   const g = opts.guestLimit ?? { burst: 30, perSecond: 0.5 };
   const guestLimit = new RateLimiter(g.burst, g.perSecond);
@@ -62,7 +71,11 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
 
   /** New guest: a random id and a token signed with the server secret (Phase 4 lite). */
   app.post('/guests', (c) => {
-    if (!guestLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
+    if (!guestLimit.take(ipOf(c))) {
+      counters.rateLimited.inc();
+      return c.json({ error: 'too many requests' }, 429);
+    }
+    counters.guests.inc();
     return c.json(issueGuestToken(secret));
   });
 
@@ -75,16 +88,21 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
   app.post('/matches', async (c) => {
     const body = await c.req.text();
     if (!validSignature(body, c.req.header('x-sentinel-signature'), secret)) {
+      counters.rejected.inc();
       return c.json({ error: 'bad signature' }, 401);
     }
     let parsed;
     try {
       parsed = MatchResultSchema.parse(JSON.parse(body));
     } catch {
+      counters.rejected.inc();
       return c.json({ error: 'bad match result' }, 400);
     }
-    if (!store.recordMatch(parsed.matchId, parsed))
+    if (!store.recordMatch(parsed.matchId, parsed)) {
+      counters.rejected.inc();
       return c.json({ error: 'match already recorded' }, 409);
+    }
+    counters.matches.inc();
     const awarded: { guestId: string; xp: number }[] = [];
     const seen = new Set<string>();
     for (const p of parsed.players) {
@@ -106,7 +124,10 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
 
   /** Public profile: level, XP and totals (defaults for a new guest). */
   app.get('/profiles/:guestId', (c) => {
-    if (!readLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
+    if (!readLimit.take(ipOf(c))) {
+      counters.rateLimited.inc();
+      return c.json({ error: 'too many requests' }, 429);
+    }
     const guestId = c.req.param('guestId');
     if (!GUEST_ID.test(guestId)) return c.json({ error: 'bad guest id' }, 400);
     const row = store.profile(guestId);

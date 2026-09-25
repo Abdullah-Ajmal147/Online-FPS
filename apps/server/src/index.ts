@@ -1,13 +1,25 @@
 import { existsSync } from 'node:fs';
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import express from 'express';
+import { resolveApiSecret } from '@sentinel/auth';
 import { PROTOCOL_VERSION } from '@sentinel/protocol';
+import express from 'express';
 import { MatchRoom } from './MatchRoom.ts';
 import { createApiReporter } from './apiReporter.ts';
-import { resolveApiSecret } from '@sentinel/auth';
+import { log, metrics } from './ops.ts';
 
 const port = Number(process.env.PORT ?? 2567);
+
+// A crash we didn't expect leaves the process in an unknown state: log it and exit so the
+// platform (Docker restart policy, Fly.io, systemd) starts a clean one.
+process.on('uncaughtException', (err) => {
+  log.fatal('uncaught exception', { err });
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  log.fatal('unhandled promise rejection', { reason: String(reason) });
+  process.exit(1);
+});
 
 const server = new Server({
   transport: new WebSocketTransport(),
@@ -16,26 +28,31 @@ const server = new Server({
     app.get('/healthz', (_req, res) => {
       res.json({ ok: true, service: 'server', protocolVersion: PROTOCOL_VERSION });
     });
+    // Prometheus metrics: rooms, players, tick times, errors, matches.
+    app.get('/metrics', (_req, res) => {
+      res.type('text/plain; version=0.0.4').send(metrics.render());
+    });
     // Production: serve the built client from this same port (one container = the whole game).
     const clientDir = process.env.SENTINEL_CLIENT_DIR;
     if (clientDir && existsSync(clientDir)) {
       app.use(express.static(clientDir, { maxAge: '1h', index: 'index.html' }));
-      console.log(`[server] serving client from ${clientDir}`);
+      log.info('serving client', { dir: clientDir });
     }
   },
 });
 
 server.define('match', MatchRoom);
 
-// Finished matches go to the API for XP (Phase 4 lite). Needs the same secret as the API.
-const apiUrl = process.env.SENTINEL_API_URL ?? 'http://localhost:8787';
+// Finished matches go to the API for XP. Needs the same secret as the API.
 const report = createApiReporter({
-  url: apiUrl,
+  url: process.env.SENTINEL_API_URL ?? 'http://localhost:8787',
   secret: resolveApiSecret(process.env),
+  log,
 });
 MatchRoom.onMatchEnd = (summary) => void report(summary);
 
+// Colyseus already handles SIGTERM/SIGINT: it stops matchmaking, disposes rooms and exits.
+server.onShutdown(() => log.info('shutting down: closing rooms'));
+
 await server.listen(port);
-console.log(
-  `[server] Colyseus listening on ws://localhost:${port} (protocol v${PROTOCOL_VERSION})`,
-);
+log.info('listening', { port, protocol: PROTOCOL_VERSION });

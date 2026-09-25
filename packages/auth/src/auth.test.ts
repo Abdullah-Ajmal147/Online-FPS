@@ -54,3 +54,43 @@ describe('resolveApiSecret', () => {
     expect(resolveApiSecret({ NODE_ENV: 'production', SENTINEL_API_SECRET: good })).toBe(good);
   });
 });
+
+describe('ops', () => {
+  it('renders Prometheus counters and gauges', async () => {
+    const { Metrics } = await import('./ops.ts');
+    const m = new Metrics();
+    const c = m.counter('sentinel_matches_total', 'Matches finished');
+    c.inc();
+    c.inc(2);
+    m.gauge('sentinel_players', 'Players connected', () => 7);
+    const text = m.render();
+    expect(text).toContain('# TYPE sentinel_matches_total counter\nsentinel_matches_total 3');
+    expect(text).toContain('sentinel_players 7');
+  });
+
+  it('computes percentiles over a rolling window', async () => {
+    const { Window } = await import('./ops.ts');
+    const w = new Window(100);
+    for (let i = 1; i <= 200; i++) w.add(i);
+    expect(w.percentile(0.5)).toBe(151);
+    expect(w.percentile(0.99)).toBe(200);
+  });
+
+  it('logs JSON lines in production', async () => {
+    const { createLogger } = await import('./ops.ts');
+    const lines: string[] = [];
+    const orig = console.log;
+    console.log = (s: string) => void lines.push(s);
+    try {
+      createLogger('test', { NODE_ENV: 'production' }).info('hello', { room: 'r1' });
+    } finally {
+      console.log = orig;
+    }
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      level: 'info',
+      service: 'test',
+      msg: 'hello',
+      room: 'r1',
+    });
+  });
+});

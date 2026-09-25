@@ -40,8 +40,7 @@ export class BotController {
     private readonly difficulty: Difficulty,
     private readonly target = MAX_PLAYERS_PER_MATCH,
   ) {
-    const ctx = sim.context.movement;
-    this.nav = new NavGrid(ctx.rapier, ctx.world, ctx.tuning, mapBounds(map));
+    this.nav = navFor(sim, map);
   }
 
   get count(): number {
@@ -107,6 +106,23 @@ export class BotController {
   private botOn(team: number): SimPlayer | undefined {
     return [...this.sim.players.values()].find((p) => p.bot && p.team === team);
   }
+}
+
+/**
+ * Nav grids per map, built once per process: building one blocks the event loop for a few
+ * hundred ms, which must not happen every time a room opens. The grid only depends on the
+ * static map geometry, so every room on that map can share it.
+ */
+const navCache = new Map<string, NavGrid>();
+
+function navFor(sim: MatchSim, map: GameMap): NavGrid {
+  let nav = navCache.get(map.id);
+  if (!nav) {
+    const ctx = sim.context.movement;
+    nav = new NavGrid(ctx.rapier, ctx.world, ctx.tuning, mapBounds(map));
+    navCache.set(map.id, nav);
+  }
+  return nav;
 }
 
 /** The map's floor extent (from its geometry), for the nav grid. */

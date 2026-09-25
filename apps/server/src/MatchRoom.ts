@@ -28,6 +28,7 @@ import { sanitizeName } from './names.ts';
 import { isProtocolCompatible } from './protocol-check.ts';
 import { MatchSim } from './sim.ts';
 import { PUMP_INTERVAL_MS, TickLoop } from './tickLoop.ts';
+import { counters, liveRooms, log, tickWindow } from './ops.ts';
 
 /** HTTP-style status used when rejecting a client built for another protocol version. */
 const RELOAD_REQUIRED_CODE = 426; // "Upgrade Required"
@@ -88,7 +89,7 @@ export class MatchRoom extends Room {
     const preset = presetFromEnv(process.env.SENTINEL_LAG);
     if (preset) {
       this.lag = new FakeLag(preset, Date.now() & 0xffff);
-      console.warn(`[match] fake lag ON: ${JSON.stringify(preset)}`);
+      log.warn('fake lag ON (test setting)', { preset });
     }
     // SENTINEL_MAP picks the map (tests use the open "arena").
     this.mapId = process.env.SENTINEL_MAP ?? 'relay-yard';
@@ -102,7 +103,7 @@ export class MatchRoom extends Room {
     this.sim = new MatchSim(rapier, map, movement, defaultLoadout, Date.now() & 0xffffffff);
     if (process.env.SENTINEL_TEST_NO_DEATH) {
       this.sim.noDeath = true;
-      console.warn('[match] TEST MODE: players cannot die (SENTINEL_TEST_NO_DEATH)');
+      log.warn('TEST MODE: players cannot die (SENTINEL_TEST_NO_DEATH)');
     }
 
     const tdm = modes['team-deathmatch']!;
@@ -119,7 +120,8 @@ export class MatchRoom extends Room {
     );
     this.match.onMatchEnd = (summary) => {
       // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
-      console.log(`[match-summary] ${JSON.stringify(summary)}`);
+      counters.matches.inc();
+      log.info('match ended', { room: this.roomId, summary });
       MatchRoom.onMatchEnd?.(summary);
     };
 
@@ -129,6 +131,7 @@ export class MatchRoom extends Room {
       this.bots.fill();
     }
 
+    liveRooms.add(this.gauges);
     this.loop = new TickLoop(() => this.tick());
     this.setSimulationInterval(() => this.loop.pump(), PUMP_INTERVAL_MS);
 
@@ -168,10 +171,13 @@ export class MatchRoom extends Room {
     context: AuthContext,
   ): { guestId: string | null } {
     if (!isProtocolCompatible(options)) {
+      counters.rejectedJoins.inc();
       throw new ServerError(RELOAD_REQUIRED_CODE, RELOAD_REQUIRED);
     }
-    if (!joinLimit.take(context.ip ?? 'unknown'))
+    if (!joinLimit.take(context.ip ?? 'unknown')) {
+      counters.rejectedJoins.inc();
       throw new ServerError(429, 'too many joins, try again shortly');
+    }
     const token = (options as { token?: unknown }).token;
     return { guestId: verifyGuestToken(token, API_SECRET) };
   }
@@ -193,9 +199,14 @@ export class MatchRoom extends Room {
       badMessages: 0,
       lastPingMs: -Infinity,
     });
-    console.log(
-      `[match ${this.roomId}] join "${player.name}" as player ${player.id} (team ${player.team})`,
-    );
+    counters.joins.inc();
+    log.info('player joined', {
+      room: this.roomId,
+      player: player.id,
+      team: player.team,
+      name: player.name,
+      guest: player.guestId !== null,
+    });
     client.sendBytes(
       MessageType.Hello,
       encodeHello({
@@ -225,7 +236,7 @@ export class MatchRoom extends Room {
     this.seats.delete(client.sessionId);
     this.lag?.forget(client.sessionId);
     this.bots?.fill();
-    console.log(`[match ${this.roomId}] leave ${client.sessionId}`);
+    log.info('player left', { room: this.roomId, session: client.sessionId });
   }
 
   private onInputCmd(client: Client, bytes: Uint8Array): void {
@@ -249,20 +260,36 @@ export class MatchRoom extends Room {
    * A failing tick is logged and skipped; repeated failures close just this room.
    */
   private tick(): void {
+    const start = performance.now();
     try {
       this.tickUnsafe();
       this.consecutiveTickErrors = 0;
+      const ms = performance.now() - start;
+      tickWindow.add(ms);
+      counters.ticks.inc();
+      if (ms > 4) counters.slowTicks.inc();
     } catch (err) {
       this.tickErrors++;
-      console.error(`[match ${this.roomId}] tick ${this.sim.tick} failed:`, err);
+      counters.tickErrors.inc();
+      log.error('tick failed', { room: this.roomId, tick: this.sim.tick, err });
       if (++this.consecutiveTickErrors >= 30) {
-        console.error(`[match ${this.roomId}] 30 failing ticks in a row: closing this room`);
+        log.error('30 failing ticks in a row: closing this room', { room: this.roomId });
         void this.disconnect();
       }
     }
   }
 
   private tickErrors = 0;
+  /** Player counts for the /metrics gauges. */
+  private readonly gauges = {
+    humans: () => this.seats.size,
+    bots: () => this.bots?.count ?? 0,
+  };
+
+  override onDispose(): void {
+    liveRooms.delete(this.gauges);
+    log.info('room closed', { room: this.roomId, tickErrors: this.tickErrors });
+  }
   private consecutiveTickErrors = 0;
 
   private tickUnsafe(): void {

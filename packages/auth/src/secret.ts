@@ -1,4 +1,5 @@
 export const DEV_SECRET = 'dev-only-secret';
+let warned = false;
 
 /**
  * The shared secret that signs guest tokens and match results. In development it falls back
@@ -15,9 +16,12 @@ export function resolveApiSecret(env: Record<string, string | undefined>): strin
         'SENTINEL_API_SECRET must be set to a random value of 32+ characters in production',
       );
     }
-    console.warn(
-      '[auth] SENTINEL_API_SECRET not set: using the development secret (never in production)',
-    );
+    if (!warned) {
+      console.warn(
+        '[auth] SENTINEL_API_SECRET not set: using the development secret (never in production)',
+      );
+      warned = true;
+    }
     return DEV_SECRET;
   }
   if (production && secret.length < 32)

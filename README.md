@@ -38,12 +38,13 @@ pnpm bots -- --count 5          # extra headless clients (they also measure the 
 ## Run the production build (Docker)
 
 ```bash
-docker compose up --build       # then open http://localhost:2567
+echo "SENTINEL_API_SECRET=$(openssl rand -hex 32)" > .env
+docker compose up -d --build    # then open http://localhost:8080
 ```
 
-One image serves the game client and the game server on port 2567; the API runs from the
-same image on 8787 with its SQLite database on a volume. Set `SENTINEL_API_SECRET` to a long
-random value (shared by both services) for anything beyond local testing.
+Caddy (HTTPS entry) → game server (serves the built client too) and the API at `/api`, with
+the database on a volume. To put it online with your own domain and automatic HTTPS, follow
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Develop
 

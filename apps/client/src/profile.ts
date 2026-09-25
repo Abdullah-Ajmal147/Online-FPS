@@ -60,12 +60,14 @@ export function forgetGuest(): void {
   }
 }
 
-/** API base URL: `?api=` in the page URL, then VITE_API_URL, then this host on port 8787. */
+/** API base URL: `?api=` (dev/allow-listed), then VITE_API_URL, then same origin /api (prod) or :8787 (dev). */
 export function apiUrl(): string {
   const fromQuery = urlFromQuery('api');
   if (fromQuery) return fromQuery;
   const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
   if (fromEnv) return fromEnv;
+  // Production: the API sits behind the same origin at /api (see deploy/Caddyfile).
+  if (!import.meta.env.DEV) return `${location.origin}/api`;
   return `${location.protocol}//${location.hostname}:8787`;
 }
 
