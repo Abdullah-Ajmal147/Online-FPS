@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import { parseArgs } from './args.ts';
+
+describe('parseArgs', () => {
+  it('uses defaults', () => {
+    expect(parseArgs([])).toEqual({ count: 1, url: 'http://localhost:2567' });
+  });
+
+  it('reads flags, skipping the pnpm "--" separator', () => {
+    expect(parseArgs(['--', '--count', '11', '--room', 'abc'])).toEqual({
+      count: 11,
+      room: 'abc',
+      url: 'http://localhost:2567',
+    });
+  });
+
+  it('rejects bad input', () => {
+    expect(() => parseArgs(['--count', '0'])).toThrow();
+    expect(() => parseArgs(['--nope', '1'])).toThrow();
+    expect(() => parseArgs(['--count'])).toThrow();
+  });
+});
