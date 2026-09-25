@@ -4,6 +4,16 @@
  */
 
 const textEncoder = new TextEncoder();
+
+/**
+ * DataView silently wraps out-of-range integers (300 → 44 in a u8). On the wire that turns a
+ * bug into a desync, so every integer write is range-checked and throws instead.
+ */
+function checkInt(value: number, min: number, max: number, type: string): void {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new RangeError(`${type} out of range: ${value}`);
+  }
+}
 const textDecoder = new TextDecoder();
 
 export class BinaryWriter {
@@ -35,6 +45,7 @@ export class BinaryWriter {
   }
 
   u8(value: number): this {
+    checkInt(value, 0, 0xff, 'u8');
     this.ensure(1);
     this.view.setUint8(this.offset, value);
     this.offset += 1;
@@ -42,6 +53,7 @@ export class BinaryWriter {
   }
 
   i8(value: number): this {
+    checkInt(value, -0x80, 0x7f, 'i8');
     this.ensure(1);
     this.view.setInt8(this.offset, value);
     this.offset += 1;
@@ -49,6 +61,7 @@ export class BinaryWriter {
   }
 
   u16(value: number): this {
+    checkInt(value, 0, 0xffff, 'u16');
     this.ensure(2);
     this.view.setUint16(this.offset, value, true);
     this.offset += 2;
@@ -56,6 +69,7 @@ export class BinaryWriter {
   }
 
   i16(value: number): this {
+    checkInt(value, -0x8000, 0x7fff, 'i16');
     this.ensure(2);
     this.view.setInt16(this.offset, value, true);
     this.offset += 2;
@@ -63,6 +77,7 @@ export class BinaryWriter {
   }
 
   u32(value: number): this {
+    checkInt(value, 0, 0xffffffff, 'u32');
     this.ensure(4);
     this.view.setUint32(this.offset, value, true);
     this.offset += 4;
@@ -70,6 +85,7 @@ export class BinaryWriter {
   }
 
   i32(value: number): this {
+    checkInt(value, -0x80000000, 0x7fffffff, 'i32');
     this.ensure(4);
     this.view.setInt32(this.offset, value, true);
     this.offset += 4;

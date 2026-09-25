@@ -24,6 +24,7 @@ function serverUrl(): string {
 export interface NetHandlers {
   onHello(hello: Hello): void;
   onSnapshot(snapshot: Snapshot, arrivalMs: number): void;
+  onDisconnect(): void;
 }
 
 const PING_INTERVAL_MS = 1000;
@@ -54,7 +55,14 @@ export class Connection {
       });
 
       room.onMessage(MessageType.Snapshot, (payload: Uint8Array) => {
-        handlers.onSnapshot(decodeSnapshot(payload), performance.now());
+        let snap: Snapshot;
+        try {
+          snap = decodeSnapshot(payload);
+        } catch (err) {
+          console.warn('[net] dropped a malformed snapshot:', err); // counts as lost
+          return;
+        }
+        handlers.onSnapshot(snap, performance.now());
       });
 
       room.onMessage(MessageType.Pong, (payload: Uint8Array) => {
@@ -70,7 +78,8 @@ export class Connection {
       room.onLeave(() => {
         clearInterval(this.pingTimer);
         this.room = undefined;
-        setStatus({ net: { state: 'error', text: 'disconnected' } });
+        setStatus({ net: { state: 'error', text: 'disconnected (practice mode)' } });
+        handlers.onDisconnect();
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

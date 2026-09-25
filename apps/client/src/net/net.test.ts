@@ -182,6 +182,23 @@ describe('RemoteBuffer', () => {
   });
 });
 
+describe('RemoteBuffer teleports', () => {
+  it('snaps instead of sliding across the map on a respawn', () => {
+    const b = new RemoteBuffer();
+    b.push(10, ent(0));
+    b.push(12, ent(0.2));
+    b.push(14, ent(40)); // respawned far away
+    expect(b.sample(13)!.position[0]).toBe(40);
+  });
+
+  it('forgets the old player when an id is reused by the other team', () => {
+    const b = new RemoteBuffer();
+    b.push(10, ent(0));
+    b.push(12, { ...ent(0.5), team: 1 });
+    expect(b.sample(11)!.team).toBe(1);
+  });
+});
+
 describe('InterpolationDelay', () => {
   it('stays at 2 snapshots with steady arrivals and grows (≤100 ms) with jitter', () => {
     const steady = new InterpolationDelay();

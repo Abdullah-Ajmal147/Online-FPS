@@ -101,6 +101,9 @@ export async function startGame(
   const interpDelay = new InterpolationDelay();
   const remoteBuffers = new Map<number, RemoteBuffer>();
   const remotePlayers = new RemotePlayers(scene);
+  // Test hook for Playwright: where remote players are drawn. Harmless in production.
+  (window as unknown as { __sentinelRemotes?: () => number[][] }).__sentinelRemotes = () =>
+    remotePlayers.positions();
   let latestServerTick = 0;
   let spawnedFromServer = false;
   let queueDepth = TARGET_QUEUE_DEPTH;
@@ -127,7 +130,21 @@ export async function startGame(
         predictor.reset({ ...snap.own, yaw: predictor.state.yaw, pitch: predictor.state.pitch });
         prevState = predictor.state;
       } else {
+        const before = predictor.state.position;
         predictor.onServerState(snap.own, snap.lastProcessedSeq);
+        // Shift the previous tick by the same correction, so the in-between frames don't pop.
+        const after = predictor.state.position;
+        if (after !== before) {
+          const p = prevState.position;
+          prevState = {
+            ...prevState,
+            position: [
+              p[0] + after[0] - before[0],
+              p[1] + after[1] - before[1],
+              p[2] + after[2] - before[2],
+            ],
+          };
+        }
       }
     }
 
@@ -142,7 +159,15 @@ export async function startGame(
     remotePlayers.retain(present);
   };
 
-  void conn.connect({ onHello: () => {}, onSnapshot });
+  const onDisconnect = () => {
+    // Back to offline practice: keep playing locally where we are.
+    spawnedFromServer = false;
+    latestServerTick = 0;
+    remoteBuffers.clear();
+    remotePlayers.retain(new Set());
+  };
+
+  void conn.connect({ onHello: () => {}, onSnapshot, onDisconnect });
 
   // --- Frame loop ---
   const timer = new THREE.Timer();

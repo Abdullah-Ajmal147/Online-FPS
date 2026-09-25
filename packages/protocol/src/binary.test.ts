@@ -39,6 +39,16 @@ describe('BinaryWriter / BinaryReader', () => {
     expect(() => r.u8()).toThrow(RangeError);
   });
 
+  it('refuses out-of-range or non-integer values instead of wrapping them', () => {
+    const w = new BinaryWriter();
+    expect(() => w.u8(256)).toThrow(RangeError);
+    expect(() => w.u8(-1)).toThrow(RangeError);
+    expect(() => w.i16(40000)).toThrow(RangeError);
+    expect(() => w.u16(1.5)).toThrow(RangeError);
+    expect(() => w.u32(Number.NaN)).toThrow(RangeError);
+    expect(() => w.u8(255).i8(-128).u32(0xffffffff)).not.toThrow();
+  });
+
   it('reset() lets the writer be reused', () => {
     const w = new BinaryWriter();
     w.u32(1);

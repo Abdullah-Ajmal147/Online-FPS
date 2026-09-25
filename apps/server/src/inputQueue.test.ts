@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { InputQueue, MAX_QUEUED_INPUTS, START_BUFFER } from './inputQueue.ts';
+import { Button } from '@sentinel/shared';
+import { InputQueue, MAX_QUEUED_INPUTS, MAX_REPEAT_TICKS, START_BUFFER } from './inputQueue.ts';
 
 const input = (seq: number, buttons = seq) => ({ seq, buttons, yaw: seq, pitch: 0, weaponSlot: 0 });
 
@@ -82,6 +83,57 @@ describe('InputQueue', () => {
     const q = started();
     for (let s = 3; s < 3 + 15; s++) q.push(input(s));
     expect(q.depth).toBe(START_BUFFER + 15);
+  });
+
+  it('recovers within a few ticks after a 250 ms hitch + burst (no double movement, no lingering lag)', () => {
+    const q = new InputQueue();
+    let seq = 0;
+    const send = () => q.push(input(++seq, Button.Forward));
+    // Steady state: one input arrives per tick, queue ~2 deep.
+    send();
+    send();
+    for (let t = 0; t < 60; t++) {
+      send();
+      q.next();
+    }
+    // Hitch: 15 ticks with nothing arriving; the server guesses.
+    for (let t = 0; t < 15; t++) q.next();
+    // Burst: the 15 late inputs arrive at once, then steady again.
+    for (let i = 0; i < 15; i++) send();
+    let ticks = 0;
+    while (q.depth > 3 && ticks < 100) {
+      send();
+      q.next();
+      ticks++;
+    }
+    expect(ticks).toBeLessThanOrEqual(30); // back to normal within 0.5 s
+  });
+
+  it('keeps jump/crouch presses from inputs dropped while catching up', () => {
+    const q = started();
+    q.next();
+    q.next(); // seq 2
+    q.next(); // starved ×2 → debt 2
+    q.next();
+    q.push(input(3, Button.Forward | Button.Jump)); // dropped (debt)
+    q.push(input(4, Button.Forward)); // dropped (debt)
+    q.push(input(5, Button.Forward));
+    const next = q.next()!;
+    expect(q.lastProcessedSeq).toBe(5);
+    expect(next.buttons & Button.Jump).toBeTruthy();
+  });
+
+  it('stops repeating a silent client after 250 ms (tabbed out while running)', () => {
+    const q = new InputQueue();
+    q.push(input(1, Button.Forward | Button.Sprint));
+    q.push(input(2, Button.Forward | Button.Sprint));
+    q.next();
+    q.next();
+    for (let t = 0; t < MAX_REPEAT_TICKS; t++)
+      expect(q.next()!.buttons).toBe(Button.Forward | Button.Sprint);
+    const idle = q.next()!;
+    expect(idle.buttons).toBe(0);
+    expect(idle.yaw).toBe(2); // keeps facing the same way
   });
 
   it('ignores garbage seqs once started', () => {

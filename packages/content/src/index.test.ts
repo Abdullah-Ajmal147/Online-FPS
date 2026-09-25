@@ -39,6 +39,15 @@ describe('maps', () => {
   });
 });
 
+describe('map validation', () => {
+  it('requires a spawn for each team', () => {
+    const map = JSON.parse(JSON.stringify(maps.greybox)) as { spawns: { team: number }[] };
+    map.spawns = map.spawns.filter((s) => s.team === 0);
+    map.spawns.push({ ...map.spawns[0]! });
+    expect(MapSchema.safeParse(map).success).toBe(false);
+  });
+});
+
 describe('movement tuning', () => {
   it('uses the approved starting numbers', () => {
     expect(movement.walkSpeed).toBe(5);
@@ -46,6 +55,11 @@ describe('movement tuning', () => {
     expect(movement.crouchSpeed).toBe(2.5);
     expect(movement.jumpHeight).toBe(1.1);
     expect(movement.slideDuration).toBe(0.8);
+  });
+
+  it('caps slide timers so they fit the u8 wire field', () => {
+    expect(MovementSchema.safeParse({ ...movement, slideDuration: 5 }).success).toBe(false);
+    expect(MovementSchema.safeParse({ ...movement, slideCooldown: 5 }).success).toBe(false);
   });
 
   it('rejects speeds in the wrong order', () => {

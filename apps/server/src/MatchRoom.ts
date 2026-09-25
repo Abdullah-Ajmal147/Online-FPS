@@ -5,6 +5,7 @@ import {
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
   decodeInputCmd,
+  decodeSnapshotAck,
   encodeHello,
   encodeSnapshot,
 } from '@sentinel/protocol';
@@ -25,10 +26,16 @@ const RELOAD_REQUIRED_CODE = 426; // "Upgrade Required"
 /** Malformed messages tolerated per client before we disconnect it. */
 const MAX_BAD_MESSAGES = 20;
 
+/** Normal traffic is 60 inputs + 1 ping per second; a 15-input catch-up burst still fits. */
+const MAX_MESSAGES_PER_SECOND = 150;
+/** Pings closer together than this are ignored (the client pings once a second). */
+const MIN_PING_INTERVAL_MS = 400;
+
 interface Seat {
   playerId: number;
   ackServerTick: number;
   badMessages: number;
+  lastPingMs: number;
 }
 
 /**
@@ -37,6 +44,8 @@ interface Seat {
  */
 export class MatchRoom extends Room {
   override maxClients = MAX_PLAYERS_PER_MATCH;
+  /** Colyseus disconnects a client that sends more than this (default is unlimited). */
+  override maxMessagesPerSecond = MAX_MESSAGES_PER_SECOND;
   private sim!: MatchSim;
   private loop!: TickLoop;
   private seats = new Map<string, Seat>();
@@ -58,12 +67,26 @@ export class MatchRoom extends Room {
       this.inbound(client, () => this.onInputCmd(client, bytes)),
     );
 
-    // Echo pings straight back so the client can measure round-trip time.
-    this.onMessageBytes(MessageType.Ping, (client: Client, bytes: Uint8Array) =>
-      this.inbound(client, () => {
-        if (bytes.length === 4) this.outbound(client, MessageType.Pong, bytes);
-      }),
-    );
+    // Echo pings straight back so the client can measure round-trip time (rate-limited).
+    this.onMessageBytes(MessageType.Ping, (client: Client, bytes: Uint8Array) => {
+      const seat = this.seats.get(client.sessionId);
+      const now = performance.now();
+      if (!seat || bytes.length !== 4 || now - seat.lastPingMs < MIN_PING_INTERVAL_MS) return;
+      seat.lastPingMs = now;
+      this.inbound(client, () => this.outbound(client, MessageType.Pong, bytes));
+    });
+
+    // Standalone ack (normally the ack rides on InputCmd).
+    this.onMessageBytes(MessageType.SnapshotAck, (client: Client, bytes: Uint8Array) => {
+      const seat = this.seats.get(client.sessionId);
+      if (!seat) return;
+      try {
+        const tick = decodeSnapshotAck(bytes);
+        seat.ackServerTick = Math.max(seat.ackServerTick, Math.min(tick, this.sim.tick));
+      } catch {
+        if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+      }
+    });
   }
 
   private onInputCmd(client: Client, bytes: Uint8Array): void {
@@ -105,7 +128,12 @@ export class MatchRoom extends Room {
 
   override onJoin(client: Client): void {
     const player = this.sim.addPlayer();
-    this.seats.set(client.sessionId, { playerId: player.id, ackServerTick: 0, badMessages: 0 });
+    this.seats.set(client.sessionId, {
+      playerId: player.id,
+      ackServerTick: 0,
+      badMessages: 0,
+      lastPingMs: -Infinity,
+    });
     console.log(
       `[match ${this.roomId}] join ${client.sessionId} as player ${player.id} (team ${player.team})`,
     );

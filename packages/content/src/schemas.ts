@@ -75,14 +75,18 @@ export const SpawnSchema = z.object({
   yawDeg: z.number(),
 });
 
-export const MapSchema = z.object({
-  id: z.string().regex(/^[a-z0-9-]+$/),
-  name: z.string().min(1),
-  /** Anything below this height counts as fallen out of the map. */
-  killY: z.number(),
-  geometry: z.array(PrimitiveSchema).min(1),
-  spawns: z.array(SpawnSchema).min(2),
-});
+export const MapSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9-]+$/),
+    name: z.string().min(1),
+    /** Anything below this height counts as fallen out of the map. */
+    killY: z.number(),
+    geometry: z.array(PrimitiveSchema).min(1),
+    spawns: z.array(SpawnSchema).min(2),
+  })
+  .refine((m) => [0, 1].every((team) => m.spawns.some((s) => s.team === team)), {
+    message: 'every team needs at least one spawn',
+  });
 export type GameMap = z.infer<typeof MapSchema>;
 
 // ---------------------------------------------------------------------------
@@ -101,12 +105,13 @@ export const MovementSchema = z
     airControl: z.number().min(0).max(1),
     gravity: z.number().positive(),
     jumpHeight: z.number().positive(),
-    slideDuration: z.number().positive(),
+    /** Max 4.25 s: slide ticks are sent as a u8 (255 ticks at 60 Hz). */
+    slideDuration: z.number().positive().max(4.25),
     /** Speed at the start of a slide, as a multiple of sprintSpeed. */
     slideBoost: z.number().min(1),
     slideFriction: z.number().nonnegative(),
     /** Seconds after a slide ends before another can start (stops crouch-spam slides). */
-    slideCooldown: z.number().nonnegative(),
+    slideCooldown: z.number().nonnegative().max(4.25),
     stepHeight: z.number().positive(),
     maxSlopeDeg: z.number().min(0).max(89),
     capsuleRadius: z.number().positive(),

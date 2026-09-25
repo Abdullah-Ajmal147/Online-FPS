@@ -31,6 +31,10 @@ export class RemoteBuffer {
   push(tick: number, state: EntityState): void {
     const last = this.samples.at(-1);
     if (last && tick <= last.tick) return; // late or duplicate snapshot
+    // A reused id (new player, other team) or a teleport (respawn): start fresh instead of
+    // drawing the player sliding across the map between the two positions.
+    if (last && (last.state.team !== state.team || isTeleport(last, tick, state)))
+      this.samples = [];
     this.samples.push({ tick, state });
     while (this.samples.length > 2 && this.samples[0]!.tick < tick - KEEP_TICKS)
       this.samples.shift();
@@ -61,6 +65,15 @@ export class RemoteBuffer {
     const b = this.samples[i + 1]!;
     return pose(a.state, b.state, (renderTick - a.tick) / (b.tick - a.tick));
   }
+}
+
+/** Faster than anyone can move (sprint-slide ≈ 8.6 m/s ≈ 0.15 m per tick): must be a teleport. */
+const TELEPORT_METRES_PER_TICK = 2;
+
+function isTeleport(prev: Sample, tick: number, next: EntityState): boolean {
+  const [x0, y0, z0] = prev.state.position;
+  const [x1, y1, z1] = next.position;
+  return Math.hypot(x1 - x0, y1 - y0, z1 - z0) > TELEPORT_METRES_PER_TICK * (tick - prev.tick);
 }
 
 function pose(a: EntityState, b: EntityState, t: number): RemotePose {

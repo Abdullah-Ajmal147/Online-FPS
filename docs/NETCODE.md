@@ -20,7 +20,8 @@ These numbers are the contract between client and server. Change them only with 
 3. Server applies inputs in `seq` order, one per tick. Missing input → repeat last
    buttons, never extrapolate position from the client.
 4. Every 2nd server tick: `Snapshot { serverTick, lastProcessedSeq[forClient], entities[] }`
-   delta-compressed against the last snapshot the client acked.
+   sent as full snapshots for now (ADR 0004); delta compression against the last acked
+   snapshot is kept as a later option.
 5. Client ack: `SnapshotAck { serverTick }` (can ride on InputCmd).
 
 ## Client prediction and reconciliation

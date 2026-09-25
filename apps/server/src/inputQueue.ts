@@ -1,4 +1,4 @@
-import type { PlayerInput } from '@sentinel/shared';
+import { Button, type PlayerInput } from '@sentinel/shared';
 import type { SequencedInput } from '@sentinel/protocol';
 
 /**
@@ -13,6 +13,14 @@ export const START_BUFFER = 2;
 /** A seq this far beyond the last processed one is garbage, not a real input. */
 const MAX_SEQ_JUMP = 600;
 
+/** How long we keep repeating a silent client's last input before letting them stand still. */
+export const MAX_REPEAT_TICKS = 15; // 250 ms: rides out jitter, stops a tabbed-out player running forever
+/**
+ * Buttons whose press (not hold) matters. When stale inputs are dropped, these are carried into
+ * the next input so a jump, slide, shot or reload press is never lost.
+ */
+const PRESS_BUTTONS = Button.Jump | Button.Crouch | Button.Fire | Button.Reload;
+
 const IDLE: PlayerInput = { buttons: 0, yaw: 0, pitch: 0 };
 
 /**
@@ -20,15 +28,23 @@ const IDLE: PlayerInput = { buttons: 0, yaw: 0, pitch: 0 };
  *
  * The server advances every player exactly ONE step per tick, never more:
  *   - the next input in seq order if one is queued, or
- *   - a repeat of the last input's buttons if none arrived in time (never a position from the client).
+ *   - a repeat of the last input's buttons if none arrived in time (never a position from the client),
+ *     for at most MAX_REPEAT_TICKS; after that the player stands still (same view angles).
  * So a client can't move faster by sending more inputs: extras are dropped by the cap.
  * Each input carries the previous two as well (redundancy), so duplicates are normal and ignored.
+ *
+ * Catching up after a stall: every tick we had to guess is "debt". When the late inputs arrive
+ * we drop that many of the oldest ones (keeping their presses), because those ticks were
+ * already simulated with the guess. Without this a 250 ms hitch would be simulated twice and
+ * leave the queue ~15 inputs deep, adding ~200 ms of input lag for seconds.
  */
 export class InputQueue {
   lastProcessedSeq = 0;
   private lastInput: PlayerInput = IDLE;
   private pending: SequencedInput[] = []; // sorted by seq, all > lastProcessedSeq
   private started = false;
+  /** Ticks simulated with a guessed (repeated/idle) input since the last real one. */
+  private debt = 0;
 
   get depth(): number {
     return this.pending.length;
@@ -58,10 +74,22 @@ export class InputQueue {
       if (this.pending.length < START_BUFFER) return null;
       this.started = true;
     }
-    const input = this.pending.shift();
-    if (!input) return this.lastInput; // starved: repeat the last buttons and angles
+    if (this.pending.length === 0) {
+      // Starved: repeat the last input for a short while, then stand still.
+      this.debt++;
+      if (this.debt <= MAX_REPEAT_TICKS) return this.lastInput;
+      return { buttons: IDLE.buttons, yaw: this.lastInput.yaw, pitch: this.lastInput.pitch };
+    }
+    // Pay back debt: skip inputs for ticks we already simulated with a guess (keep one to apply).
+    let carried = 0;
+    while (this.debt > 0 && this.pending.length > 1) {
+      carried |= this.pending.shift()!.buttons & PRESS_BUTTONS;
+      this.debt--;
+    }
+    this.debt = 0;
+    const input = this.pending.shift()!;
     this.lastProcessedSeq = input.seq;
-    this.lastInput = { buttons: input.buttons, yaw: input.yaw, pitch: input.pitch };
+    this.lastInput = { buttons: input.buttons | carried, yaw: input.yaw, pitch: input.pitch };
     return this.lastInput;
   }
 }

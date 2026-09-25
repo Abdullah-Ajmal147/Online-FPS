@@ -23,6 +23,11 @@ export class RemotePlayers {
     group.scale.y = pose.crouching ? movement.crouchHeight / movement.standingHeight : 1;
   }
 
+  /** Positions of drawn remote players (used by end-to-end tests). */
+  positions(): number[][] {
+    return [...this.meshes.values()].map((g) => [g.position.x, g.position.y, g.position.z]);
+  }
+
   /** Remove players that are no longer in snapshots. */
   retain(ids: ReadonlySet<number>): void {
     for (const [id, group] of this.meshes) {
