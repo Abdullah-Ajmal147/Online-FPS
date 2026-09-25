@@ -1,6 +1,12 @@
 import * as THREE from 'three/webgpu';
 import { defaultLoadout, maps, movement, type GameMap } from '@sentinel/content';
-import type { GameEvent, Snapshot } from '@sentinel/protocol';
+import {
+  DRAW,
+  MatchPhase,
+  type GameEvent,
+  type MatchInfo,
+  type Snapshot,
+} from '@sentinel/protocol';
 import {
   Predictor,
   SKIN,
@@ -153,7 +159,41 @@ export async function startGame(
   let feedKey = 0;
   let myId = 0;
   const teamOf = new Map<number, number>();
-  const nameOf = (id: number) => (id === myId ? 'You' : `${TEAM_NAMES[teamOf.get(id) ?? 0]} ${id}`);
+  const names = new Map<number, string>();
+  const nameOf = (id: number) =>
+    id === myId ? 'You' : (names.get(id) ?? `${TEAM_NAMES[teamOf.get(id) ?? 0]} ${id}`);
+  /** Countdown and results: the server freezes everyone, so we send no movement or fire. */
+  let frozen = false;
+
+  const PHASES = ['warmup', 'countdown', 'live', 'ended'] as const;
+  const onMatchInfo = (info: MatchInfo) => {
+    for (const p of info.players) {
+      names.set(p.id, p.name);
+      teamOf.set(p.id, p.team);
+    }
+    frozen = info.phase === MatchPhase.Countdown || info.phase === MatchPhase.Ended;
+    const mine = myTeam();
+    const mvp = info.players.find((p) => p.id === info.mvp);
+    setStatus({
+      match: {
+        phase: PHASES[info.phase]!,
+        secondsLeft: info.secondsLeft,
+        scoreLimit: info.scoreLimit,
+        scores: [info.teamScores[mine as 0 | 1], info.teamScores[(1 - mine) as 0 | 1]],
+        myTeam: mine,
+        result:
+          info.phase !== MatchPhase.Ended
+            ? null
+            : info.winner === DRAW
+              ? 'draw'
+              : info.winner === mine
+                ? 'win'
+                : 'loss',
+        mvp: mvp ? (mvp.id === myId ? `${mvp.name} (you)` : mvp.name) : null,
+        players: info.players.map((p) => ({ ...p, me: p.id === myId })),
+      },
+    });
+  };
 
   // --- Network ---
   const conn = new Connection();
@@ -293,21 +333,27 @@ export async function startGame(
     remotePlayers.retain(new Set());
     hud.alive = true;
     hudDirty = true;
+    frozen = false;
+    setStatus({ match: null });
   };
 
-  void conn.connect({
-    onHello: (hello) => {
-      myId = hello.playerId;
-      myTeamCache = hello.team;
-      if (hello.mapId !== map.id) {
-        loadMap(hello.mapId);
-        prevState = predictor.state;
-      }
+  void conn.connect(
+    {
+      onHello: (hello) => {
+        myId = hello.playerId;
+        myTeamCache = hello.team;
+        if (hello.mapId !== map.id) {
+          loadMap(hello.mapId);
+          prevState = predictor.state;
+        }
+      },
+      onSnapshot,
+      onEvents,
+      onMatchInfo,
+      onDisconnect,
     },
-    onSnapshot,
-    onEvents,
-    onDisconnect,
-  });
+    settings().name,
+  );
 
   // --- Shots ---
   const tmpA = new THREE.Vector3();
@@ -391,6 +437,7 @@ export async function startGame(
     for (let i = 0; i < fixed.ticks; i++) {
       prevState = predictor.state;
       const sample = input.sample();
+      if (frozen) sample.buttons = 0; // the server isn't moving anyone right now
       const { shot } = predictor.tick({ ...sample, weaponSlot: sample.weaponSlot ?? 0, viewTick });
       if (shot && hud.alive) ownShot(shot);
       if (conn.connected && spawnedFromServer) {

@@ -49,6 +49,14 @@ describe('maps', () => {
   });
 });
 
+describe('Relay Yard', () => {
+  it('has six spawns per team for 6v6', () => {
+    const m = maps['relay-yard']!;
+    expect(m.spawns.filter((s) => s.team === 0)).toHaveLength(6);
+    expect(m.spawns.filter((s) => s.team === 1)).toHaveLength(6);
+  });
+});
+
 describe('map validation', () => {
   it('requires a spawn for each team', () => {
     const map = JSON.parse(JSON.stringify(maps.greybox)) as { spawns: { team: number }[] };

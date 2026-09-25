@@ -3,12 +3,14 @@ import { MAX_PLAYERS_PER_MATCH, SNAPSHOT_RATE, type Vec3 } from '@sentinel/share
 import {
   decodeEvents,
   decodeHello,
+  decodeMatchInfo,
   decodeInputCmd,
   decodePing,
   decodeSnapshot,
   decodeSnapshotAck,
   encodeEvents,
   encodeHello,
+  encodeMatchInfo,
   encodeInputCmd,
   encodePing,
   encodeSnapshot,
@@ -66,8 +68,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 4 (Phase 2: weapons, health, events, view tick, map in Hello)', () => {
-    expect(PROTOCOL_VERSION).toBe(4);
+  it('is 5 (Phase 3: match info)', () => {
+    expect(PROTOCOL_VERSION).toBe(5);
   });
 });
 
@@ -189,5 +191,39 @@ describe('SnapshotAck and Ping', () => {
     expect(decodeSnapshotAck(encodeSnapshotAck(77))).toBe(77);
     expect(decodePing(encodePing(123456.9))).toBe(123456);
     expect(decodePing(encodePing(2 ** 32 + 5))).toBe(5); // wraps
+  });
+});
+
+describe('MatchInfo', () => {
+  it('round-trips phase, clock, scores and the scoreboard (names included)', () => {
+    const info = {
+      phase: 2 as const,
+      secondsLeft: 431,
+      scoreLimit: 75,
+      teamScores: [41, 38] as [number, number],
+      winner: 255,
+      mvp: 0,
+      players: [
+        { id: 1, team: 0, bot: false, kills: 12, deaths: 4, name: 'Ayesha' },
+        { id: 2, team: 1, bot: true, kills: 9, deaths: 7, name: 'Bot Heron' },
+      ],
+    };
+    expect(decodeMatchInfo(encodeMatchInfo(info))).toEqual(info);
+  });
+
+  it('rounds seconds up and rejects bad phases', () => {
+    const info = {
+      phase: 0 as const,
+      secondsLeft: 4.2,
+      scoreLimit: 75,
+      teamScores: [0, 0] as [number, number],
+      winner: 255,
+      mvp: 0,
+      players: [],
+    };
+    expect(decodeMatchInfo(encodeMatchInfo(info)).secondsLeft).toBe(5);
+    expect(() => decodeMatchInfo(new Uint8Array([9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow(
+      RangeError,
+    );
   });
 });

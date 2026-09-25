@@ -5,18 +5,26 @@ import {
   RELOAD_REQUIRED,
   decodeEvents,
   decodeHello,
+  decodeMatchInfo,
   decodePing,
   decodeSnapshot,
   encodeInputCmd,
   encodePing,
   type GameEvent,
   type Hello,
+  type MatchInfo,
   type InputCmd,
   type Snapshot,
 } from '@sentinel/protocol';
 import { setStatus } from './store.ts';
 
+/**
+ * Game server to join: `?server=` in the page URL (tests, and later region picking), then the
+ * build-time VITE_SERVER_URL, then the same host on port 2567.
+ */
 function serverUrl(): string {
+  const fromQuery = new URLSearchParams(location.search).get('server');
+  if (fromQuery && /^https?:\/\//.test(fromQuery)) return fromQuery;
   const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
   if (fromEnv) return fromEnv;
   const protocol = location.protocol === 'https:' ? 'https' : 'http';
@@ -27,6 +35,7 @@ export interface NetHandlers {
   onHello(hello: Hello): void;
   onSnapshot(snapshot: Snapshot, arrivalMs: number): void;
   onEvents(events: GameEvent[]): void;
+  onMatchInfo(info: MatchInfo): void;
   onDisconnect(): void;
 }
 
@@ -38,10 +47,10 @@ export class Connection {
   private room: Room | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
 
-  async connect(handlers: NetHandlers): Promise<void> {
+  async connect(handlers: NetHandlers, name: string): Promise<void> {
     const client = new Client(serverUrl());
     try {
-      const room = await client.joinOrCreate('match', { protocolVersion: PROTOCOL_VERSION });
+      const room = await client.joinOrCreate('match', { protocolVersion: PROTOCOL_VERSION, name });
       this.room = room;
 
       room.onMessage(MessageType.Hello, (payload: Uint8Array) => {
@@ -73,6 +82,14 @@ export class Connection {
           handlers.onEvents(decodeEvents(payload));
         } catch (err) {
           console.warn('[net] dropped malformed events:', err);
+        }
+      });
+
+      room.onMessage(MessageType.MatchInfo, (payload: Uint8Array) => {
+        try {
+          handlers.onMatchInfo(decodeMatchInfo(payload));
+        } catch (err) {
+          console.warn('[net] dropped malformed match info:', err);
         }
       });
 

@@ -382,3 +382,175 @@ body {
   margin-top: 6px;
   color: #c9d1d9;
 }
+
+.row input[type='text'] {
+  width: 160px;
+}
+
+.scorebar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 14px;
+  border-radius: 8px;
+  transform: translateX(-50%);
+  background: rgb(0 0 0 / 55%);
+  font:
+    800 22px ui-monospace,
+    monospace;
+}
+
+.sb-clock {
+  min-width: 90px;
+  text-align: center;
+  font-size: 18px;
+  color: #e6edf3;
+}
+
+.sb-limit {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  font:
+    11px system-ui,
+    sans-serif;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.banner {
+  position: absolute;
+  top: 24%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 70%);
+}
+
+.banner-title {
+  font:
+    800 34px system-ui,
+    sans-serif;
+}
+
+.banner-big .banner-title {
+  font-size: 96px;
+}
+
+.banner-sub {
+  color: #c9d1d9;
+}
+
+.scoreboard,
+.results {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(760px, calc(100vw - 32px));
+  padding: 18px 22px;
+  border-radius: 12px;
+  transform: translate(-50%, -50%);
+  background: rgb(13 17 23 / 92%);
+}
+
+.sb-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+@media (max-width: 640px) {
+  .sb-teams {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sb-team-name {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font:
+    700 16px system-ui,
+    sans-serif;
+}
+
+.sb-team table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.sb-team th {
+  text-align: left;
+  color: #8b949e;
+  font-weight: 600;
+}
+
+.sb-team th:not(:first-child),
+.sb-team td:not(:first-child) {
+  width: 40px;
+  text-align: right;
+}
+
+.sb-team td {
+  padding: 3px 0;
+  border-top: 1px solid #21262d;
+}
+
+.sb-me td {
+  color: #ffd35a;
+  font-weight: 700;
+}
+
+.sb-bot {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #30363d;
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.results {
+  text-align: center;
+}
+
+.results-title {
+  font:
+    900 44px system-ui,
+    sans-serif;
+}
+
+.results-win {
+  color: #3fb950;
+}
+
+.results-loss {
+  color: #f85149;
+}
+
+.results-score {
+  margin: 2px 0 6px;
+  font:
+    800 26px ui-monospace,
+    monospace;
+}
+
+.results-mvp {
+  margin-bottom: 14px;
+  color: #ffd35a;
+  font-weight: 700;
+}
+
+.results .sb-teams {
+  text-align: left;
+}
+
+.results-next {
+  margin-top: 14px;
+  color: #8b949e;
+}

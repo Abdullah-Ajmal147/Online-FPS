@@ -131,6 +131,13 @@ Status: in progress (owner delegated decisions; continuing without per-task stop
 
 Tasks done:
 
-- (none yet)
+- 1. `GameMode` interface + Team Deathmatch (10 min / 75 kills from mode data); suicides and falls score nothing.
+- 2. Match loop: warm-up (needs 2+ players) → countdown (everyone respawned, frozen) → live → ended (frozen, results, MVP) → next match. `MatchInfo` message (protocol v5) at 2 Hz + on phase change.
+- 3. Spawns: team spawn not visible to any living enemy if possible, else farthest from enemies; 1.5 s spawn protection ended early by firing.
+- 4–5. HUD: score bar + clock, warm-up/countdown banners, Tab scoreboard (names, K/D, BOT tags), results screen (Victory/Defeat/Draw, MVP, table); names chosen in the menu, sanitized on the server.
+- 6. Server bots (ADR 0007: nav grid instead of recast): 1 m nav grid from the physics world + A*; roam, spot enemies (FOV + line of sight), react after a delay, aim with shrinking error and limited turn rate, partial recoil control, strafe, ADS at range, reload; difficulty easy/normal/hard. Fill to 12, keep teams even, swap a bot out when a human joins.
+- 7. First real map **Relay Yard** (original, 44×68 m, three lanes, central platform with ramps, balcony with stairs/ramp, spawn barriers). Default map.
+- 9. Match summary JSON logged at match end (`[match-summary] {...}`).
+- Tests: full bots-only match on Relay Yard in-process (fights, winner, MVP, < 4 ms/tick); e2e full match flow against a bot-filled server with 20 s matches.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

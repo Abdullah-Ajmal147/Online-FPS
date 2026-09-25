@@ -27,6 +27,8 @@ export const MessageType = {
   Pong: 6,
   /** Server → client: kills, hit confirmations, damage taken. Never dropped. */
   Events: 7,
+  /** Server → client: match phase, clock, scores, scoreboard. Never dropped. */
+  MatchInfo: 8,
 } as const;
 
 export type { SequencedInput, OwnState };
@@ -387,4 +389,85 @@ export function encodePing(clientTimeMs: number): Uint8Array {
 
 export function decodePing(bytes: Uint8Array): number {
   return new BinaryReader(bytes).u32();
+}
+
+// ---------------------------------------------------------------------------
+// MatchInfo — match phase, clock, scores and the scoreboard. Reliable, ~2 Hz + on change.
+// ---------------------------------------------------------------------------
+
+export const MatchPhase = { Warmup: 0, Countdown: 1, Live: 2, Ended: 3 } as const;
+export type MatchPhaseId = (typeof MatchPhase)[keyof typeof MatchPhase];
+
+/** `winner`: a team (0/1), DRAW, or NO_WINNER while the match is running. */
+export const DRAW = 2;
+export const NO_WINNER = 255;
+
+export interface ScoreboardRow {
+  id: number;
+  team: number;
+  bot: boolean;
+  kills: number;
+  deaths: number;
+  name: string;
+}
+
+export interface MatchInfo {
+  phase: MatchPhaseId;
+  /** Seconds left in the current phase (rounded up). */
+  secondsLeft: number;
+  scoreLimit: number;
+  teamScores: [number, number];
+  winner: number;
+  /** Player id of the match MVP once ended (0 = none). */
+  mvp: number;
+  players: ScoreboardRow[];
+}
+
+export function encodeMatchInfo(m: MatchInfo): Uint8Array {
+  const w = new BinaryWriter(32 + m.players.length * 24);
+  w.u8(m.phase)
+    .u16(Math.min(0xffff, Math.max(0, Math.ceil(m.secondsLeft))))
+    .u16(m.scoreLimit);
+  w.u16(m.teamScores[0]).u16(m.teamScores[1]).u8(m.winner).u8(m.mvp).u8(m.players.length);
+  for (const p of m.players) {
+    w.u8(p.id)
+      .u8(p.team)
+      .u8(p.bot ? 1 : 0)
+      .u16(p.kills)
+      .u16(p.deaths)
+      .string(p.name);
+  }
+  return w.finish();
+}
+
+export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
+  const r = new BinaryReader(bytes);
+  const phase = r.u8();
+  if (phase > 3) throw new RangeError(`bad match phase ${phase}`);
+  const secondsLeft = r.u16();
+  const scoreLimit = r.u16();
+  const teamScores: [number, number] = [r.u16(), r.u16()];
+  const winner = r.u8();
+  const mvp = r.u8();
+  const count = r.u8();
+  const players: ScoreboardRow[] = [];
+  for (let i = 0; i < count; i++) {
+    players.push({
+      id: r.u8(),
+      team: r.u8(),
+      bot: r.u8() === 1,
+      kills: r.u16(),
+      deaths: r.u16(),
+      name: r.string(),
+    });
+  }
+  return {
+    phase: phase as MatchPhaseId,
+    secondsLeft,
+    scoreLimit,
+    teamScores,
+    winner,
+    mvp,
+    players,
+  };
 }

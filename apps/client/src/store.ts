@@ -46,6 +46,27 @@ export interface CombatHud {
   killFeed: KillFeedEntry[];
 }
 
+export interface MatchHud {
+  phase: 'warmup' | 'countdown' | 'live' | 'ended';
+  secondsLeft: number;
+  scoreLimit: number;
+  /** [my team, enemy team] */
+  scores: [number, number];
+  myTeam: number;
+  /** 'win' | 'loss' | 'draw' once ended. */
+  result: 'win' | 'loss' | 'draw' | null;
+  mvp: string | null;
+  players: {
+    id: number;
+    name: string;
+    team: number;
+    bot: boolean;
+    kills: number;
+    deaths: number;
+    me: boolean;
+  }[];
+}
+
 export interface ClientStatus {
   backend: 'WebGPU' | 'WebGL 2' | 'starting';
   net: { state: 'connecting' | 'connected' | 'error'; text: string };
@@ -57,6 +78,7 @@ export interface ClientStatus {
   netStats: NetStats | null;
   fps: number;
   combat: CombatHud | null;
+  match: MatchHud | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -69,6 +91,7 @@ let status: ClientStatus = {
   netStats: null,
   fps: 0,
   combat: null,
+  match: null,
 };
 const listeners = new Set<Listener>();
 

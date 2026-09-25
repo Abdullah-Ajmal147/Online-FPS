@@ -27,7 +27,7 @@ import {
   type SimState,
   type Vec3,
 } from '@sentinel/shared';
-import { InputQueue } from './inputQueue.ts';
+import { InputQueue, type TickInput } from './inputQueue.ts';
 
 export const MAX_HEALTH = 100;
 /** Respawn 3 s after death (Phase 2 task 6). */
@@ -37,6 +37,8 @@ export const REGEN_DELAY_TICKS = 4 * TICK_RATE;
 export const REGEN_PER_TICK = 1;
 /** Lag compensation never rewinds further than this (NETCODE.md, ADR 0005). */
 export const MAX_REWIND_TICKS = Math.round((MAX_REWIND_MS / 1000) * TICK_RATE);
+/** Spawn protection: 1.5 s, or until you fire (Phase 3). */
+export const SPAWN_PROTECTION_TICKS = Math.round(1.5 * TICK_RATE);
 /** One second of hitbox history per player. */
 const HISTORY_TICKS = TICK_RATE;
 
@@ -50,6 +52,12 @@ interface HistoryEntry {
 export interface SimPlayer {
   id: number;
   team: number;
+  name: string;
+  /** Server bot: its input comes from `botInput` (set by the bot controller each tick). */
+  bot: boolean;
+  botInput: TickInput | null;
+  /** Damage is ignored before this tick (spawn protection). */
+  protectedUntil: number;
   body: PlayerBody;
   sim: SimState;
   queue: InputQueue;
@@ -111,16 +119,26 @@ export class MatchSim {
     return this.players.size >= MAX_PLAYERS_PER_MATCH;
   }
 
-  addPlayer(): SimPlayer {
+  /** Players per team right now. */
+  teamCounts(): [number, number] {
+    const counts: [number, number] = [0, 0];
+    for (const p of this.players.values()) counts[p.team as 0 | 1]++;
+    return counts;
+  }
+
+  addPlayer(opts: { name?: string; bot?: boolean; team?: number } = {}): SimPlayer {
     if (this.isFull) throw new Error('match is full');
     let id = 1;
     while (this.players.has(id)) id++;
-    const teamCounts = [0, 0];
-    for (const p of this.players.values()) teamCounts[p.team]!++;
-    const team = teamCounts[0]! <= teamCounts[1]! ? 0 : 1;
+    const [a, b] = this.teamCounts();
+    const team = opts.team ?? (a <= b ? 0 : 1);
     const player: SimPlayer = {
       id,
       team,
+      name: opts.name ?? `Player ${id}`,
+      bot: opts.bot ?? false,
+      botInput: null,
+      protectedUntil: this.tick + SPAWN_PROTECTION_TICKS,
       body: createPlayerBody(this.ctx.movement),
       sim: this.freshSim(team),
       queue: new InputQueue(),
@@ -145,6 +163,12 @@ export class MatchSim {
     this.players.delete(id);
   }
 
+  /**
+   * While frozen (countdown, results screen) inputs are still consumed, so seqs keep flowing,
+   * but nobody moves or shoots.
+   */
+  frozen = false;
+
   /** One fixed 1/60 s tick: move everyone, then resolve this tick's shots, then health. */
   step(): void {
     const start = performance.now();
@@ -153,11 +177,13 @@ export class MatchSim {
     const shots: { shooter: SimPlayer; shot: ShotRequest; viewTick: number }[] = [];
 
     for (const p of this.players.values()) {
-      const input = p.queue.next(); // always consumed, even while dead, so seqs keep flowing
-      if (!input || !p.alive) continue;
+      // Always consumed, even while dead or frozen, so seqs keep flowing.
+      const input = p.bot ? p.botInput : p.queue.next();
+      if (!input || !p.alive || this.frozen) continue;
       const r = stepSim(p.sim, input, this.ctx, p.body);
       p.sim = r.state;
       if (r.shot) {
+        p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
         shots.push({ shooter: p, shot: r.shot, viewTick: input.viewTick });
       }
@@ -275,7 +301,7 @@ export class MatchSim {
     zone: HitZone,
     slot: number,
   ): void {
-    if (!victim.alive) return;
+    if (!victim.alive || this.tick < victim.protectedUntil) return;
     victim.health = Math.max(this.noDeath ? 1 : 0, victim.health - damage);
     victim.lastDamageTick = this.tick;
     const killed = victim.health === 0;
@@ -332,6 +358,47 @@ export class MatchSim {
     p.respawnTicks = 0;
     p.lifeId = (p.lifeId + 1) & 0xff;
     p.history = [];
+    p.protectedUntil = this.tick + SPAWN_PROTECTION_TICKS;
+  }
+
+  /** New match: everyone back to a spawn, full health and ammo. */
+  respawnAll(): void {
+    for (const p of this.players.values()) this.respawn(p);
+  }
+
+  /** New match: zero kills and deaths. */
+  resetStats(): void {
+    for (const p of this.players.values()) {
+      p.kills = 0;
+      p.deaths = 0;
+    }
+  }
+
+  /** Eye position of a player (bots aim from here). */
+  eyeOf(p: SimPlayer): Vec3 {
+    return eyePosition(p.sim.move, this.ctx.movement);
+  }
+
+  /** True if nothing solid blocks the straight line between two points. */
+  lineOfSight(from: Vec3, to: Vec3): boolean {
+    const d: Vec3 = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+    const len = Math.hypot(d[0], d[1], d[2]);
+    if (len < 1e-6) return true;
+    const hit = this.ctx.movement.world.castRay(
+      new this.rapier.Ray(
+        { x: from[0], y: from[1], z: from[2] },
+        { x: d[0] / len, y: d[1] / len, z: d[2] / len },
+      ),
+      len,
+      true,
+      this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+    );
+    return hit === null;
+  }
+
+  /** The shared simulation context (bots plan with the same world). */
+  get context(): SimContext {
+    return this.ctx;
   }
 
   // --- Hitbox history ----------------------------------------------------------------------
@@ -379,31 +446,32 @@ export class MatchSim {
   }
 
   /**
-   * Team spawn farthest from the nearest living enemy (Phase 3 adds line-of-sight checks and
-   * spawn protection).
+   * Pick a team spawn (Phase 3): never one a living enemy can see if avoidable, otherwise the
+   * one farthest from the nearest enemy. Ties rotate so teammates don't stack on one point.
    */
   private spawnState(team: number) {
     const spawns = this.map.spawns.filter((s) => s.team === team);
     const enemies = [...this.players.values()].filter((p) => p.team !== team && p.alive);
-    let spawn = spawns[this.spawnCursor[team]! % spawns.length]!;
-    this.spawnCursor[team]!++;
-    if (enemies.length > 0) {
-      let bestScore = -Infinity;
-      for (const s of spawns) {
-        const nearest = Math.min(
-          ...enemies.map((e) =>
-            Math.hypot(
-              e.sim.move.position[0] - s.position[0],
-              e.sim.move.position[2] - s.position[2],
-            ),
-          ),
-        );
-        if (nearest > bestScore) {
-          bestScore = nearest;
-          spawn = s;
-        }
+    const start = this.spawnCursor[team]!++;
+    let best = spawns[start % spawns.length]!;
+    let bestScore = -Infinity;
+    for (let i = 0; i < spawns.length; i++) {
+      const s = spawns[(start + i) % spawns.length]!;
+      const head: Vec3 = [s.position[0], s.position[1] + 1.6, s.position[2]];
+      let nearest = 1000;
+      let seen = false;
+      for (const e of enemies) {
+        const p = e.sim.move.position;
+        const d = Math.hypot(p[0] - s.position[0], p[2] - s.position[2]);
+        nearest = Math.min(nearest, d);
+        if (!seen && d < 80 && this.lineOfSight(this.eyeOf(e), head)) seen = true;
+      }
+      const score = nearest - (seen ? 10_000 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = s;
       }
     }
-    return createPlayerState(spawn.position, yawFromDegrees(spawn.yawDeg));
+    return createPlayerState(best.position, yawFromDegrees(best.yawDeg));
   }
 }

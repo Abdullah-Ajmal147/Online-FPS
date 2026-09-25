@@ -43,6 +43,7 @@ const newSim = (map: GameMap = maps.greybox!) =>
 /** Put a player at a spot, standing still, facing -Z. */
 function place(p: SimPlayer, pos: Vec3): void {
   p.sim = { ...p.sim, move: { ...createPlayerState(pos, 0), grounded: true } };
+  p.protectedUntil = 0; // tests place players directly: no spawn protection
 }
 
 /**
@@ -275,6 +276,21 @@ describe('MatchSim: shooting', () => {
     });
     sim.step();
     expect(sim.lastShots[0]?.hit).toBeNull(); // the old position is outside the window
+  });
+});
+
+describe('MatchSim: spawn protection', () => {
+  it('ignores damage for 1.5 s after spawning, until the player fires', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer();
+    const target = sim.addPlayer();
+    place(shooter, [0, 0, 10]);
+    target.sim = { ...target.sim, move: { ...createPlayerState([0, 0, 0], 0), grounded: true } };
+    target.protectedUntil = sim.tick + 200;
+    const pitch = aimPitch(1.67, 1.1, 10);
+    aimIn(sim, shooter, pitch);
+    feed(sim, shooter, 10, AIM_FIRE, { pitch });
+    expect(target.health).toBe(MAX_HEALTH);
   });
 });
 

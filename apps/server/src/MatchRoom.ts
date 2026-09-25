@@ -1,5 +1,5 @@
 import { Room, ServerError, type Client } from '@colyseus/core';
-import { defaultLoadout, maps, movement } from '@sentinel/content';
+import { defaultLoadout, maps, modes, movement } from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
@@ -8,6 +8,7 @@ import {
   decodeSnapshotAck,
   encodeEvents,
   encodeHello,
+  encodeMatchInfo,
   encodeSnapshot,
   type GameEvent,
 } from '@sentinel/protocol';
@@ -17,21 +18,26 @@ import {
   TICK_RATE,
   initPhysics,
 } from '@sentinel/shared';
+import { DIFFICULTIES } from './bots/brain.ts';
+import { BotController } from './bots/controller.ts';
 import { FakeLag, presetFromEnv } from './fakeLag.ts';
+import { Match, type MatchSummary } from './match.ts';
+import { TeamDeathmatch } from './mode.ts';
+import { sanitizeName } from './names.ts';
 import { isProtocolCompatible } from './protocol-check.ts';
 import { MatchSim } from './sim.ts';
 import { PUMP_INTERVAL_MS, TickLoop } from './tickLoop.ts';
 
 /** HTTP-style status used when rejecting a client built for another protocol version. */
 const RELOAD_REQUIRED_CODE = 426; // "Upgrade Required"
-
 /** Malformed messages tolerated per client before we disconnect it. */
 const MAX_BAD_MESSAGES = 20;
-
 /** Normal traffic is 60 inputs + 1 ping per second; a 15-input catch-up burst still fits. */
 const MAX_MESSAGES_PER_SECOND = 150;
 /** Pings closer together than this are ignored (the client pings once a second). */
 const MIN_PING_INTERVAL_MS = 400;
+/** Scoreboard/clock updates, on top of immediate updates when the phase changes. */
+const MATCH_INFO_EVERY_TICKS = TICK_RATE / 2;
 
 interface Seat {
   playerId: number;
@@ -40,20 +46,35 @@ interface Seat {
   lastPingMs: number;
 }
 
+const envNumber = (name: string, fallback: number) => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+};
+
 /**
  * Authoritative match room. The server simulates everyone at 60 Hz from their inputs only
- * (CLAUDE.md rule 1) and sends each client a snapshot every 2nd tick (30 Hz).
+ * (CLAUDE.md rule 1), runs the match loop (warm-up → countdown → live → results), fills empty
+ * slots with bots, and sends each client a snapshot every 2nd tick (30 Hz).
+ *
+ * Environment (all optional): SENTINEL_MAP, SENTINEL_BOTS (0 = off), SENTINEL_BOT_DIFFICULTY
+ * (easy|normal|hard), SENTINEL_MATCH_SECONDS, SENTINEL_WARMUP_SECONDS, SENTINEL_RESULTS_SECONDS,
+ * and the test-only SENTINEL_LAG / SENTINEL_TEST_NO_DEATH.
  */
 export class MatchRoom extends Room {
+  /** Humans only; bots are not clients. */
   override maxClients = MAX_PLAYERS_PER_MATCH;
   /** Colyseus disconnects a client that sends more than this (default is unlimited). */
   override maxMessagesPerSecond = MAX_MESSAGES_PER_SECOND;
   private sim!: MatchSim;
+  private match!: Match;
+  private bots: BotController | null = null;
   private loop!: TickLoop;
   private seats = new Map<string, Seat>();
   /** Set by `pnpm dev:lag --preset <name>` (SENTINEL_LAG). Never on in production. */
   private lag: FakeLag | null = null;
   private mapId = 'greybox';
+  /** Called with each finished match (MatchRoom logs it; Phase 4 posts it to the API). */
+  static onMatchEnd: ((summary: MatchSummary) => void) | null = null;
 
   override async onCreate(): Promise<void> {
     const preset = presetFromEnv(process.env.SENTINEL_LAG);
@@ -61,19 +82,45 @@ export class MatchRoom extends Room {
       this.lag = new FakeLag(preset, Date.now() & 0xffff);
       console.warn(`[match] fake lag ON: ${JSON.stringify(preset)}`);
     }
-    // SENTINEL_MAP picks the map (tests use the open "arena"); Phase 3 rotates real maps.
-    this.mapId = process.env.SENTINEL_MAP ?? 'greybox';
+    // SENTINEL_MAP picks the map (tests use the open "arena").
+    this.mapId = process.env.SENTINEL_MAP ?? 'relay-yard';
     const map = maps[this.mapId];
-    if (!map)
+    if (!map) {
       throw new Error(
         `SENTINEL_MAP: unknown map "${this.mapId}" (have ${Object.keys(maps).join(', ')})`,
       );
+    }
     const rapier = await initPhysics();
     this.sim = new MatchSim(rapier, map, movement, defaultLoadout, Date.now() & 0xffffffff);
     if (process.env.SENTINEL_TEST_NO_DEATH) {
       this.sim.noDeath = true;
       console.warn('[match] TEST MODE: players cannot die (SENTINEL_TEST_NO_DEATH)');
     }
+
+    const tdm = modes['team-deathmatch']!;
+    this.match = new Match(
+      this.sim,
+      new TeamDeathmatch(tdm),
+      {
+        warmupSeconds: envNumber('SENTINEL_WARMUP_SECONDS', 8),
+        countdownSeconds: 4,
+        liveSeconds: envNumber('SENTINEL_MATCH_SECONDS', tdm.timeLimitSeconds),
+        resultsSeconds: envNumber('SENTINEL_RESULTS_SECONDS', 12),
+      },
+      this.mapId,
+    );
+    this.match.onMatchEnd = (summary) => {
+      // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
+      console.log(`[match-summary] ${JSON.stringify(summary)}`);
+      MatchRoom.onMatchEnd?.(summary);
+    };
+
+    if (process.env.SENTINEL_BOTS !== '0') {
+      const level = (process.env.SENTINEL_BOT_DIFFICULTY ?? 'normal') as keyof typeof DIFFICULTIES;
+      this.bots = new BotController(this.sim, map, DIFFICULTIES[level] ?? DIFFICULTIES.normal);
+      this.bots.fill();
+    }
+
     this.loop = new TickLoop(() => this.tick());
     this.setSimulationInterval(() => this.loop.pump(), PUMP_INTERVAL_MS);
 
@@ -103,6 +150,52 @@ export class MatchRoom extends Room {
     });
   }
 
+  override onAuth(_client: Client, options: unknown): boolean {
+    if (!isProtocolCompatible(options)) {
+      throw new ServerError(RELOAD_REQUIRED_CODE, RELOAD_REQUIRED);
+    }
+    return true;
+  }
+
+  override onJoin(client: Client, options?: { name?: unknown }): void {
+    // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
+    const team = this.bots ? this.bots.teamForHuman() : undefined;
+    if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
+    const player = this.sim.addPlayer({
+      name: sanitizeName(options?.name),
+      ...(team === undefined ? {} : { team }),
+    });
+    this.seats.set(client.sessionId, {
+      playerId: player.id,
+      ackServerTick: 0,
+      badMessages: 0,
+      lastPingMs: -Infinity,
+    });
+    console.log(
+      `[match ${this.roomId}] join "${player.name}" as player ${player.id} (team ${player.team})`,
+    );
+    client.sendBytes(
+      MessageType.Hello,
+      encodeHello({
+        protocolVersion: PROTOCOL_VERSION,
+        serverTickRate: TICK_RATE,
+        playerId: player.id,
+        team: player.team,
+        mapId: this.mapId,
+      }),
+    );
+    this.sendMatchInfo();
+  }
+
+  override onLeave(client: Client): void {
+    const seat = this.seats.get(client.sessionId);
+    if (seat) this.sim.removePlayer(seat.playerId);
+    this.seats.delete(client.sessionId);
+    this.lag?.forget(client.sessionId);
+    this.bots?.fill();
+    console.log(`[match ${this.roomId}] leave ${client.sessionId}`);
+  }
+
   private onInputCmd(client: Client, bytes: Uint8Array): void {
     const seat = this.seats.get(client.sessionId);
     if (!seat) return;
@@ -118,6 +211,24 @@ export class MatchRoom extends Room {
     for (const input of cmd.inputs) queue?.push(input);
   }
 
+  private tick(): void {
+    this.bots?.think();
+    this.sim.step();
+    const phaseChanged = this.match.update();
+    this.sendEvents();
+    if (phaseChanged || this.sim.tick % MATCH_INFO_EVERY_TICKS === 0) this.sendMatchInfo();
+    if (this.sim.tick % TICKS_PER_SNAPSHOT !== 0) return;
+    for (const client of this.clients) {
+      const seat = this.seats.get(client.sessionId);
+      if (!seat) continue;
+      this.outbound(
+        client,
+        MessageType.Snapshot,
+        encodeSnapshot(this.sim.snapshotFor(seat.playerId)),
+      );
+    }
+  }
+
   /** Kills to everyone, hits to the shooter, damage to the victim. Reliable (never dropped). */
   private sendEvents(): void {
     if (this.sim.events.length === 0) return;
@@ -127,14 +238,23 @@ export class MatchRoom extends Room {
       const mine: GameEvent[] = this.sim.events
         .filter((e) => e.to === null || e.to === seat.playerId)
         .map((e) => e.event);
-      if (mine.length === 0) continue;
-      const bytes = encodeEvents(mine);
-      const send = () => {
-        if (this.seats.has(client.sessionId)) client.sendBytes(MessageType.Events, bytes);
-      };
-      if (this.lag) this.lag.pass(`${client.sessionId}:out`, send, false);
-      else send();
+      if (mine.length > 0) this.reliable(client, MessageType.Events, encodeEvents(mine));
     }
+  }
+
+  /** Phase, clock, scores and scoreboard to everyone. Reliable. */
+  private sendMatchInfo(): void {
+    const bytes = encodeMatchInfo(this.match.info());
+    for (const client of this.clients) this.reliable(client, MessageType.MatchInfo, bytes);
+  }
+
+  /** Reliable message to a client (delayed but never dropped by fake lag). */
+  private reliable(client: Client, type: number, bytes: Uint8Array): void {
+    const send = () => {
+      if (this.seats.has(client.sessionId)) client.sendBytes(type, bytes);
+    };
+    if (this.lag) this.lag.pass(`${client.sessionId}:out`, send, false);
+    else send();
   }
 
   /** Fast-path message from a client, through fake lag when it's on. */
@@ -150,58 +270,5 @@ export class MatchRoom extends Room {
     };
     if (this.lag) this.lag.pass(`${client.sessionId}:out`, send, true);
     else send();
-  }
-
-  override onAuth(_client: Client, options: unknown): boolean {
-    if (!isProtocolCompatible(options)) {
-      throw new ServerError(RELOAD_REQUIRED_CODE, RELOAD_REQUIRED);
-    }
-    return true;
-  }
-
-  override onJoin(client: Client): void {
-    const player = this.sim.addPlayer();
-    this.seats.set(client.sessionId, {
-      playerId: player.id,
-      ackServerTick: 0,
-      badMessages: 0,
-      lastPingMs: -Infinity,
-    });
-    console.log(
-      `[match ${this.roomId}] join ${client.sessionId} as player ${player.id} (team ${player.team})`,
-    );
-    client.sendBytes(
-      MessageType.Hello,
-      encodeHello({
-        protocolVersion: PROTOCOL_VERSION,
-        serverTickRate: TICK_RATE,
-        playerId: player.id,
-        team: player.team,
-        mapId: this.mapId,
-      }),
-    );
-  }
-
-  override onLeave(client: Client): void {
-    const seat = this.seats.get(client.sessionId);
-    if (seat) this.sim.removePlayer(seat.playerId);
-    this.seats.delete(client.sessionId);
-    this.lag?.forget(client.sessionId);
-    console.log(`[match ${this.roomId}] leave ${client.sessionId}`);
-  }
-
-  private tick(): void {
-    this.sim.step();
-    this.sendEvents();
-    if (this.sim.tick % TICKS_PER_SNAPSHOT !== 0) return;
-    for (const client of this.clients) {
-      const seat = this.seats.get(client.sessionId);
-      if (!seat) continue;
-      this.outbound(
-        client,
-        MessageType.Snapshot,
-        encodeSnapshot(this.sim.snapshotFor(seat.playerId)),
-      );
-    }
   }
 }

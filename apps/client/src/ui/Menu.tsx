@@ -41,11 +41,24 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
     <div class="menu" data-testid="menu">
       <div class="menu-card">
         <h1>Sentinel Strike</h1>
-        <p class="menu-sub">Greybox movement test · practice mode</p>
+        <p class="menu-sub">Team Deathmatch · 6v6 · Relay Yard</p>
         <button class="play" data-testid="play" onClick={onPlay}>
           Click to play
         </button>
         <p class="menu-hint">Esc releases the mouse and brings this menu back.</p>
+
+        <label class="row">
+          <span>Your name</span>
+          <input
+            type="text"
+            maxLength={16}
+            placeholder="Player"
+            value={settings.name}
+            data-testid="name-input"
+            onChange={(e) => set('name', (e.target as HTMLInputElement).value)}
+          />
+        </label>
+        <p class="menu-hint">Takes effect next time you join a match.</p>
 
         <h2>Settings</h2>
         <label class="row">

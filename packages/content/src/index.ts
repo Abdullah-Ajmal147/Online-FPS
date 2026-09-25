@@ -11,6 +11,7 @@ import {
 import teamDeathmatchJson from './modes/team-deathmatch.json' with { type: 'json' };
 import arenaJson from './maps/arena.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
+import relayYardJson from './maps/relay-yard.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
 import kestrelJson from './weapons/kestrel-ar.json' with { type: 'json' };
 import wrenJson from './weapons/wren-sp.json' with { type: 'json' };
@@ -24,6 +25,8 @@ export const modes: Record<string, Mode> = {
 
 export const maps: Record<string, GameMap> = {
   greybox: MapSchema.parse(greyboxJson),
+  /** First real map: compact, original, three lanes (Phase 3). */
+  'relay-yard': MapSchema.parse(relayYardJson),
   /** Open test arena with a clear line between spawns (netcode and hit-registration tests). */
   arena: MapSchema.parse(arenaJson),
 };

@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * Two game servers:
+ *   :2567 — no bots, open arena, long warm-up: functional tests (movement, two players, combat)
+ *   :2568 — bots fill to 12, Relay Yard, 20 s matches: the full match-flow test (?server=…)
+ * Game servers are never reused (they need these exact settings), so stop `pnpm dev` first.
+ */
 export default defineConfig({
   testDir: 'e2e',
   timeout: 30_000,
@@ -13,8 +19,23 @@ export default defineConfig({
       command: 'node_modules/.bin/tsx src/index.ts',
       cwd: 'apps/server',
       url: 'http://localhost:2567/healthz',
+      env: { SENTINEL_BOTS: '0', SENTINEL_MAP: 'arena', SENTINEL_WARMUP_SECONDS: '3600' },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
+    },
+    {
+      command: 'node_modules/.bin/tsx src/index.ts',
+      cwd: 'apps/server',
+      url: 'http://localhost:2568/healthz',
+      env: {
+        PORT: '2568',
+        SENTINEL_MAP: 'relay-yard',
+        SENTINEL_WARMUP_SECONDS: '3',
+        SENTINEL_MATCH_SECONDS: '20',
+        SENTINEL_RESULTS_SECONDS: '6',
+      },
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
+      reuseExistingServer: false,
     },
     {
       command: 'node_modules/.bin/vite',

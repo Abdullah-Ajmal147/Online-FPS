@@ -28,6 +28,8 @@ export const ACTION_LABELS: Record<Action, string> = {
 };
 
 export interface Settings {
+  /** Display name (the server sanitizes it; accounts come in Phase 4). */
+  name: string;
   /** Degrees of view rotation per mouse count (raw pointer-lock movement unit). */
   sensitivity: number;
   /** Horizontal field of view in degrees. */
@@ -39,6 +41,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  name: '',
   sensitivity: 0.06,
   fov: 90,
   toggleSprint: false,
@@ -88,6 +91,7 @@ export function normalizeSettings(raw: unknown): Settings {
       DEFAULT_SETTINGS.sensitivity,
     ),
     fov: clamp(r.fov, fov.min, fov.max, DEFAULT_SETTINGS.fov),
+    name: typeof r.name === 'string' ? r.name.slice(0, 16) : DEFAULT_SETTINGS.name,
     toggleSprint:
       typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
     headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
