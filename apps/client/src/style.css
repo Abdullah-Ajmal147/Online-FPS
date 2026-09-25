@@ -48,3 +48,110 @@ body {
 .status-dot[data-state='error'] {
   background: #f85149;
 }
+
+.crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / 60%);
+}
+
+.menu {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(13 17 23 / 45%);
+  pointer-events: auto;
+  overflow-y: auto;
+}
+
+.menu-card {
+  width: min(460px, 100%);
+  padding: 24px 28px;
+  border-radius: 12px;
+  background: rgb(13 17 23 / 92%);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 40%);
+}
+
+.menu h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+}
+
+.menu h2 {
+  margin: 22px 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8b949e;
+}
+
+.menu-sub {
+  margin: 4px 0 18px;
+  color: #8b949e;
+}
+
+.menu-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #8b949e;
+}
+
+.play {
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f81f7;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.play:hover {
+  background: #4493f8;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.row input[type='number'] {
+  width: 80px;
+}
+
+.key {
+  min-width: 110px;
+  padding: 4px 10px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #161b22;
+  color: #e6edf3;
+  font:
+    13px ui-monospace,
+    monospace;
+  cursor: pointer;
+}
+
+.link {
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  color: #58a6ff;
+  cursor: pointer;
+  font: inherit;
+}

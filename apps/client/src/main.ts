@@ -1,14 +1,37 @@
 import { h, render } from 'preact';
+import { startGame, type Game } from './game/game.ts';
 import { connect } from './net.ts';
-import { startRenderer } from './renderer.ts';
+import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { setStatus } from './store.ts';
-import { Hud } from './ui/Hud.tsx';
+import { App } from './ui/App.tsx';
 
-render(h(Hud, null), document.getElementById('ui')!);
+let settings: Settings = loadSettings();
+let game: Game | undefined;
+
+const ui = document.getElementById('ui')!;
+const rerender = () =>
+  render(
+    h(App, {
+      settings,
+      onSettings: (next: Settings) => {
+        settings = next;
+        saveSettings(next);
+        rerender();
+      },
+      onPlay: () => void game?.requestPlay(),
+    }),
+    ui,
+  );
+rerender();
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
-startRenderer(canvas)
-  .then((backend) => setStatus({ backend }))
-  .catch((err: unknown) => console.error('[renderer] failed to start:', err));
+canvas.addEventListener('click', () => void game?.requestPlay());
+
+startGame(canvas, () => settings)
+  .then((g) => {
+    game = g;
+    setStatus({ backend: g.backend });
+  })
+  .catch((err: unknown) => console.error('[game] failed to start:', err));
 
 void connect();

@@ -1,7 +1,19 @@
 /** Tiny observable store shared by the game code and the Preact HUD. */
+export interface PlayerDebug {
+  position: readonly [number, number, number];
+  speed: number;
+  grounded: boolean;
+  crouching: boolean;
+  sliding: boolean;
+}
+
 export interface ClientStatus {
   backend: 'WebGPU' | 'WebGL 2' | 'starting';
   net: { state: 'connecting' | 'connected' | 'error'; text: string };
+  /** True while the mouse is captured and the player is in control. */
+  playing: boolean;
+  /** Null until the local simulation has started. */
+  player: PlayerDebug | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -9,6 +21,8 @@ type Listener = (status: ClientStatus) => void;
 let status: ClientStatus = {
   backend: 'starting',
   net: { state: 'connecting', text: 'connecting…' },
+  playing: false,
+  player: null,
 };
 const listeners = new Set<Listener>();
 

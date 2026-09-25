@@ -1,0 +1,118 @@
+/** Player settings. Stored per browser (a convenience, not game state). */
+
+export const ACTIONS = ['forward', 'back', 'left', 'right', 'jump', 'crouch', 'sprint'] as const;
+export type Action = (typeof ACTIONS)[number];
+
+export const ACTION_LABELS: Record<Action, string> = {
+  forward: 'Move forward',
+  back: 'Move back',
+  left: 'Move left',
+  right: 'Move right',
+  jump: 'Jump',
+  crouch: 'Crouch / slide',
+  sprint: 'Sprint',
+};
+
+export interface Settings {
+  /** Degrees of view rotation per mouse count (raw pointer-lock movement unit). */
+  sensitivity: number;
+  /** Horizontal field of view in degrees. */
+  fov: number;
+  toggleSprint: boolean;
+  headBob: boolean;
+  /** KeyboardEvent.code per action. */
+  bindings: Record<Action, string>;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  sensitivity: 0.06,
+  fov: 90,
+  toggleSprint: false,
+  headBob: false,
+  // Crouch is C, not Ctrl: Ctrl+W closes the browser tab.
+  bindings: {
+    forward: 'KeyW',
+    back: 'KeyS',
+    left: 'KeyA',
+    right: 'KeyD',
+    jump: 'Space',
+    crouch: 'KeyC',
+    sprint: 'ShiftLeft',
+  },
+};
+
+export const LIMITS = {
+  sensitivity: { min: 0.005, max: 0.5 },
+  fov: { min: 70, max: 120 },
+} as const;
+
+const STORAGE_KEY = 'sentinel.settings.v1';
+
+function clamp(v: unknown, min: number, max: number, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+}
+
+/** Merge anything stored with the defaults, so old or broken data never crashes the game. */
+export function normalizeSettings(raw: unknown): Settings {
+  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<Settings>;
+  const bindings = { ...DEFAULT_SETTINGS.bindings };
+  if (r.bindings && typeof r.bindings === 'object') {
+    for (const action of ACTIONS) {
+      const code = (r.bindings as Record<string, unknown>)[action];
+      if (typeof code === 'string' && code.length > 0) bindings[action] = code;
+    }
+  }
+  const { sensitivity, fov } = LIMITS;
+  return {
+    sensitivity: clamp(
+      r.sensitivity,
+      sensitivity.min,
+      sensitivity.max,
+      DEFAULT_SETTINGS.sensitivity,
+    ),
+    fov: clamp(r.fov, fov.min, fov.max, DEFAULT_SETTINGS.fov),
+    toggleSprint:
+      typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
+    headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
+    bindings,
+  };
+}
+
+export function loadSettings(): Settings {
+  try {
+    const text = localStorage.getItem(STORAGE_KEY);
+    return normalizeSettings(text ? JSON.parse(text) : null);
+  } catch {
+    return normalizeSettings(null);
+  }
+}
+
+export function saveSettings(settings: Settings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Private mode or blocked storage: settings just won't persist.
+  }
+}
+
+/** Rebind an action; a key used by another action is swapped so nothing is left unbound. */
+export function rebind(
+  bindings: Record<Action, string>,
+  action: Action,
+  code: string,
+): Record<Action, string> {
+  const next = { ...bindings };
+  const other = ACTIONS.find((a) => a !== action && next[a] === code);
+  if (other) next[other] = next[action];
+  next[action] = code;
+  return next;
+}
+
+/** "KeyW" → "W", "ShiftLeft" → "Left Shift". */
+export function keyLabel(code: string): string {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  const m = /^(Shift|Control|Alt|Meta)(Left|Right)$/.exec(code);
+  if (m) return `${m[2]} ${m[1] === 'Control' ? 'Ctrl' : m[1]}`;
+  return code;
+}

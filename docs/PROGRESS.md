@@ -38,6 +38,7 @@ What we learned:
 - Bug fixed: HUD stayed on "connecting…" when updates arrived before Preact's `useEffect` subscribed (always in hidden tabs). `subscribe()` now calls the listener immediately.
 - Run `pnpm lint` after editing docs too: Prettier checks Markdown, and CI caught an unformatted PROGRESS.md.
 - Headless Chromium and the Chrome used for testing ran the WebGL 2 fallback; WebGPU path still needs a check in a WebGPU-enabled browser.
+- Chrome automation tabs report `visibilityState: hidden`: no animation frames and no pointer lock, so the game can't be play-tested there; use Playwright (headless is visible to itself) for scripted play sessions.
 - `pnpm dev:lag --preset <good|normal|bad>` sets `SENTINEL_LAG`, but the fake-lag layer is Phase 1 task 8 (server only warns for now).
 
 Open issues carried forward:
@@ -55,5 +56,7 @@ Tasks done:
 
 - 1. Greybox map + movement tuning as data (`packages/content`, zod schemas); `expandMap()` turns box/ramp/stairs primitives into solids; `buildWorld()` makes Rapier colliders; client draws the same solids. Yaw limited to quarter turns so geometry is bit-identical everywhere.
 - 2. Deterministic movement `step(state, input, ctx, body)` in `packages/shared/movement`: walk/sprint/crouch/jump/slide, autostep 0.4 m, 45° slope limit, wall sliding, air control; float32 state (ADR 0003), `detSinCos` instead of Math.sin. Netcode review fixed: crouch-spam slides (sprint required + 0.6 s cooldown), bunny-hop speed kept only for one slide-jump, server clamps pitch and masks buttons.
+- 3. Input: pointer lock (raw `unadjustedMovement` where supported), rebindable keys (crouch on C, not Ctrl: Ctrl+W closes the tab), sensitivity in °/count, hold or toggle sprint; settings saved per browser.
+- 4. First-person camera: horizontal FOV setting (default 90°), head bob off by default, crouch eye height eased. Local practice mode runs the shared `step()` at a fixed 60 Hz with render interpolation (becomes client prediction in task 7).
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
