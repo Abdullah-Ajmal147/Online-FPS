@@ -140,6 +140,19 @@ Tasks done:
 - 8 (local part). `Dockerfile` (Debian trixie base: pnpm 12's native binary segfaults on bookworm) + `docker-compose.yml`: the game server serves the built client on :2567, API on :8787 with SQLite on a volume. Verified: compose up → page loads from the game server, joins, 11 bots, profile card. CI builds the image. Remote VPS/HTTPS deploy needs the owner's hosting account.
 - 9. Match summary JSON logged at match end (`[match-summary] {...}`).
 - Tests: full bots-only match on Relay Yard in-process (fights, winner, MVP, < 4 ms/tick); e2e full match flow against a bot-filled server with 20 s matches.
+- Soak (`apps/server/scripts/soak.ts`): 10 full bot-filled TDM matches back to back on Relay Yard, no crash; every match went to 75 kills (~145 kills, 6.5–8.5 min each); tick median 0.32 ms, p99 2.7 ms, one 47 ms spike (GC/JIT warm-up, to watch).
+
+Exit tests:
+
+- [~] 10 full bot-filled matches, no crash, tick < 4 ms — **passed locally** (in-process soak); the remote-server run needs the owner's VPS/Fly.io account
+- [ ] 5 outside playtesters, feedback in `docs/playtests/` — needs the owner
+- [ ] Two humans + 10 bots over the internet — needs hosting (works locally: e2e two players, and bots fill to 12)
+
+Open issues carried forward:
+
+- **Balance:** in the soak, Ember (team 1) won 8/10. Relay Yard is not symmetric (balcony stairs on Aegis's end, ramp on Ember's; side-lane cover differs). Check in playtests, then mirror the map if the gap holds.
+- Deploy to a VPS/Fly.io with HTTPS/WSS (owner account), then run the exit tests remotely.
+- 47 ms worst-case tick spike in the soak: add tick-time monitoring (Phase 7).
 - Phase 4 (lite, pulled forward for the end-to-end game): API with SQLite (`node:sqlite`) — `POST /matches` accepts only HMAC-signed results from the game server, each match id once; XP (150 + 100/kill + 250 win / 100 draw) and levels (500, 750, 1000… XP) computed by the API; `GET /profiles/:guestId`. Browser keeps a random guest id (not a secure identity; Supabase replaces it in Phase 4); menu shows level/XP, refreshed after each match. E2E checks XP after a full bot match.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
