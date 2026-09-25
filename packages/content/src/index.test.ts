@@ -50,6 +50,38 @@ describe('maps', () => {
 });
 
 describe('Relay Yard', () => {
+  it('is point-symmetric: rotated 180° it is the same map with the teams swapped (fair)', () => {
+    const m = maps['relay-yard']!;
+    const near = (a: readonly number[], b: readonly number[]) =>
+      a.every((v, i) => Math.abs(v - b[i]!) < 1e-9);
+    const flip = (p: readonly number[]) => [-p[0]! + 0, p[1]!, -p[2]! + 0];
+    const turn = (yaw: number) => (yaw + 180) % 360;
+    for (const g of m.geometry) {
+      const twin = m.geometry.find((o) => {
+        if (o.kind !== g.kind) return false;
+        if (g.kind === 'box' && o.kind === 'box')
+          return near(o.center, flip(g.center)) && near(o.size, g.size);
+        if (g.kind === 'ramp' && o.kind === 'ramp') {
+          return (
+            near(o.base, flip(g.base)) &&
+            o.yawDeg === turn(g.yawDeg) &&
+            o.run === g.run &&
+            o.rise === g.rise
+          );
+        }
+        if (g.kind === 'stairs' && o.kind === 'stairs') {
+          return near(o.start, flip(g.start)) && o.yawDeg === turn(g.yawDeg) && o.steps === g.steps;
+        }
+        return false;
+      });
+      expect(twin, JSON.stringify(g)).toBeDefined();
+    }
+    for (const s of m.spawns) {
+      const twin = m.spawns.find((o) => o.team !== s.team && near(o.position, flip(s.position)));
+      expect(twin, JSON.stringify(s)).toBeDefined();
+    }
+  });
+
   it('has six spawns per team for 6v6', () => {
     const m = maps['relay-yard']!;
     expect(m.spawns.filter((s) => s.team === 0)).toHaveLength(6);
