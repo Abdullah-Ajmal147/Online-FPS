@@ -6,3 +6,6 @@ packages:
 allowBuilds:
   esbuild: true
   msgpackr-extract: true
+
+minimumReleaseAgeExclude:
+  - '@dimforge/rapier3d-compat@0.21.0'

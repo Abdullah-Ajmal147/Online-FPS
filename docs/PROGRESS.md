@@ -49,10 +49,10 @@ Open issues carried forward:
 
 ## Phase 1 — Networked movement
 
-Status: planning (plan written, waiting for owner approval)
+Status: in progress (plan approved 2026-09-25: no player collision, starting movement numbers, hold-to-sprint + toggle option)
 
 Tasks done:
 
-- (none yet)
+- 1. Greybox map + movement tuning as data (`packages/content`, zod schemas); `expandMap()` turns box/ramp/stairs primitives into solids; `buildWorld()` makes Rapier colliders; client draws the same solids. Yaw limited to quarter turns so geometry is bit-identical everywhere.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

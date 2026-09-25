@@ -218,6 +218,9 @@ importers:
       '@colyseus/sdk':
         specifier: ^0.18.4
         version: 0.18.4(@colyseus/core@0.18.16)(typescript@6.0.3)(zod@4.6.5)
+      '@sentinel/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@sentinel/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -280,7 +283,14 @@ importers:
 
   packages/protocol: {}
 
-  packages/shared: {}
+  packages/shared:
+    dependencies:
+      '@dimforge/rapier3d-compat':
+        specifier: 0.21.0
+        version: 0.21.0
+      '@sentinel/content':
+        specifier: workspace:*
+        version: link:../content
 
   tools/bots:
     dependencies:
@@ -477,6 +487,9 @@ packages:
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
+
+  '@dimforge/rapier3d-compat@0.21.0':
+    resolution: {integrity: sha512-tCl1HPGwOhn5aCQbgqWbOH+Nx/5fnr3IPAnzQuR7zIhC/raqi2yxC6LhvZqjdI2El5hQgY5RDAwDrAjAi2FdPA==}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -2560,6 +2573,8 @@ snapshots:
       - utf-8-validate
 
   '@dimforge/rapier3d-compat@0.12.0': {}
+
+  '@dimforge/rapier3d-compat@0.21.0': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

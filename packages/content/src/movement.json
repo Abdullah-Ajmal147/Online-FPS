@@ -1,0 +1,19 @@
+{
+  "walkSpeed": 5,
+  "sprintSpeed": 7.5,
+  "crouchSpeed": 2.5,
+  "groundAccel": 60,
+  "groundFriction": 40,
+  "airControl": 0.3,
+  "gravity": 20,
+  "jumpHeight": 1.1,
+  "slideDuration": 0.8,
+  "slideBoost": 1.15,
+  "slideFriction": 6,
+  "stepHeight": 0.4,
+  "maxSlopeDeg": 45,
+  "capsuleRadius": 0.35,
+  "standingHeight": 1.8,
+  "crouchHeight": 1.2,
+  "eyeOffset": 0.15
+}
