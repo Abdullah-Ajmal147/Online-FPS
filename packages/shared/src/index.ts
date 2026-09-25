@@ -4,3 +4,6 @@ export * from './input.ts';
 export * from './map/solids.ts';
 export * from './movement/index.ts';
 export * from './physics.ts';
+export * from './net/predictor.ts';
+export * from './rng.ts';
+export * from './net/pacing.ts';

@@ -14,6 +14,11 @@ describe('parseArgs', () => {
     });
   });
 
+  it('reads --duration', () => {
+    expect(parseArgs(['--duration', '60']).duration).toBe(60);
+    expect(() => parseArgs(['--duration', '-1'])).toThrow();
+  });
+
   it('rejects bad input', () => {
     expect(() => parseArgs(['--count', '0'])).toThrow();
     expect(() => parseArgs(['--nope', '1'])).toThrow();

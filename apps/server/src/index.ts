@@ -5,12 +5,6 @@ import { MatchRoom } from './MatchRoom.ts';
 
 const port = Number(process.env.PORT ?? 2567);
 
-const lagPreset = process.env.SENTINEL_LAG;
-if (lagPreset) {
-  // The fake-lag transport layer is Phase 1, task 8. Until then this is a no-op.
-  console.warn(`[server] SENTINEL_LAG=${lagPreset} requested, but fake lag is not implemented yet`);
-}
-
 const server = new Server({
   transport: new WebSocketTransport(),
   greet: false,

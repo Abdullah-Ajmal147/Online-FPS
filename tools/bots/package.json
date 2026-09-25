@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@colyseus/sdk": "^0.18.4",
+    "@sentinel/content": "workspace:*",
     "@sentinel/protocol": "workspace:*",
     "@sentinel/shared": "workspace:*"
   },

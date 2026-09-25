@@ -2,6 +2,8 @@ export interface BotArgs {
   count: number;
   room?: string;
   url: string;
+  /** Stop after this many seconds and print a summary (for automated netcode tests). */
+  duration?: number;
 }
 
 /** Parses `--count 11 --room <id> --url http://localhost:2567`. */
@@ -25,6 +27,13 @@ export function parseArgs(argv: readonly string[]): BotArgs {
       case '--url':
         args.url = value;
         break;
+      case '--duration': {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0)
+          throw new Error(`--duration must be a positive number of seconds`);
+        args.duration = n;
+        break;
+      }
       default:
         throw new Error(`unknown flag ${flag}`);
     }

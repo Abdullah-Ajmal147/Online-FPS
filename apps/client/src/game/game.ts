@@ -21,7 +21,7 @@ import { buildMapMeshes } from '../map.ts';
 import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '../net/clock.ts';
 import { InterpolationDelay, RemoteBuffer } from '../net/interpolator.ts';
-import { Predictor } from '../net/predictor.ts';
+import { Predictor } from '@sentinel/shared';
 import type { Settings } from '../settings.ts';
 import { setStatus } from '../store.ts';
 import { advanceFixedStep } from './fixedStep.ts';

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { WanderBrain, rng } from './brain.ts';
+import { createRng } from '@sentinel/shared';
+import { WanderBrain } from './brain.ts';
 
 describe('bots', () => {
   it('rng is deterministic per seed', () => {
-    const a = rng(42);
-    const b = rng(42);
+    const a = createRng(42);
+    const b = createRng(42);
     expect([a(), a(), a()]).toEqual([b(), b(), b()]);
   });
 

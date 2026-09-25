@@ -1,4 +1,4 @@
-import { INPUT_REDUNDANCY, type PlayerInput, type PlayerState, type Vec3 } from '@sentinel/shared';
+import { INPUT_REDUNDANCY, type OwnState, type SequencedInput, type Vec3 } from '@sentinel/shared';
 import { BinaryReader, BinaryWriter } from './binary.ts';
 import { dequantizePosition, quantizePosition } from './quantize.ts';
 
@@ -48,10 +48,7 @@ export function decodeHello(bytes: Uint8Array): Hello {
 // InputCmd
 // ---------------------------------------------------------------------------
 
-export interface SequencedInput extends PlayerInput {
-  seq: number;
-  weaponSlot: number;
-}
+export type { SequencedInput, OwnState };
 
 export interface InputCmd {
   /** Newest serverTick the client has received (the snapshot ack). */
@@ -102,9 +99,6 @@ export function decodeInputCmd(bytes: Uint8Array): InputCmd {
 // ---------------------------------------------------------------------------
 // Snapshot
 // ---------------------------------------------------------------------------
-
-/** Everything step() reads, sent losslessly to the owning player (ADR 0003 table). */
-export type OwnState = Omit<PlayerState, 'yaw' | 'pitch'>;
 
 export interface EntityState {
   id: number;

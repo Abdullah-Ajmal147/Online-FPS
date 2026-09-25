@@ -304,6 +304,9 @@ importers:
       '@colyseus/sdk':
         specifier: ^0.18.4
         version: 0.18.4(@colyseus/core@0.18.16)(typescript@6.0.3)(zod@4.6.5)
+      '@sentinel/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@sentinel/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

@@ -1,12 +1,18 @@
-import type { OwnState, SequencedInput } from '@sentinel/protocol';
-import {
-  INPUT_REDUNDANCY,
-  step,
-  type MovementContext,
-  type PlayerBody,
-  type PlayerState,
-  type Vec3,
-} from '@sentinel/shared';
+import { INPUT_REDUNDANCY } from '../constants.ts';
+import type { PlayerInput } from '../input.ts';
+import type { Vec3 } from '../map/solids.ts';
+import type { MovementContext, PlayerBody } from '../movement/context.ts';
+import type { PlayerState } from '../movement/state.ts';
+import { step } from '../movement/step.ts';
+
+/** An input with its sequence number, as sent in InputCmd (see packages/protocol). */
+export interface SequencedInput extends PlayerInput {
+  seq: number;
+  weaponSlot: number;
+}
+
+/** Everything step() reads, as the server sends it for our own player (ADR 0003). */
+export type OwnState = Omit<PlayerState, 'yaw' | 'pitch'>;
 
 /** History kept for replay: 2 s of ticks covers any ping we still consider playable. */
 const HISTORY = 120;

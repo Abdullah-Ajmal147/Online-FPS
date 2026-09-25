@@ -14,7 +14,7 @@ import {
   type PlayerState,
   type Rapier,
 } from '@sentinel/shared';
-import { Predictor } from './predictor.ts';
+import { Predictor } from '@sentinel/shared';
 import { InterpolationDelay, MAX_EXTRAPOLATION_TICKS, RemoteBuffer } from './interpolator.ts';
 import { ServerClock, inputPacing } from './clock.ts';
 

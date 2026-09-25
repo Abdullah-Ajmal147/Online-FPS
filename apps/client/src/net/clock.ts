@@ -23,13 +23,4 @@ export class ServerClock {
   }
 }
 
-/**
- * Pace our input production to keep ~2 inputs waiting in the server's queue: enough to ride
- * out jitter, not so many that they add lag. Returns a time scale for the local fixed-step loop.
- */
-export const TARGET_QUEUE_DEPTH = 2;
-
-export function inputPacing(smoothedDepth: number): number {
-  const scale = 1 + (TARGET_QUEUE_DEPTH - smoothedDepth) * 0.02;
-  return Math.min(1.05, Math.max(0.95, scale));
-}
+export { TARGET_QUEUE_DEPTH, inputPacing } from '@sentinel/shared';

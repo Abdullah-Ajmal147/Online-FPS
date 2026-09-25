@@ -62,5 +62,6 @@ Tasks done:
 - 5. Protocol v2: `InputCmd` (last 3 inputs + ack, 30 bytes), `Snapshot` (own state exact float32 per ADR 0003, others at 1/64 m; 12 players ≈ 7.6 KB/s, no delta compression needed), `SnapshotAck`, `Ping`/`Pong`. Decoder rejects malformed client bytes.
 - 6. Server: 60 Hz accumulator loop, 30 Hz snapshots, per-player `InputQueue` (seq order, duplicates dropped, start buffer 2, cap 20, exactly one step per tick so flooding gains nothing). 12-player tick ≈ 0.5 ms.
 - 7. Client prediction + reconciliation (exact-match fast path, blend < 5 cm over 100 ms, else snap), remote interpolation 2 snapshots behind (adaptive to 100 ms, ≤ 50 ms extrapolation), input pacing on server queue depth. Bots now wander with inputs only.
+- 8. Fake lag (`pnpm dev:lag --preset good|normal|bad`, server-side): per-direction FIFO delay with jitter, loss on fast-path messages only, seeded. Predictor moved to `packages/shared` so bots run real prediction; `pnpm bots -- --count 11 --duration 60` prints the correction rate. Measured with 11 bots: **normal 0.08%**, **bad 0.94%** corrections (target < 1%).
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
