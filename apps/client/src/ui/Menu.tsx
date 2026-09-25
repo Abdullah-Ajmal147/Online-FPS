@@ -139,7 +139,9 @@ function ProfileCard() {
   return (
     <div class="profile-card" data-testid="profile">
       <div class="profile-level">
-        Level <b>{p.level}</b>
+        <span class="profile-level-label">
+          Level <b>{p.level}</b>
+        </span>
         <span>{p.xp.toLocaleString()} XP</span>
       </div>
       <div class="xp-bar">

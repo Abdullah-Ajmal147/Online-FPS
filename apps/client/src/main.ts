@@ -17,13 +17,13 @@ const rerender = () =>
         settings = next;
         saveSettings(next);
         rerender();
-        void refreshProfile();
       },
       onPlay: () => void game?.requestPlay(),
     }),
     ui,
   );
 rerender();
+void refreshProfile(); // level/XP card in the menu
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 canvas.addEventListener('click', () => void game?.requestPlay());

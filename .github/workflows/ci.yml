@@ -32,3 +32,11 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+
+  docker:
+    # The production image (game server + client + API) must keep building.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t sentinel-strike .

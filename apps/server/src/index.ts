@@ -1,5 +1,7 @@
+import { existsSync } from 'node:fs';
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
+import express from 'express';
 import { PROTOCOL_VERSION } from '@sentinel/protocol';
 import { MatchRoom } from './MatchRoom.ts';
 import { createApiReporter } from './apiReporter.ts';
@@ -13,6 +15,12 @@ const server = new Server({
     app.get('/healthz', (_req, res) => {
       res.json({ ok: true, service: 'server', protocolVersion: PROTOCOL_VERSION });
     });
+    // Production: serve the built client from this same port (one container = the whole game).
+    const clientDir = process.env.SENTINEL_CLIENT_DIR;
+    if (clientDir && existsSync(clientDir)) {
+      app.use(express.static(clientDir, { maxAge: '1h', index: 'index.html' }));
+      console.log(`[server] serving client from ${clientDir}`);
+    }
   },
 });
 

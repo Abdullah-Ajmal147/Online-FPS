@@ -31,6 +31,8 @@ test('menu shows controls and rebinding', async ({ page }) => {
   await expect(page.getByTestId('menu')).toBeVisible();
   await expect(page.getByTestId('play')).toBeVisible();
   await expect(page.getByText('Crouch / slide')).toBeVisible();
+  // The guest profile (level/XP) loads from the API on page load.
+  await expect(page.getByTestId('profile')).toContainText('Level 1');
 });
 
 test('F3 toggles the network debug overlay', async ({ page }) => {

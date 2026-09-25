@@ -1,0 +1,27 @@
+# Local production-like run: `docker compose up --build`, then open http://localhost:2567
+# Set SENTINEL_API_SECRET to a long random string outside of local testing.
+services:
+  game:
+    build: .
+    image: sentinel-strike
+    ports:
+      - '2567:2567'
+    environment:
+      SENTINEL_API_URL: http://api:8787
+      SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:-dev-only-secret}
+    depends_on:
+      - api
+    restart: unless-stopped
+  api:
+    image: sentinel-strike
+    command: ['node', 'apps/api/dist/index.mjs']
+    ports:
+      - '8787:8787'
+    environment:
+      SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:-dev-only-secret}
+      SENTINEL_DB: /data/sentinel.db
+    volumes:
+      - sentinel-data:/data
+    restart: unless-stopped
+volumes:
+  sentinel-data:
