@@ -49,7 +49,9 @@ These numbers are the contract between client and server. Change them only with 
 
 ## Quantization
 
-- Position: 1/64 m resolution (int32 per axis is plenty; compress deltas as int16)
+- Position of other players: 1/64 m resolution (int32 per axis is plenty; compress deltas as int16)
+- The receiving player's own state: exact float32, and the simulation rounds its state to
+  float32 every tick (see ADR 0003)
 - Yaw/pitch: 16 bits each
 - Health/ammo: uint8
 
@@ -57,4 +59,4 @@ These numbers are the contract between client and server. Change them only with 
 
 - `pnpm dev:lag` presets: `good` (40 ms, 0%), `normal` (120 ± 20 ms, 3%), `bad` (250 ± 60 ms, 8%).
 - Replay test: feed a recorded input stream to client-predictor and server sim;
-  final positions must match within 1 cm.
+  final state must match exactly (ADR 0003; the phase exit test's 1 cm is the upper bound).

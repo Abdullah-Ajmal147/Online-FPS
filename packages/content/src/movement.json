@@ -10,6 +10,7 @@
   "slideDuration": 0.8,
   "slideBoost": 1.15,
   "slideFriction": 6,
+  "slideCooldown": 0.6,
   "stepHeight": 0.4,
   "maxSlopeDeg": 45,
   "capsuleRadius": 0.35,

@@ -11,11 +11,10 @@ Rules this plan follows: `docs/NETCODE.md` (60 Hz sim, 30 Hz snapshots, 3× inpu
 - **One movement function for client and server.** `packages/shared/movement` exports
   `step(state, input, world) -> state`. The server runs it to decide the truth; the client runs
   the same code to predict. Both use the same Rapier version, so results match.
-- **Quantize inside the simulation, not just on the wire.** Snapshots send positions at 1/64 m
-  (about 1.6 cm). If only the wire were quantized, every snapshot would differ from the
-  client's prediction by up to 0.8 cm and cause constant tiny corrections. Instead, `step()`
-  rounds position to 1/64 m and velocity to a fixed grid at the end of every tick. Server state
-  is then exactly what the snapshot carries, and replaying from it reproduces the prediction.
+- **Exact prediction via float32 state (ADR 0003).** The simulation rounds position and
+  velocity to float32 every tick, and each snapshot carries the receiving player's own state
+  as exact float32. Replaying from it reproduces the prediction exactly. (First draft rounded
+  the simulation to 1/64 m; that distorted walk speed and diagonal movement, see the ADR.)
 - **No player-vs-player collision in Phase 1.** Players pass through each other. Pushing other
   players is where client prediction goes wrong most often, so it waits until movement feels
   right (see question 1).

@@ -105,6 +105,8 @@ export const MovementSchema = z
     /** Speed at the start of a slide, as a multiple of sprintSpeed. */
     slideBoost: z.number().min(1),
     slideFriction: z.number().nonnegative(),
+    /** Seconds after a slide ends before another can start (stops crouch-spam slides). */
+    slideCooldown: z.number().nonnegative(),
     stepHeight: z.number().positive(),
     maxSlopeDeg: z.number().min(0).max(89),
     capsuleRadius: z.number().positive(),

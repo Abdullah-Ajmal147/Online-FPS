@@ -54,5 +54,6 @@ Status: in progress (plan approved 2026-09-25: no player collision, starting mov
 Tasks done:
 
 - 1. Greybox map + movement tuning as data (`packages/content`, zod schemas); `expandMap()` turns box/ramp/stairs primitives into solids; `buildWorld()` makes Rapier colliders; client draws the same solids. Yaw limited to quarter turns so geometry is bit-identical everywhere.
+- 2. Deterministic movement `step(state, input, ctx, body)` in `packages/shared/movement`: walk/sprint/crouch/jump/slide, autostep 0.4 m, 45° slope limit, wall sliding, air control; float32 state (ADR 0003), `detSinCos` instead of Math.sin. Netcode review fixed: crouch-spam slides (sprint required + 0.6 s cooldown), bunny-hop speed kept only for one slide-jump, server clamps pitch and masks buttons.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
