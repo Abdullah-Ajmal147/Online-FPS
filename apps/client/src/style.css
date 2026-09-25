@@ -155,3 +155,27 @@ body {
   cursor: pointer;
   font: inherit;
 }
+
+.debug-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-width: 220px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 65%);
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+}
+
+.debug-title {
+  margin-bottom: 4px;
+  color: #8b949e;
+}
+
+.debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}

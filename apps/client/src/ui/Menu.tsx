@@ -106,7 +106,7 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
           ))}
         </div>
         <p class="menu-hint">
-          Slide: sprint forward, then press crouch. Mouse: look around.
+          Slide: sprint forward, then press crouch. F3: network stats.
           <button class="link" onClick={() => onSettings(DEFAULT_SETTINGS)}>
             Reset to defaults
           </button>

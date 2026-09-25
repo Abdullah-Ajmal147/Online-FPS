@@ -10,7 +10,7 @@ test('client renders and connects to the match room', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('practice mode: holding W walks the player forward (-Z)', async ({ page }) => {
+test('holding W walks the player forward (-Z)', async ({ page }) => {
   await page.goto('/');
   const debug = page.getByTestId('player-debug');
   await expect(debug).toBeVisible();
@@ -31,4 +31,18 @@ test('menu shows controls and rebinding', async ({ page }) => {
   await expect(page.getByTestId('menu')).toBeVisible();
   await expect(page.getByTestId('play')).toBeVisible();
   await expect(page.getByText('Crouch / slide')).toBeVisible();
+});
+
+test('F3 toggles the network debug overlay', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
+  await page.keyboard.press('F3');
+  const overlay = page.getByTestId('debug-overlay');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText('ping (rtt)');
+  await expect(overlay).toContainText('corrections');
+  // Stats arrive once the server has sent our first snapshots.
+  await expect(overlay).toContainText('network', { timeout: 5000 });
+  await page.keyboard.press('F3');
+  await expect(overlay).toBeHidden();
 });
