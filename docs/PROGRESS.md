@@ -1,10 +1,10 @@
 # Progress
 
-**Current phase:** 0 — Setup
+**Current phase:** 1 — Networked movement
 
 ## Phase 0 — Setup
 
-Status: in progress (tasks 1–9 done, CI green; task 10 waiting on owner answers)
+Status: **done 2026-09-25**
 
 Tasks done:
 
@@ -18,6 +18,7 @@ Tasks done:
 - 7. Client joins the room and shows "connected, protocol v1" after the server's binary `Hello` arrives
 - 8. Vitest across workspace (17 tests); Playwright test checks the "connected" text and the renderer backend
 - 9. `.github/workflows/ci.yml`: install, lint, typecheck, test, build, e2e. Green on GitHub (github.com/Abdullah-Ajmal147/Online-FPS).
+- 10. `docs/GAME_DESIGN.md` filled. The owner delegated the choices (worldwide audience): Sentinel Strike; Aegis Directive vs Ember Syndicate; medium-fast TTK; health regen; no killstreaks at launch; EU + NA East + Asia regions (ADR 0002).
 - Also: `packages/content` has a zod `ModeSchema` + Team Deathmatch data; `tools/bots` joins N idle bots.
 
 Exit tests:
@@ -41,7 +42,17 @@ What we learned:
 
 Open issues carried forward:
 
-- Task 10: owner answers the open questions in `docs/GAME_DESIGN.md`.
+- Owner should confirm the delegated design choices before Phase 2 (TTK, health) and Phase 5 (factions, art).
+- WebGPU backend not yet seen running (only the WebGL 2 fallback).
+- Worldwide play (ADR 0002): test netcode with the `bad` preset too, not only `normal`.
 - Client bundle 964 KB (271 KB gzip), mostly Three.js; fine for the 15 MB budget, split later if needed.
+
+## Phase 1 — Networked movement
+
+Status: planning (plan written, waiting for owner approval)
+
+Tasks done:
+
+- (none yet)
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
