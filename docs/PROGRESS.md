@@ -4,7 +4,7 @@
 
 ## Phase 0 — Setup
 
-Status: in progress (tasks 1–8 done and verified locally; 9 written but CI not yet run; 10 waiting on owner)
+Status: in progress (tasks 1–9 done, CI green; task 10 waiting on owner answers)
 
 Tasks done:
 
@@ -17,14 +17,14 @@ Tasks done:
 - 6. Protocol: `PROTOCOL_VERSION = 1`, DataView `BinaryWriter`/`BinaryReader`, binary `Hello` message; round-trip tests
 - 7. Client joins the room and shows "connected, protocol v1" after the server's binary `Hello` arrives
 - 8. Vitest across workspace (17 tests); Playwright test checks the "connected" text and the renderer backend
-- 9. `.github/workflows/ci.yml`: install, lint, typecheck, test, build, e2e. **Not run yet — needs a GitHub remote + push.**
+- 9. `.github/workflows/ci.yml`: install, lint, typecheck, test, build, e2e. Green on GitHub (github.com/Abdullah-Ajmal147/Online-FPS).
 - Also: `packages/content` has a zod `ModeSchema` + Team Deathmatch data; `tools/bots` joins N idle bots.
 
 Exit tests:
 
 - [x] `pnpm dev` starts all three apps; the browser shows the cube and "connected, protocol v1" (checked in Chrome)
 - [x] `pnpm test` and `pnpm test:e2e` pass locally
-- [ ] CI is green on a push
+- [x] CI is green on a push
 - [x] `docs/PROGRESS.md` updated
 
 What we learned:
@@ -35,13 +35,13 @@ What we learned:
 - Portable packages compile without DOM/Node libs; `packages/protocol/src/globals.d.ts` declares only TextEncoder/TextDecoder.
 - Playwright must launch servers directly (not via `pnpm --filter … dev` / `tsx watch`), or it hangs on shutdown.
 - Bug fixed: HUD stayed on "connecting…" when updates arrived before Preact's `useEffect` subscribed (always in hidden tabs). `subscribe()` now calls the listener immediately.
+- Run `pnpm lint` after editing docs too: Prettier checks Markdown, and CI caught an unformatted PROGRESS.md.
 - Headless Chromium and the Chrome used for testing ran the WebGL 2 fallback; WebGPU path still needs a check in a WebGPU-enabled browser.
 - `pnpm dev:lag --preset <good|normal|bad>` sets `SENTINEL_LAG`, but the fake-lag layer is Phase 1 task 8 (server only warns for now).
 
 Open issues carried forward:
 
 - Task 10: owner answers the open questions in `docs/GAME_DESIGN.md`.
-- Push to GitHub and confirm CI is green.
 - Client bundle 964 KB (271 KB gzip), mostly Three.js; fine for the 15 MB budget, split later if needed.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
