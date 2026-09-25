@@ -1,6 +1,17 @@
 /** Player settings. Stored per browser (a convenience, not game state). */
 
-export const ACTIONS = ['forward', 'back', 'left', 'right', 'jump', 'crouch', 'sprint'] as const;
+export const ACTIONS = [
+  'forward',
+  'back',
+  'left',
+  'right',
+  'jump',
+  'crouch',
+  'sprint',
+  'reload',
+  'primary',
+  'secondary',
+] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -11,6 +22,9 @@ export const ACTION_LABELS: Record<Action, string> = {
   jump: 'Jump',
   crouch: 'Crouch / slide',
   sprint: 'Sprint',
+  reload: 'Reload',
+  primary: 'Primary weapon',
+  secondary: 'Sidearm',
 };
 
 export interface Settings {
@@ -38,6 +52,9 @@ export const DEFAULT_SETTINGS: Settings = {
     jump: 'Space',
     crouch: 'KeyC',
     sprint: 'ShiftLeft',
+    reload: 'KeyR',
+    primary: 'Digit1',
+    secondary: 'Digit2',
   },
 };
 

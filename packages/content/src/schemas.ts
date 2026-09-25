@@ -28,6 +28,9 @@ const PositiveVec3Schema = z.tuple([
  */
 const QuarterYawSchema = z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]);
 
+/** Maps must fit within ±500 m on every axis (wire format limit is ±511 m, see ADR 0004). */
+export const MAP_EXTENT_METRES = 500;
+
 export const MaterialSchema = z.enum(['floor', 'wall', 'prop', 'ramp', 'stairs', 'platform']);
 export type Material = z.infer<typeof MaterialSchema>;
 
@@ -86,7 +89,18 @@ export const MapSchema = z
   })
   .refine((m) => [0, 1].every((team) => m.spawns.some((s) => s.team === team)), {
     message: 'every team needs at least one spawn',
-  });
+  })
+  // Other players' positions go on the wire as int16 at 1/64 m (ADR 0004): ±511 m.
+  .refine(
+    (m) =>
+      [
+        ...m.spawns.map((s) => s.position),
+        ...m.geometry.map((g) =>
+          g.kind === 'box' ? g.center : g.kind === 'ramp' ? g.base : g.start,
+        ),
+      ].every((p) => p.every((v) => Math.abs(v) <= MAP_EXTENT_METRES)),
+    { message: `map must fit within ±${500} m` },
+  );
 export type GameMap = z.infer<typeof MapSchema>;
 
 // ---------------------------------------------------------------------------
@@ -128,3 +142,62 @@ export const MovementSchema = z
       'crouch height must be below standing height, and both taller than the capsule diameter',
   });
 export type Movement = z.infer<typeof MovementSchema>;
+
+// ---------------------------------------------------------------------------
+// Weapons. Units: damage in HP, distances in metres, times in seconds, angles in degrees.
+// packages/shared converts these to ticks and 16-bit angle units once at load.
+// ---------------------------------------------------------------------------
+
+const Degrees = z.number().nonnegative().max(45);
+
+export const WeaponSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9-]+$/),
+    name: z.string().min(1),
+    class: z.enum(['rifle', 'smg', 'shotgun', 'marksman', 'sidearm']),
+    /** Loadout slot: 0 = primary, 1 = secondary. */
+    slot: z.union([z.literal(0), z.literal(1)]),
+    fireMode: z.enum(['auto', 'semi']),
+    /** Rounds per minute. At most 3600 (one shot per 60 Hz tick). */
+    rpm: z.number().positive().max(3600),
+    damage: z.object({
+      head: z.number().int().positive().max(255),
+      torso: z.number().int().positive().max(255),
+      limbs: z.number().int().positive().max(255),
+    }),
+    falloff: z.object({
+      start: z.number().nonnegative(),
+      end: z.number().positive(),
+      minMultiplier: z.number().min(0).max(1),
+    }),
+    maxRange: z.number().positive().max(500),
+    magazine: z.number().int().positive().max(255),
+    reserve: z.number().int().nonnegative().max(65535),
+    reloadTime: z.number().positive().max(4.25),
+    equipTime: z.number().positive().max(4.25),
+    adsTime: z.number().positive().max(4.25),
+    spread: z.object({
+      hip: Degrees,
+      ads: Degrees,
+      moving: Degrees,
+      airborne: Degrees,
+      perShot: Degrees,
+      max: Degrees,
+      recoveryPerSecond: z.number().nonnegative(),
+    }),
+    recoil: z.object({
+      /** Per shot: [up, right] kick in degrees. After the last entry the last one repeats. */
+      pattern: z.array(z.tuple([z.number(), z.number()])).min(1),
+      adsMultiplier: z.number().min(0).max(2),
+      recoveryPerSecond: z.number().nonnegative(),
+    }),
+    moveSpeedMultiplier: z.number().positive().max(1.5),
+    adsMoveSpeedMultiplier: z.number().positive().max(1.5),
+  })
+  .refine((w) => w.falloff.end > w.falloff.start, {
+    message: 'falloff.end must be beyond falloff.start',
+  })
+  .refine((w) => w.damage.head >= w.damage.torso && w.damage.torso >= w.damage.limbs, {
+    message: 'damage must satisfy head >= torso >= limbs',
+  });
+export type Weapon = z.infer<typeof WeaponSchema>;

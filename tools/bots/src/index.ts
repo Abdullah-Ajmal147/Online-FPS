@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { Client, type Room } from '@colyseus/sdk';
-import { maps, movement } from '@sentinel/content';
+import { defaultLoadout, maps, movement } from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
@@ -17,6 +17,8 @@ import {
   createMovementContext,
   createPlayerBody,
   createPlayerState,
+  createSimContext,
+  createWeaponState,
   expandMap,
   initPhysics,
   inputPacing,
@@ -41,6 +43,7 @@ interface Bot {
   brain: WanderBrain;
   predictor: Predictor;
   spawned: boolean;
+  lifeId: number;
   ack: number;
   queueDepth: number;
   accumulatorMs: number;
@@ -55,11 +58,17 @@ for (let i = 0; i < args.count; i++) {
     ? await client.joinById(args.room, options)
     : await client.joinOrCreate('match', options);
   const ctx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
+  const simCtx = createSimContext(ctx, defaultLoadout);
   const bot: Bot = {
     name: `bot ${i + 1}`,
     room,
     brain: new WanderBrain(1000 + i),
-    predictor: new Predictor(createPlayerState([0, 0, 0], 0), ctx, createPlayerBody(ctx)),
+    predictor: new Predictor(
+      { move: createPlayerState([0, 0, 0], 0), weapon: createWeaponState(simCtx.loadout) },
+      simCtx,
+      createPlayerBody(ctx),
+    ),
+    lifeId: -1,
     spawned: false,
     ack: 0,
     queueDepth: TARGET_QUEUE_DEPTH,
@@ -73,11 +82,14 @@ for (let i = 0; i < args.count; i++) {
     bot.ack = snap.serverTick;
     bot.queueDepth += (snap.inputQueueDepth - bot.queueDepth) * 0.1;
     if (!snap.own) return;
-    if (!bot.spawned) {
+    const own = snap.own;
+    if (!bot.spawned || own.lifeId !== bot.lifeId) {
+      // Joined or respawned: predict from the server's state.
       bot.spawned = true;
-      bot.predictor.reset({ ...snap.own, yaw: 0, pitch: 0 });
-    } else {
-      bot.predictor.onServerState(snap.own, snap.lastProcessedSeq);
+      bot.lifeId = own.lifeId;
+      bot.predictor.reset({ move: { ...own.sim.move, yaw: 0, pitch: 0 }, weapon: own.sim.weapon });
+    } else if (own.respawnTicks === 0) {
+      bot.predictor.onServerState(own.sim, snap.lastProcessedSeq);
     }
   });
   room.onMessage(MessageType.Pong, (bytes: Uint8Array) => {
@@ -101,7 +113,7 @@ const loop = setInterval(() => {
       bot.accumulatorMs -= TICK_DT * 1000;
       const input = bot.brain.next();
       if (args.record && bot === bots[0]) bot.recorded.push(input);
-      bot.predictor.tick({ ...input, weaponSlot: 0 });
+      bot.predictor.tick({ ...input, weaponSlot: 0, viewTick: bot.ack });
       bot.room.sendBytes(
         MessageType.InputCmd,
         encodeInputCmd({ ackServerTick: bot.ack, inputs: bot.predictor.recentInputs() }),

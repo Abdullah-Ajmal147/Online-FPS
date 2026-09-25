@@ -39,6 +39,7 @@ These numbers are the contract between client and server. Change them only with 
 
 ## Hit registration (hitscan)
 
+- (Implemented as a per-input `viewTick` — see ADR 0005.)
 - Firing is a button bit inside `InputCmd`; the server uses that input's `yaw`, `pitch`
   and the client's interpolation delay to decide what the shooter saw.
 - Server: validate fire rate / ammo from server weapon state → compute
@@ -50,7 +51,7 @@ These numbers are the contract between client and server. Change them only with 
 
 ## Quantization
 
-- Position of other players: 1/64 m resolution (int32 per axis is plenty; compress deltas as int16)
+- Position of other players: 1/64 m resolution, int16 per axis (maps within ±500 m; ADR 0004)
 - The receiving player's own state: exact float32, and the simulation rounds its state to
   float32 every tick (see ADR 0003)
 - Yaw/pitch: 16 bits each

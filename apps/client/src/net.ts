@@ -3,11 +3,13 @@ import {
   MessageType,
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
+  decodeEvents,
   decodeHello,
   decodePing,
   decodeSnapshot,
   encodeInputCmd,
   encodePing,
+  type GameEvent,
   type Hello,
   type InputCmd,
   type Snapshot,
@@ -24,6 +26,7 @@ function serverUrl(): string {
 export interface NetHandlers {
   onHello(hello: Hello): void;
   onSnapshot(snapshot: Snapshot, arrivalMs: number): void;
+  onEvents(events: GameEvent[]): void;
   onDisconnect(): void;
 }
 
@@ -63,6 +66,14 @@ export class Connection {
           return;
         }
         handlers.onSnapshot(snap, performance.now());
+      });
+
+      room.onMessage(MessageType.Events, (payload: Uint8Array) => {
+        try {
+          handlers.onEvents(decodeEvents(payload));
+        } catch (err) {
+          console.warn('[net] dropped malformed events:', err);
+        }
       });
 
       room.onMessage(MessageType.Pong, (payload: Uint8Array) => {

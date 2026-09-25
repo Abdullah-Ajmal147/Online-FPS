@@ -179,3 +179,206 @@ body {
   justify-content: space-between;
   gap: 16px;
 }
+
+:root {
+  --team-a: #3b8cff;
+  --team-b: #ff8a3d;
+  --spread: 6px;
+}
+
+.team-a {
+  color: var(--team-a);
+}
+
+.team-b {
+  color: var(--team-b);
+}
+
+/* Crosshair: four lines whose gap follows the weapon's current spread. */
+.crosshair-lines {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+.crosshair-lines i {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 55%);
+}
+
+.ch-top,
+.ch-bottom {
+  width: 2px;
+  height: 8px;
+  left: -1px;
+}
+
+.ch-left,
+.ch-right {
+  width: 8px;
+  height: 2px;
+  top: -1px;
+}
+
+.ch-top {
+  bottom: var(--spread);
+}
+
+.ch-bottom {
+  top: var(--spread);
+}
+
+.ch-left {
+  right: var(--spread);
+}
+
+.ch-right {
+  left: var(--spread);
+}
+
+.hitmarker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background:
+    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat;
+  -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+  mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+  color: #fff;
+}
+
+.hm-predicted {
+  color: rgb(255 255 255 / 45%);
+}
+
+.hm-head {
+  color: #ffd35a;
+}
+
+.hm-kill {
+  color: #ff4d4d;
+  width: 28px;
+  height: 28px;
+}
+
+.damage-arc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border-top: 6px solid rgb(255 60 60 / 85%);
+  -webkit-mask: linear-gradient(90deg, transparent 30%, #000 45%, #000 55%, transparent 70%);
+  mask: linear-gradient(90deg, transparent 30%, #000 45%, #000 55%, transparent 70%);
+}
+
+.killfeed {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font:
+    600 13px/1.4 system-ui,
+    sans-serif;
+}
+
+.kf-row {
+  display: flex;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 55%);
+}
+
+.kf-weapon {
+  color: #c9d1d9;
+  font-weight: 400;
+}
+
+.vitals {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  left: 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font:
+    700 20px ui-monospace,
+    monospace;
+}
+
+.health-bar {
+  width: 220px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 55%);
+  overflow: hidden;
+}
+
+.health-fill {
+  height: 100%;
+  background: #e6edf3;
+  transition: width 0.1s;
+}
+
+.health-fill[data-low='true'] {
+  background: #ff5a5a;
+}
+
+.ammo {
+  text-align: right;
+  font:
+    700 30px ui-monospace,
+    monospace;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 60%);
+}
+
+.ammo-reserve {
+  margin-left: 6px;
+  font-size: 18px;
+  color: #c9d1d9;
+}
+
+.weapon-name {
+  font:
+    600 13px system-ui,
+    sans-serif;
+  color: #c9d1d9;
+}
+
+.death {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: radial-gradient(circle, transparent 30%, rgb(60 0 0 / 55%));
+}
+
+.death-title {
+  font:
+    800 34px system-ui,
+    sans-serif;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 70%);
+}
+
+.death-sub {
+  margin-top: 6px;
+  color: #c9d1d9;
+}

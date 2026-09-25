@@ -17,7 +17,10 @@ export interface RemotePose {
   position: Vec3;
   /** Radians. */
   yaw: number;
+  /** Radians, positive looks up. */
+  pitch: number;
   crouching: boolean;
+  alive: boolean;
   team: number;
 }
 
@@ -89,7 +92,9 @@ function pose(a: EntityState, b: EntityState, t: number): RemotePose {
       lerp(a.position[2], b.position[2]),
     ],
     yaw: yawRad(a.yaw) + dy * Math.min(t, 1),
+    pitch: ((a.pitch + (b.pitch - a.pitch) * Math.min(t, 1)) / 16384) * (Math.PI / 2),
     crouching: t < 0.5 ? a.crouching : b.crouching,
+    alive: b.alive,
     team: b.team,
   };
 }

@@ -19,6 +19,33 @@ export interface NetStats {
   remotePlayers: number;
 }
 
+export interface KillFeedEntry {
+  key: number;
+  killer: string;
+  killerTeam: number;
+  victim: string;
+  victimTeam: number;
+  weapon: string;
+  headshot: boolean;
+}
+
+export interface CombatHud {
+  alive: boolean;
+  health: number;
+  weaponName: string;
+  ammo: number;
+  reserve: number;
+  reloading: boolean;
+  respawnSeconds: number;
+  killedBy: string | null;
+  /** performance.now() of the last confirmed hit, and what it was. */
+  hitAt: number;
+  hitKind: 'hit' | 'head' | 'kill' | 'predicted';
+  /** Damage directions (degrees, 0 = ahead, clockwise) with the time they arrived. */
+  damage: { key: number; angle: number; at: number }[];
+  killFeed: KillFeedEntry[];
+}
+
 export interface ClientStatus {
   backend: 'WebGPU' | 'WebGL 2' | 'starting';
   net: { state: 'connecting' | 'connected' | 'error'; text: string };
@@ -29,6 +56,7 @@ export interface ClientStatus {
   /** Null in offline practice mode. */
   netStats: NetStats | null;
   fps: number;
+  combat: CombatHud | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -40,6 +68,7 @@ let status: ClientStatus = {
   player: null,
   netStats: null,
   fps: 0,
+  combat: null,
 };
 const listeners = new Set<Listener>();
 

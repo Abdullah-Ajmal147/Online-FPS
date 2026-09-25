@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { Button } from '@sentinel/shared';
 import { InputQueue, MAX_QUEUED_INPUTS, MAX_REPEAT_TICKS, START_BUFFER } from './inputQueue.ts';
 
-const input = (seq: number, buttons = seq) => ({ seq, buttons, yaw: seq, pitch: 0, weaponSlot: 0 });
+const input = (seq: number, buttons = seq) => ({
+  seq,
+  buttons,
+  yaw: seq,
+  pitch: 0,
+  weaponSlot: 0,
+  viewTick: seq,
+});
 
 function started(): InputQueue {
   const q = new InputQueue();

@@ -1,0 +1,36 @@
+{
+  "id": "wren-sp",
+  "name": "Wren SP",
+  "class": "sidearm",
+  "slot": 1,
+  "fireMode": "semi",
+  "rpm": 400,
+  "damage": { "head": 50, "torso": 30, "limbs": 24 },
+  "falloff": { "start": 15, "end": 30, "minMultiplier": 0.7 },
+  "maxRange": 100,
+  "magazine": 12,
+  "reserve": 48,
+  "reloadTime": 1.5,
+  "equipTime": 0.3,
+  "adsTime": 0.18,
+  "spread": {
+    "hip": 1.8,
+    "ads": 0.2,
+    "moving": 1,
+    "airborne": 3,
+    "perShot": 0.6,
+    "max": 3,
+    "recoveryPerSecond": 10
+  },
+  "recoil": {
+    "pattern": [
+      [1.2, 0.1],
+      [1.2, -0.15],
+      [1.2, 0.2]
+    ],
+    "adsMultiplier": 0.8,
+    "recoveryPerSecond": 12
+  },
+  "moveSpeedMultiplier": 1,
+  "adsMoveSpeedMultiplier": 0.7
+}

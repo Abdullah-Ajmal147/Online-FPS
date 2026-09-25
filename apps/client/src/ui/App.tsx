@@ -1,4 +1,5 @@
 import type { Settings } from '../settings.ts';
+import { CombatHud } from './CombatHud.tsx';
 import { DebugOverlay } from './DebugOverlay.tsx';
 import { Hud, useStatus } from './Hud.tsx';
 import { Menu } from './Menu.tsx';
@@ -15,7 +16,8 @@ export function App(props: Props) {
     <>
       <Hud />
       <DebugOverlay />
-      {status.playing ? <div class="crosshair" /> : <Menu {...props} />}
+      <CombatHud />
+      {!status.playing && <Menu {...props} />}
     </>
   );
 }

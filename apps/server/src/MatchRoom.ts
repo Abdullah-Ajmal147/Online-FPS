@@ -1,13 +1,15 @@
 import { Room, ServerError, type Client } from '@colyseus/core';
-import { maps, movement } from '@sentinel/content';
+import { defaultLoadout, maps, movement } from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
   decodeInputCmd,
   decodeSnapshotAck,
+  encodeEvents,
   encodeHello,
   encodeSnapshot,
+  type GameEvent,
 } from '@sentinel/protocol';
 import {
   MAX_PLAYERS_PER_MATCH,
@@ -59,7 +61,13 @@ export class MatchRoom extends Room {
       console.warn(`[match] fake lag ON: ${presetName} ${JSON.stringify(LAG_PRESETS[presetName])}`);
     }
     const rapier = await initPhysics();
-    this.sim = new MatchSim(rapier, maps.greybox!, movement);
+    this.sim = new MatchSim(
+      rapier,
+      maps.greybox!,
+      movement,
+      defaultLoadout,
+      Date.now() & 0xffffffff,
+    );
     this.loop = new TickLoop(() => this.tick());
     this.setSimulationInterval(() => this.loop.pump(), PUMP_INTERVAL_MS);
 
@@ -104,6 +112,25 @@ export class MatchRoom extends Room {
     for (const input of cmd.inputs) queue?.push(input);
   }
 
+  /** Kills to everyone, hits to the shooter, damage to the victim. Reliable (never dropped). */
+  private sendEvents(): void {
+    if (this.sim.events.length === 0) return;
+    for (const client of this.clients) {
+      const seat = this.seats.get(client.sessionId);
+      if (!seat) continue;
+      const mine: GameEvent[] = this.sim.events
+        .filter((e) => e.to === null || e.to === seat.playerId)
+        .map((e) => e.event);
+      if (mine.length === 0) continue;
+      const bytes = encodeEvents(mine);
+      const send = () => {
+        if (this.seats.has(client.sessionId)) client.sendBytes(MessageType.Events, bytes);
+      };
+      if (this.lag) this.lag.pass(`${client.sessionId}:out`, send, false);
+      else send();
+    }
+  }
+
   /** Fast-path message from a client, through fake lag when it's on. */
   private inbound(client: Client, handle: () => void): void {
     if (this.lag) this.lag.pass(`${client.sessionId}:in`, handle, true);
@@ -143,6 +170,7 @@ export class MatchRoom extends Room {
         protocolVersion: PROTOCOL_VERSION,
         serverTickRate: TICK_RATE,
         playerId: player.id,
+        team: player.team,
       }),
     );
   }
@@ -157,6 +185,7 @@ export class MatchRoom extends Room {
 
   private tick(): void {
     this.sim.step();
+    this.sendEvents();
     if (this.sim.tick % TICKS_PER_SNAPSHOT !== 0) return;
     for (const client of this.clients) {
       const seat = this.seats.get(client.sessionId);

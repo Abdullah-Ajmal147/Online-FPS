@@ -22,6 +22,8 @@ export function step(
   rawInput: PlayerInput,
   ctx: MovementContext,
   body: PlayerBody,
+  /** Held weapon's speed multiplier (aiming slows you). Not applied to slides. */
+  speedScale = 1,
 ): PlayerState {
   const input = sanitizeInput(rawInput);
   const t = ctx.tuning;
@@ -98,7 +100,7 @@ export function step(
   } else {
     if (!prev.grounded) slideTicks = 0;
     const sprinting = sprintHeld && !crouching;
-    let target = crouching ? t.crouchSpeed : sprinting ? t.sprintSpeed : t.walkSpeed;
+    let target = (crouching ? t.crouchSpeed : sprinting ? t.sprintSpeed : t.walkSpeed) * speedScale;
     if (groundRules) {
       // Accelerate towards the wish velocity; with no input, friction brings us to a stop.
       [vx, vz] = approach(

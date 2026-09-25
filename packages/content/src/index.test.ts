@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { MapSchema, ModeSchema, MovementSchema, maps, modes, movement } from './index.ts';
+import {
+  MapSchema,
+  ModeSchema,
+  MovementSchema,
+  WeaponSchema,
+  defaultLoadout,
+  maps,
+  modes,
+  movement,
+  weapons,
+} from './index.ts';
 
 describe('content', () => {
   it('loads Team Deathmatch as 6v6', () => {
@@ -64,5 +74,37 @@ describe('movement tuning', () => {
 
   it('rejects speeds in the wrong order', () => {
     expect(MovementSchema.safeParse({ ...movement, crouchSpeed: 9 }).success).toBe(false);
+  });
+});
+
+describe('weapons', () => {
+  it('has an original rifle and sidearm in the default loadout', () => {
+    expect(defaultLoadout.map((w) => [w.class, w.slot])).toEqual([
+      ['rifle', 0],
+      ['sidearm', 1],
+    ]);
+  });
+
+  it('kills in 4–5 rifle body shots, about 0.3–0.5 s (GAME_DESIGN medium-fast TTK)', () => {
+    const rifle = weapons['kestrel-ar']!;
+    const shots = Math.ceil(100 / rifle.damage.torso);
+    expect(shots).toBeGreaterThanOrEqual(4);
+    expect(shots).toBeLessThanOrEqual(5);
+    const ttk = ((shots - 1) * 60) / rifle.rpm;
+    expect(ttk).toBeGreaterThanOrEqual(0.3);
+    expect(ttk).toBeLessThanOrEqual(0.5);
+  });
+
+  it('rejects bad weapon data', () => {
+    const rifle = weapons['kestrel-ar']!;
+    expect(WeaponSchema.safeParse({ ...rifle, rpm: 5000 }).success).toBe(false);
+    expect(
+      WeaponSchema.safeParse({ ...rifle, damage: { head: 10, torso: 20, limbs: 5 } }).success,
+    ).toBe(false);
+    expect(
+      WeaponSchema.safeParse({ ...rifle, falloff: { start: 30, end: 20, minMultiplier: 1 } })
+        .success,
+    ).toBe(false);
+    expect(WeaponSchema.safeParse({ ...rifle, magazine: 300 }).success).toBe(false);
   });
 });

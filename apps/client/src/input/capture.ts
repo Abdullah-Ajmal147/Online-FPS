@@ -1,4 +1,4 @@
-import { pitchFromRadians, yawFromRadians, type PlayerInput } from '@sentinel/shared';
+import { Button, pitchFromRadians, yawFromRadians, type PlayerInput } from '@sentinel/shared';
 import type { Settings } from '../settings.ts';
 import { buttonsFromKeys } from './keys.ts';
 import { applyLook, type Look } from './look.ts';
@@ -12,6 +12,10 @@ export class InputCapture {
   locked = false;
   private held = new Set<string>();
   private sprintLatched = false;
+  /** Mouse buttons: left = fire, right = aim down sights. */
+  private mouseButtons = 0;
+  /** Selected weapon slot (keys 1/2, mouse wheel). */
+  weaponSlot: 0 | 1 = 0;
   private listeners: (() => void)[] = [];
 
   constructor(
@@ -28,6 +32,33 @@ export class InputCapture {
       if (!this.locked) return;
       const m = e as MouseEvent;
       this.look = applyLook(this.look, m.movementX, m.movementY, this.settings().sensitivity);
+    });
+    if (import.meta.env.DEV) {
+      // Dev/test only (stripped from production builds): lets Playwright aim and shoot
+      // without pointer lock, which headless browsers can't grant.
+      (window as unknown as { __sentinelInput?: unknown }).__sentinelInput = {
+        setLook: (yaw: number, pitch: number) => (this.look = { yaw, pitch }),
+        setMouse: (fire: boolean, aim: boolean) =>
+          (this.mouseButtons = (fire ? Button.Fire : 0) | (aim ? Button.Aim : 0)),
+      };
+    }
+    this.on(document, 'mousedown', (e) => {
+      if (!this.locked) return;
+      const b = (e as MouseEvent).button;
+      if (b === 0) this.mouseButtons |= Button.Fire;
+      if (b === 2) this.mouseButtons |= Button.Aim;
+    });
+    this.on(document, 'mouseup', (e) => {
+      const b = (e as MouseEvent).button;
+      if (b === 0) this.mouseButtons &= ~Button.Fire;
+      if (b === 2) this.mouseButtons &= ~Button.Aim;
+    });
+    this.on(document, 'contextmenu', (e) => {
+      if (this.locked) e.preventDefault();
+    });
+    this.on(document, 'wheel', (e) => {
+      if (!this.locked || (e as WheelEvent).deltaY === 0) return;
+      this.weaponSlot = this.weaponSlot === 0 ? 1 : 0;
     });
     this.on(document, 'pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;
@@ -54,13 +85,12 @@ export class InputCapture {
     const s = this.settings();
     const sprintHeld = this.held.has(s.bindings.sprint);
     return {
-      buttons: buttonsFromKeys(
-        this.held,
-        s.bindings,
-        s.toggleSprint ? this.sprintLatched : sprintHeld,
-      ),
+      buttons:
+        buttonsFromKeys(this.held, s.bindings, s.toggleSprint ? this.sprintLatched : sprintHeld) |
+        this.mouseButtons,
       yaw: yawFromRadians(this.look.yaw),
       pitch: pitchFromRadians(this.look.pitch),
+      weaponSlot: this.weaponSlot,
     };
   }
 
@@ -79,6 +109,8 @@ export class InputCapture {
       if (e.code === s.bindings.sprint && s.toggleSprint && !e.repeat) {
         this.sprintLatched = !this.sprintLatched;
       }
+      if (e.code === s.bindings.primary) this.weaponSlot = 0;
+      if (e.code === s.bindings.secondary) this.weaponSlot = 1;
       this.held.add(e.code);
     } else {
       this.held.delete(e.code);
@@ -88,6 +120,7 @@ export class InputCapture {
   private releaseAll(): void {
     this.held.clear();
     this.sprintLatched = false;
+    this.mouseButtons = 0;
   }
 
   private on(target: EventTarget, type: string, fn: (e: Event) => void): void {

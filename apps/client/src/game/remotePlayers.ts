@@ -18,6 +18,7 @@ export class RemotePlayers {
       this.meshes.set(id, group);
       this.scene.add(group);
     }
+    group.visible = pose.alive;
     group.position.set(...pose.position);
     group.rotation.y = pose.yaw;
     group.scale.y = pose.crouching ? movement.crouchHeight / movement.standingHeight : 1;

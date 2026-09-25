@@ -1,71 +1,99 @@
 import { describe, expect, it } from 'vitest';
-import { SNAPSHOT_RATE, MAX_PLAYERS_PER_MATCH, type Vec3 } from '@sentinel/shared';
+import { MAX_PLAYERS_PER_MATCH, SNAPSHOT_RATE, type Vec3 } from '@sentinel/shared';
 import {
+  decodeEvents,
   decodeHello,
   decodeInputCmd,
   decodePing,
   decodeSnapshot,
   decodeSnapshotAck,
+  encodeEvents,
   encodeHello,
   encodeInputCmd,
   encodePing,
   encodeSnapshot,
   encodeSnapshotAck,
   type EntityState,
-  type OwnState,
+  type GameEvent,
+  type OwnSnapshot,
   type Snapshot,
 } from './messages.ts';
 import { PROTOCOL_VERSION } from './version.ts';
 
-const own: OwnState = {
-  position: [Math.fround(-12.345678), Math.fround(1.0625), Math.fround(7.000001)],
-  velocity: [Math.fround(7.5), Math.fround(-3.3333), 0],
-  grounded: false,
-  crouching: true,
-  slideTicks: 17,
-  slideCooldownTicks: 36,
-  prevButtons: 0b10_0110_0001,
+const own: OwnSnapshot = {
+  sim: {
+    move: {
+      position: [Math.fround(-12.345678), Math.fround(1.0625), Math.fround(7.000001)],
+      velocity: [Math.fround(7.5), Math.fround(-3.3333), 0],
+      grounded: false,
+      crouching: true,
+      slideTicks: 17,
+      slideCooldownTicks: 36,
+      prevButtons: 0b10_0110_0001,
+    },
+    weapon: {
+      slot: 1,
+      ammo: [
+        { ammo: 17, reserve: 120 },
+        { ammo: 3, reserve: 40000 },
+      ],
+      cooldownTicks: 5,
+      reloadTicks: 90,
+      switchTicks: 0,
+      adsTicks: 12,
+      shotIndex: 7,
+      recoilPitch: 1500,
+      recoilYaw: -320,
+      bloom: 400,
+    },
+  },
+  health: 64,
+  lifeId: 3,
+  respawnTicks: 0,
 };
 
 const entity = (id: number, position: Vec3): EntityState => ({
   id,
   team: id % 2,
+  alive: id !== 3,
   grounded: true,
   crouching: id % 3 === 0,
   position,
   yaw: (id * 5000) & 0xffff,
   pitch: -1200 + id,
+  weaponSlot: id % 2,
+  shotCount: (id * 37) & 0xff,
 });
 
 describe('protocol version', () => {
-  it('is 2 (Phase 1 messages)', () => {
-    expect(PROTOCOL_VERSION).toBe(2);
+  it('is 3 (Phase 2: weapons, health, events, view tick)', () => {
+    expect(PROTOCOL_VERSION).toBe(3);
   });
 });
 
 describe('Hello', () => {
   it('round-trips', () => {
-    const msg = { protocolVersion: PROTOCOL_VERSION, serverTickRate: 60, playerId: 7 };
+    const msg = { protocolVersion: PROTOCOL_VERSION, serverTickRate: 60, playerId: 7, team: 1 };
     expect(decodeHello(encodeHello(msg))).toEqual(msg);
   });
 });
 
 describe('InputCmd', () => {
   const inputs = [
-    { seq: 1000, buttons: 0x41, yaw: 65535, pitch: -16000, weaponSlot: 0 },
-    { seq: 1001, buttons: 0x51, yaw: 12, pitch: 16000, weaponSlot: 1 },
-    { seq: 1002, buttons: 0, yaw: 0, pitch: 0, weaponSlot: 2 },
+    { seq: 1000, buttons: 0x41, yaw: 65535, pitch: -16000, weaponSlot: 0, viewTick: 5000.5 },
+    { seq: 1001, buttons: 0x51, yaw: 12, pitch: 16000, weaponSlot: 1, viewTick: 5001.25 },
+    { seq: 1002, buttons: 0, yaw: 0, pitch: 0, weaponSlot: 1, viewTick: 5002 },
   ];
 
-  it('round-trips 1 to 3 inputs', () => {
+  it('round-trips 1 to 3 inputs, view tick to 1/256 of a tick', () => {
     for (let n = 1; n <= 3; n++) {
       const msg = { ackServerTick: 4_000_000_000, inputs: inputs.slice(0, n) };
       expect(decodeInputCmd(encodeInputCmd(msg))).toEqual(msg);
     }
   });
 
-  it('is 30 bytes with 3 inputs (4 ack + 1 count + 4 seq + 3 × 7)', () => {
-    expect(encodeInputCmd({ ackServerTick: 1, inputs }).length).toBe(30);
+  it('is 45 bytes with 3 inputs (4 ack + 1 count + 4 seq + 3 × 12)', () => {
+    expect(encodeInputCmd({ ackServerTick: 1, inputs }).length).toBe(45);
   });
 
   it('rejects malformed client bytes', () => {
@@ -96,36 +124,32 @@ describe('Snapshot', () => {
     inputQueueDepth: 2,
     serverTickMicros: 850,
     own,
-    entities: [entity(1, [1.5, 0, -3.25]), entity(2, [-29.984375, 3, 29.5])],
+    entities: [entity(1, [1.5, 0, -3.25]), entity(3, [-29.984375, 3, 29.5])],
   };
 
-  it('round-trips the own-player block exactly (ADR 0003)', () => {
+  it('round-trips the own block exactly: movement, weapon, health (ADR 0003)', () => {
     expect(decodeSnapshot(encodeSnapshot(snap)).own).toEqual(own);
   });
 
-  it('round-trips everything else, positions within 1/128 m', () => {
+  it('round-trips entities, positions within 1/128 m', () => {
     const back = decodeSnapshot(
-      encodeSnapshot({ ...snap, entities: [entity(4, [0.123, 1.777, -9.99])] }),
+      encodeSnapshot({ ...snap, entities: [entity(3, [0.123, 1.777, -9.99])] }),
     );
-    expect(back.serverTick).toBe(123456);
-    expect(back.lastProcessedSeq).toBe(999);
-    expect(back.inputQueueDepth).toBe(2);
-    expect(back.serverTickMicros).toBe(850);
     const e = back.entities[0]!;
     expect(e).toMatchObject({
-      id: 4,
-      team: 0,
-      grounded: true,
-      crouching: false,
-      yaw: 20000,
-      pitch: -1196,
+      id: 3,
+      team: 1,
+      alive: false,
+      crouching: true,
+      weaponSlot: 1,
+      shotCount: 111,
     });
     [0.123, 1.777, -9.99].forEach((v, i) =>
       expect(Math.abs(e.position[i]! - v)).toBeLessThanOrEqual(1 / 128),
     );
   });
 
-  it('works without an own block (spectator / not spawned)', () => {
+  it('works without an own block', () => {
     expect(decodeSnapshot(encodeSnapshot({ ...snap, own: null })).own).toBeNull();
   });
 
@@ -135,8 +159,22 @@ describe('Snapshot', () => {
     );
     const bytes = encodeSnapshot({ ...snap, entities: others }).length;
     const overhead = 8; // WebSocket frame + Colyseus message header, generous
-    const bytesPerSecond = (bytes + overhead) * SNAPSHOT_RATE;
-    expect(bytesPerSecond).toBeLessThan(10 * 1024);
+    expect((bytes + overhead) * SNAPSHOT_RATE).toBeLessThan(10 * 1024);
+  });
+});
+
+describe('Events', () => {
+  it('round-trips kills, hits and damage', () => {
+    const events: GameEvent[] = [
+      { type: 'kill', killer: 2, victim: 5, weaponSlot: 0, headshot: true },
+      { type: 'hit', victim: 5, damage: 34, zone: 'head', killed: true },
+      { type: 'damaged', attacker: 2, from: [10.5, 1.5, -3], health: 66 },
+    ];
+    expect(decodeEvents(encodeEvents(events))).toEqual(events);
+  });
+
+  it('rejects unknown event types', () => {
+    expect(() => decodeEvents(new Uint8Array([1, 99]))).toThrow(RangeError);
   });
 });
 

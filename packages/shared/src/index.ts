@@ -7,3 +7,6 @@ export * from './physics.ts';
 export * from './net/predictor.ts';
 export * from './rng.ts';
 export * from './net/pacing.ts';
+export * from './combat/weapon.ts';
+export * from './combat/sim.ts';
+export * from './combat/hitbox.ts';

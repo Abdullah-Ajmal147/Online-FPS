@@ -1,0 +1,45 @@
+{
+  "id": "kestrel-ar",
+  "name": "Kestrel AR",
+  "class": "rifle",
+  "slot": 0,
+  "fireMode": "auto",
+  "rpm": 600,
+  "damage": { "head": 34, "torso": 22, "limbs": 18 },
+  "falloff": { "start": 25, "end": 45, "minMultiplier": 0.8 },
+  "maxRange": 150,
+  "magazine": 30,
+  "reserve": 120,
+  "reloadTime": 2.2,
+  "equipTime": 0.45,
+  "adsTime": 0.25,
+  "spread": {
+    "hip": 2.4,
+    "ads": 0.15,
+    "moving": 1.4,
+    "airborne": 4,
+    "perShot": 0.35,
+    "max": 3,
+    "recoveryPerSecond": 8
+  },
+  "recoil": {
+    "pattern": [
+      [0.55, 0.05],
+      [0.6, -0.1],
+      [0.6, 0.15],
+      [0.55, 0.2],
+      [0.5, -0.05],
+      [0.45, -0.25],
+      [0.4, -0.3],
+      [0.35, 0.1],
+      [0.35, 0.3],
+      [0.3, 0.25],
+      [0.3, -0.1],
+      [0.3, -0.3]
+    ],
+    "adsMultiplier": 0.7,
+    "recoveryPerSecond": 9
+  },
+  "moveSpeedMultiplier": 0.95,
+  "adsMoveSpeedMultiplier": 0.6
+}

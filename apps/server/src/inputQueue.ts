@@ -1,4 +1,9 @@
 import { Button, type PlayerInput } from '@sentinel/shared';
+
+/** What the server simulates for one tick: the input plus the tick the client was viewing. */
+export interface TickInput extends PlayerInput {
+  viewTick: number;
+}
 import type { SequencedInput } from '@sentinel/protocol';
 
 /**
@@ -21,7 +26,7 @@ export const MAX_REPEAT_TICKS = 15; // 250 ms: rides out jitter, stops a tabbed-
  */
 const PRESS_BUTTONS = Button.Jump | Button.Crouch | Button.Fire | Button.Reload;
 
-const IDLE: PlayerInput = { buttons: 0, yaw: 0, pitch: 0 };
+const IDLE: TickInput = { buttons: 0, yaw: 0, pitch: 0, viewTick: 0 };
 
 /**
  * Per-player input queue on the server (docs/NETCODE.md, "Message flow").
@@ -40,7 +45,7 @@ const IDLE: PlayerInput = { buttons: 0, yaw: 0, pitch: 0 };
  */
 export class InputQueue {
   lastProcessedSeq = 0;
-  private lastInput: PlayerInput = IDLE;
+  private lastInput: TickInput = IDLE;
   private pending: SequencedInput[] = []; // sorted by seq, all > lastProcessedSeq
   private started = false;
   /** Ticks simulated with a guessed (repeated/idle) input since the last real one. */
@@ -69,7 +74,7 @@ export class InputQueue {
    * (the player is not simulated yet, so the client's first predicted step matches ours).
    * Once started, it always returns an input: the server never skips a player's step.
    */
-  next(): PlayerInput | null {
+  next(): TickInput | null {
     if (!this.started) {
       if (this.pending.length < START_BUFFER) return null;
       this.started = true;
@@ -77,8 +82,17 @@ export class InputQueue {
     if (this.pending.length === 0) {
       // Starved: repeat the last input for a short while, then stand still.
       this.debt++;
-      if (this.debt <= MAX_REPEAT_TICKS) return this.lastInput;
-      return { buttons: IDLE.buttons, yaw: this.lastInput.yaw, pitch: this.lastInput.pitch };
+      // A guessed tick: the client's view moved on by one tick too.
+      const viewTick = this.lastInput.viewTick + this.debt;
+      if (this.debt <= MAX_REPEAT_TICKS) return { ...this.lastInput, viewTick };
+      const { yaw, pitch, weaponSlot } = this.lastInput;
+      return {
+        buttons: IDLE.buttons,
+        yaw,
+        pitch,
+        viewTick,
+        ...(weaponSlot === undefined ? {} : { weaponSlot }),
+      };
     }
     // Pay back debt: skip inputs for ticks we already simulated with a guess (keep one to apply).
     let carried = 0;
@@ -89,7 +103,13 @@ export class InputQueue {
     this.debt = 0;
     const input = this.pending.shift()!;
     this.lastProcessedSeq = input.seq;
-    this.lastInput = { buttons: input.buttons | carried, yaw: input.yaw, pitch: input.pitch };
+    this.lastInput = {
+      buttons: input.buttons | carried,
+      yaw: input.yaw,
+      pitch: input.pitch,
+      weaponSlot: input.weaponSlot,
+      viewTick: input.viewTick,
+    };
     return this.lastInput;
   }
 }

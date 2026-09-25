@@ -5,10 +5,14 @@ import {
   type GameMap,
   type Mode,
   type Movement,
+  type Weapon,
+  WeaponSchema,
 } from './schemas.ts';
 import teamDeathmatchJson from './modes/team-deathmatch.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
+import kestrelJson from './weapons/kestrel-ar.json' with { type: 'json' };
+import wrenJson from './weapons/wren-sp.json' with { type: 'json' };
 
 export * from './schemas.ts';
 
@@ -22,3 +26,14 @@ export const maps: Record<string, GameMap> = {
 };
 
 export const movement: Movement = MovementSchema.parse(movementJson);
+
+export const weapons: Record<string, Weapon> = {
+  'kestrel-ar': WeaponSchema.parse(kestrelJson),
+  'wren-sp': WeaponSchema.parse(wrenJson),
+};
+
+/** Phase 2 default loadout: [primary, secondary]. Loadouts become player choice in Phase 4. */
+export const defaultLoadout: readonly [Weapon, Weapon] = [
+  weapons['kestrel-ar']!,
+  weapons['wren-sp']!,
+];

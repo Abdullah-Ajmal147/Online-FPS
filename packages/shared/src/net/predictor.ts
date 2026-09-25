@@ -1,18 +1,10 @@
+import { stepSim, type SimContext, type SimState } from '../combat/sim.ts';
+import type { ShotRequest, WeaponState } from '../combat/weapon.ts';
 import { INPUT_REDUNDANCY } from '../constants.ts';
 import type { PlayerInput } from '../input.ts';
 import type { Vec3 } from '../map/solids.ts';
-import type { MovementContext, PlayerBody } from '../movement/context.ts';
+import type { PlayerBody } from '../movement/context.ts';
 import type { PlayerState } from '../movement/state.ts';
-import { step } from '../movement/step.ts';
-
-/** An input with its sequence number, as sent in InputCmd (see packages/protocol). */
-export interface SequencedInput extends PlayerInput {
-  seq: number;
-  weaponSlot: number;
-}
-
-/** Everything step() reads, as the server sends it for our own player (ADR 0003). */
-export type OwnState = Omit<PlayerState, 'yaw' | 'pitch'>;
 
 /** History kept for replay: 2 s of ticks covers any ping we still consider playable. */
 const HISTORY = 120;
@@ -20,11 +12,28 @@ const HISTORY = 120;
 export const BLEND_BELOW_METRES = 0.05;
 export const BLEND_SECONDS = 0.1;
 
+/** An input with its sequence number, as sent in InputCmd (see packages/protocol). */
+export interface SequencedInput extends PlayerInput {
+  seq: number;
+  weaponSlot: number;
+  /**
+   * Server tick (fractional) at which this client was drawing the other players when the input
+   * was made. The server rewinds hitboxes to it for lag compensation (ADR 0005).
+   */
+  viewTick: number;
+}
+
+/** Everything the simulation reads, as the server sends it for our own player (ADR 0003). */
+export interface OwnState {
+  move: Omit<PlayerState, 'yaw' | 'pitch'>;
+  weapon: WeaponState;
+}
+
 interface Entry {
   seq: number;
   input: SequencedInput;
   /** State after applying this input. */
-  state: PlayerState;
+  state: SimState;
 }
 
 export interface PredictionStats {
@@ -39,14 +48,15 @@ export interface PredictionStats {
 /**
  * Client-side prediction + reconciliation (docs/NETCODE.md).
  *
- * Every local tick we apply our input immediately with the same step() the server runs and
+ * Every local tick we apply our input immediately with the same stepSim() the server runs and
  * remember (input, resulting state). When a snapshot says "I have processed up to seq N and
  * your state is S", we restart from S and replay every input after N. If the server saw the
  * same inputs we did, the replay lands exactly where we already were: no correction. Otherwise
  * the difference is either blended out over 100 ms (small) or snapped (large).
+ * Weapon state (ammo, reload, recoil) is predicted and reconciled the same way.
  */
 export class Predictor {
-  state: PlayerState;
+  state: SimState;
   /** Visual-only offset added to the rendered position while a small correction blends out. */
   readonly renderOffset: [number, number, number] = [0, 0, 0];
   readonly stats: PredictionStats = { snapshots: 0, corrections: 0, lastError: 0 };
@@ -54,31 +64,36 @@ export class Predictor {
   private history: Entry[] = [];
 
   constructor(
-    initial: PlayerState,
-    private readonly ctx: MovementContext,
+    initial: SimState,
+    private readonly ctx: SimContext,
     private readonly body: PlayerBody,
   ) {
     this.state = initial;
   }
 
   /**
-   * Start over from a state the server gave us (e.g. our spawn when we join). Clears the
-   * input history: inputs predicted before this (offline practice) must never be replayed.
+   * Start over from a state the server gave us (our spawn when we join or respawn). Clears the
+   * input history: inputs predicted before this must never be replayed on top of it.
    * The seq counter keeps counting; the server takes our first seq as its baseline.
    */
-  reset(state: PlayerState): void {
+  reset(state: SimState): void {
     this.state = state;
     this.history = [];
     this.renderOffset.fill(0);
   }
 
-  /** Apply one local input. Returns the sequenced input to send. */
-  tick(input: Omit<SequencedInput, 'seq'>): SequencedInput {
-    const sequenced: SequencedInput = { ...input, seq: ++this.seq };
-    this.state = step(this.state, sequenced, this.ctx, this.body);
-    this.history.push({ seq: sequenced.seq, input: sequenced, state: this.state });
+  /**
+   * Apply one local input. Returns the sequenced input to send and the shot it fired, if any
+   * (for muzzle flash, tracer and predicted hit marker; the server decides the real hit).
+   * Replays during reconciliation never report shots, so effects never play twice.
+   */
+  tick(input: Omit<SequencedInput, 'seq'>): { sent: SequencedInput; shot: ShotRequest | null } {
+    const sent: SequencedInput = { ...input, seq: ++this.seq };
+    const r = stepSim(this.state, sent, this.ctx, this.body);
+    this.state = r.state;
+    this.history.push({ seq: sent.seq, input: sent, state: this.state });
     if (this.history.length > HISTORY) this.history.shift();
-    return sequenced;
+    return { sent, shot: r.shot };
   }
 
   /** The newest inputs, oldest first, to put in the next InputCmd (redundancy against loss). */
@@ -97,22 +112,26 @@ export class Predictor {
     if (acked && sameState(acked.state, own)) return;
 
     // Rebuild from the server's state and replay everything the server hasn't processed yet.
-    const before: Vec3 = this.state.position;
-    const base = this.history[0]?.input ?? acked?.input;
-    let s: PlayerState = {
-      ...own,
-      yaw: acked?.input.yaw ?? base?.yaw ?? this.state.yaw,
-      pitch: acked?.input.pitch ?? base?.pitch ?? this.state.pitch,
+    const before: Vec3 = this.state.move.position;
+    const base = acked?.input ?? this.history[0]?.input;
+    let s: SimState = {
+      move: {
+        ...own.move,
+        yaw: base?.yaw ?? this.state.move.yaw,
+        pitch: base?.pitch ?? this.state.move.pitch,
+      },
+      weapon: own.weapon,
     };
     for (const e of this.history) {
-      s = step(s, e.input, this.ctx, this.body);
+      s = stepSim(s, e.input, this.ctx, this.body).state;
       e.state = s;
     }
     this.state = s;
 
-    const dx = before[0] - s.position[0];
-    const dy = before[1] - s.position[1];
-    const dz = before[2] - s.position[2];
+    const after = s.move.position;
+    const dx = before[0] - after[0];
+    const dy = before[1] - after[1];
+    const dz = before[2] - after[2];
     const error = Math.sqrt(dx * dx + dy * dy + dz * dz);
     this.stats.lastError = error;
     if (error === 0) return;
@@ -134,18 +153,39 @@ export class Predictor {
   }
 }
 
-function sameState(a: PlayerState, b: OwnState): boolean {
+function sameState(a: SimState, b: OwnState): boolean {
+  const m = a.move;
+  const o = b.move;
+  if (
+    m.position[0] !== o.position[0] ||
+    m.position[1] !== o.position[1] ||
+    m.position[2] !== o.position[2] ||
+    m.velocity[0] !== o.velocity[0] ||
+    m.velocity[1] !== o.velocity[1] ||
+    m.velocity[2] !== o.velocity[2] ||
+    m.grounded !== o.grounded ||
+    m.crouching !== o.crouching ||
+    m.slideTicks !== o.slideTicks ||
+    m.slideCooldownTicks !== o.slideCooldownTicks ||
+    m.prevButtons !== o.prevButtons
+  ) {
+    return false;
+  }
+  const w = a.weapon;
+  const v = b.weapon;
   return (
-    a.position[0] === b.position[0] &&
-    a.position[1] === b.position[1] &&
-    a.position[2] === b.position[2] &&
-    a.velocity[0] === b.velocity[0] &&
-    a.velocity[1] === b.velocity[1] &&
-    a.velocity[2] === b.velocity[2] &&
-    a.grounded === b.grounded &&
-    a.crouching === b.crouching &&
-    a.slideTicks === b.slideTicks &&
-    a.slideCooldownTicks === b.slideCooldownTicks &&
-    a.prevButtons === b.prevButtons
+    w.slot === v.slot &&
+    w.ammo[0].ammo === v.ammo[0].ammo &&
+    w.ammo[0].reserve === v.ammo[0].reserve &&
+    w.ammo[1].ammo === v.ammo[1].ammo &&
+    w.ammo[1].reserve === v.ammo[1].reserve &&
+    w.cooldownTicks === v.cooldownTicks &&
+    w.reloadTicks === v.reloadTicks &&
+    w.switchTicks === v.switchTicks &&
+    w.adsTicks === v.adsTicks &&
+    w.shotIndex === v.shotIndex &&
+    w.recoilPitch === v.recoilPitch &&
+    w.recoilYaw === v.recoilYaw &&
+    w.bloom === v.bloom
   );
 }

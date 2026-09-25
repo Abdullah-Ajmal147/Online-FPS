@@ -96,6 +96,12 @@ Status: in progress. The owner asked for a complete end-to-end game and delegate
 
 Tasks done:
 
-- (none yet)
+- 1–2. Weapon schema (zod) and two original weapons as data: **Kestrel AR** (600 rpm auto, 22 torso → 5 shots / 0.4 s) and **Wren SP** (semi sidearm). Loadout = [rifle, sidearm].
+- 3. Shared weapon state machine (`packages/shared/combat`): fire rate, ammo, reload (auto on empty), switching, ADS, deterministic recoil pattern (recovers only after you stop firing) and bloom; runs on server, predicted on client; `stepSim` = movement + weapon, ADS slows movement.
+- 4–5. Hitboxes (head sphere, torso and legs capsules) + 1 s history; server hitscan rewinds to the client's `viewTick` clamped to 200 ms (ADR 0005), walls block, server-side random spread, damage falloff, no friendly fire.
+- 6. Health 100, death, respawn after 3 s at the team spawn farthest from enemies, regen after 4 s; falling out of the map kills.
+- 7 (greybox version). Procedural viewmodel (kick, ADS, reload dip, switch), muzzle flash, tracers, impact marks, recoil on camera, spread-driven crosshair, predicted + confirmed hit markers, damage direction arcs, kill feed, death screen, synthesized Web Audio with 3D positioned remote shots (no asset files; ADR pending in Phase 5 for real assets).
+- 8. Anti-cheat basics are the shared weapon rules on the server: a client firing at 2× rate gets no extra shots (unit test).
+- Protocol v3: inputs carry `viewTick`, own block carries weapon + health + lifeId, entities carry alive/weapon/shot counter (int16 positions, ADR 0004 update), reliable `Events` (kill/hit/damaged). E2E: two browsers, one shoots the other, server confirms hits.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
