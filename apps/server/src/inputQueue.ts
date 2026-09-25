@@ -37,7 +37,9 @@ export class InputQueue {
   push(input: SequencedInput): void {
     const { seq } = input;
     if (!Number.isInteger(seq) || seq <= this.lastProcessedSeq) return; // old or resent
-    if (seq > this.lastProcessedSeq + MAX_SEQ_JUMP) return;
+    // The first inputs set the baseline (a client may have counted seqs offline before joining).
+    // After that, a huge jump is garbage.
+    if (this.lastProcessedSeq > 0 && seq > this.lastProcessedSeq + MAX_SEQ_JUMP) return;
     let i = this.pending.length;
     while (i > 0 && this.pending[i - 1]!.seq > seq) i--;
     if (i > 0 && this.pending[i - 1]!.seq === seq) return; // duplicate
@@ -46,10 +48,14 @@ export class InputQueue {
     while (this.pending.length > MAX_QUEUED_INPUTS) this.pending.shift();
   }
 
-  /** The input for this tick. Always returns something: the server never skips a player's step. */
-  next(): PlayerInput {
+  /**
+   * The input for this tick, or null while a new player's start buffer is still filling
+   * (the player is not simulated yet, so the client's first predicted step matches ours).
+   * Once started, it always returns an input: the server never skips a player's step.
+   */
+  next(): PlayerInput | null {
     if (!this.started) {
-      if (this.pending.length < START_BUFFER) return this.lastInput;
+      if (this.pending.length < START_BUFFER) return null;
       this.started = true;
     }
     const input = this.pending.shift();

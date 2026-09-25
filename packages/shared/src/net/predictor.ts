@@ -61,6 +61,17 @@ export class Predictor {
     this.state = initial;
   }
 
+  /**
+   * Start over from a state the server gave us (e.g. our spawn when we join). Clears the
+   * input history: inputs predicted before this (offline practice) must never be replayed.
+   * The seq counter keeps counting; the server takes our first seq as its baseline.
+   */
+  reset(state: PlayerState): void {
+    this.state = state;
+    this.history = [];
+    this.renderOffset.fill(0);
+  }
+
   /** Apply one local input. Returns the sequenced input to send. */
   tick(input: Omit<SequencedInput, 'seq'>): SequencedInput {
     const sequenced: SequencedInput = { ...input, seq: ++this.seq };

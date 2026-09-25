@@ -124,7 +124,7 @@ export async function startGame(
       if (!spawnedFromServer) {
         // First contact: take the server's spawn, then predict from there.
         spawnedFromServer = true;
-        predictor.state = { ...snap.own, yaw: predictor.state.yaw, pitch: predictor.state.pitch };
+        predictor.reset({ ...snap.own, yaw: predictor.state.yaw, pitch: predictor.state.pitch });
         prevState = predictor.state;
       } else {
         predictor.onServerState(snap.own, snap.lastProcessedSeq);

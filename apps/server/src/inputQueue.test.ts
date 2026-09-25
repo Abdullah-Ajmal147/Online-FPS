@@ -10,14 +10,24 @@ function started(): InputQueue {
 }
 
 describe('InputQueue', () => {
-  it('waits for a small buffer before starting, repeating idle input meanwhile', () => {
+  it('waits for a small buffer before starting (player not simulated meanwhile)', () => {
     const q = new InputQueue();
     q.push(input(1));
-    expect(q.next().buttons).toBe(0);
+    expect(q.next()).toBeNull();
     expect(q.lastProcessedSeq).toBe(0);
     q.push(input(2));
-    expect(q.next().buttons).toBe(1);
+    expect(q.next()!.buttons).toBe(1);
     expect(q.lastProcessedSeq).toBe(1);
+  });
+
+  it('accepts any first seq as the baseline (client counted seqs offline before joining)', () => {
+    const q = new InputQueue();
+    q.push(input(5000));
+    q.push(input(5001));
+    expect(q.next()!.buttons).toBe(5000);
+    q.push(input(5002 + 10_000)); // but later huge jumps are garbage
+    q.push(input(5002));
+    expect(q.depth).toBe(2);
   });
 
   it('applies inputs in seq order even if they arrive out of order', () => {
@@ -25,7 +35,7 @@ describe('InputQueue', () => {
     q.push(input(3));
     q.push(input(1));
     q.push(input(2));
-    expect([q.next(), q.next(), q.next()].map((i) => i.buttons)).toEqual([1, 2, 3]);
+    expect([q.next(), q.next(), q.next()].map((i) => i!.buttons)).toEqual([1, 2, 3]);
   });
 
   it('drops duplicates and inputs already processed (redundant resends)', () => {
@@ -37,7 +47,7 @@ describe('InputQueue', () => {
     q.push(input(2)); // still queued: duplicate
     q.push(input(3));
     expect(q.depth).toBe(2);
-    expect([q.next(), q.next()].map((i) => i.buttons)).toEqual([2, 3]);
+    expect([q.next(), q.next()].map((i) => i!.buttons)).toEqual([2, 3]);
   });
 
   it('repeats the last input when starved, without advancing lastProcessedSeq', () => {
@@ -45,7 +55,7 @@ describe('InputQueue', () => {
     q.next();
     q.next();
     const repeated = q.next();
-    expect(repeated.buttons).toBe(2);
+    expect(repeated!.buttons).toBe(2);
     expect(q.lastProcessedSeq).toBe(2);
   });
 
@@ -54,7 +64,7 @@ describe('InputQueue', () => {
     q.next();
     q.next();
     q.push(input(4)); // 3 was lost, even with redundancy
-    expect(q.next().buttons).toBe(4);
+    expect(q.next()!.buttons).toBe(4);
     expect(q.lastProcessedSeq).toBe(4);
     q.push(input(3)); // arrives too late
     expect(q.depth).toBe(0);
@@ -74,10 +84,11 @@ describe('InputQueue', () => {
     expect(q.depth).toBe(START_BUFFER + 15);
   });
 
-  it('ignores garbage seqs', () => {
+  it('ignores garbage seqs once started', () => {
     const q = started();
+    q.next(); // seq 1 processed: baseline set
     q.push(input(1_000_000));
     q.push({ ...input(5), seq: 5.5 });
-    expect(q.depth).toBe(START_BUFFER);
+    expect(q.depth).toBe(START_BUFFER - 1);
   });
 });

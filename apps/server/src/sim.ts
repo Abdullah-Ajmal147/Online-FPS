@@ -77,7 +77,9 @@ export class MatchSim {
   step(): void {
     const start = performance.now();
     for (const p of this.players.values()) {
-      p.state = step(p.state, p.queue.next(), this.ctx, p.body);
+      const input = p.queue.next();
+      if (!input) continue; // still filling the start buffer
+      p.state = step(p.state, input, this.ctx, p.body);
       if (p.state.position[1] < this.map.killY) p.state = this.spawnState(p.team);
     }
     this.tick++;
