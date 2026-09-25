@@ -97,6 +97,51 @@ export class NavGrid {
         });
       }
     }
+    this.labelRegions();
+  }
+
+  /** Connected region id per cell (-1 = not walkable); region 0.. by flood fill. */
+  private region!: Int32Array;
+  /** The biggest region: the playable floor (rooftops and crate tops are small islands). */
+  private mainRegion = -1;
+
+  private labelRegions(): void {
+    this.region = new Int32Array(this.w * this.h).fill(-1);
+    let next = 0;
+    let bestSize = 0;
+    const stack: number[] = [];
+    for (let c = 0; c < this.w * this.h; c++) {
+      if (this.region[c] !== -1 || Number.isNaN(this.height[c]!)) continue;
+      let size = 0;
+      this.region[c] = next;
+      stack.push(c);
+      while (stack.length > 0) {
+        const cur = stack.pop()!;
+        size++;
+        const ci = cur % this.w;
+        const cj = Math.floor(cur / this.w);
+        for (let bit = 0; bit < 8; bit++) {
+          if (!(this.links[cur]! & (1 << bit))) continue;
+          const [di, dj] = NavGrid.DIRS[bit]!;
+          const n = (cj + dj) * this.w + ci + di;
+          if (this.region[n] === -1) {
+            this.region[n] = next;
+            stack.push(n);
+          }
+        }
+      }
+      if (size > bestSize) {
+        bestSize = size;
+        this.mainRegion = next;
+      }
+      next++;
+    }
+  }
+
+  /** True if walking from one cell to the other is possible at all. */
+  connected(a: [number, number], b: [number, number]): boolean {
+    const ra = this.region[a[1] * this.w + a[0]];
+    return ra !== undefined && ra !== -1 && ra === this.region[b[1] * this.w + b[0]];
   }
 
   center(i: number, j: number): [number, number] {
@@ -128,12 +173,17 @@ export class NavGrid {
   }
 
   /** All walkable cells (for picking roam goals). */
-  /** All walkable cells (for picking roam goals). Computed once; the grid never changes. */
+  /**
+   * Cells worth walking to: the main connected floor only (not rooftops or crate tops, which
+   * can't be reached on foot). Computed once; the grid never changes.
+   */
   walkableCells(): readonly [number, number][] {
     if (!this.cellsCache) {
       const out: [number, number][] = [];
       for (let j = 0; j < this.h; j++)
-        for (let i = 0; i < this.w; i++) if (this.walkable(i, j)) out.push([i, j]);
+        for (let i = 0; i < this.w; i++) {
+          if (this.region[j * this.w + i] === this.mainRegion) out.push([i, j]);
+        }
       this.cellsCache = out;
     }
     return this.cellsCache;
@@ -151,6 +201,8 @@ export class NavGrid {
     const start = this.nearestWalkable(from[0], from[2]);
     const goal = this.nearestWalkable(to[0], to[2]);
     if (!start || !goal) return null;
+    // Different regions: unreachable. Answer at once instead of searching the whole map.
+    if (!this.connected(start, goal)) return null;
     const idx = (i: number, j: number) => j * this.w + i;
     const startI = idx(...start);
     const goalI = idx(...goal);
@@ -179,8 +231,9 @@ export class NavGrid {
       const ci = cur % this.w;
       const cj = Math.floor(cur / this.w);
       const links = this.links[cur]!;
-      NavGrid.DIRS.forEach(([di, dj], bit) => {
-        if (!(links & (1 << bit))) return;
+      for (let bit = 0; bit < 8; bit++) {
+        if (!(links & (1 << bit))) continue;
+        const [di, dj] = NavGrid.DIRS[bit]!;
         const n = idx(ci + di, cj + dj);
         const cost = g[cur]! + (di !== 0 && dj !== 0 ? Math.SQRT2 : 1);
         if (cost < g[n]!) {
@@ -188,7 +241,7 @@ export class NavGrid {
           came[n] = cur;
           open.push(n, cost + hCost(n));
         }
-      });
+      }
     }
     if (startI !== goalI && came[goalI] === -1) return null;
     const cells: number[] = [];

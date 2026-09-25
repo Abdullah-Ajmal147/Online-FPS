@@ -49,7 +49,12 @@ export class BotController {
   }
 
   /** Before each sim step: every bot decides its input for this tick. */
+  /** Path searches allowed per tick across all bots. */
+  static readonly PLANS_PER_TICK = 2;
+  private readonly planBudget = { left: BotController.PLANS_PER_TICK };
+
   think(): void {
+    this.planBudget.left = BotController.PLANS_PER_TICK;
     for (const [id, brain] of this.brains) {
       const p = this.sim.players.get(id);
       if (p) p.botInput = brain.think();
@@ -92,7 +97,10 @@ export class BotController {
   private addBot(): SimPlayer {
     const name = `Bot ${CALLSIGNS[this.nameCursor++ % CALLSIGNS.length]}`;
     const p = this.sim.addPlayer({ name, bot: true });
-    this.brains.set(p.id, new BotBrain(p, this.sim, this.nav, this.difficulty, this.seed++));
+    this.brains.set(
+      p.id,
+      new BotBrain(p, this.sim, this.nav, this.difficulty, this.seed++, this.planBudget),
+    );
     return p;
   }
 

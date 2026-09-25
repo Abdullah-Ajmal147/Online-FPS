@@ -153,7 +153,7 @@ Open issues carried forward:
 
 - ~~Balance: team 1 won 8/10 on the asymmetric Relay Yard~~ → map made point-symmetric (test-enforced); re-run 4/6.
 - Deploy to a VPS/Fly.io with HTTPS/WSS (owner account), then run the exit tests remotely.
-- 47 ms worst-case tick spike in the soak: add tick-time monitoring (Phase 7).
+- ~~Tick spikes~~: 0.54% of ticks were over 4 ms, almost all bot path planning (unreachable rooftop goals made A* search the whole map, and many bots re-planned on the same tick). Fixed with connected-region labelling, a 2-searches-per-tick budget and a tighter A* loop: now 0.03% (p99 1.16 ms); the worst tick is first-tick JIT warm-up.
 - Snapshots send every player's position to everyone (wallhack-able): add interest management / PVS before public launch (review L7).
 - Phase 4 (lite, pulled forward for the end-to-end game): API with SQLite (`node:sqlite`) — `POST /matches` accepts only HMAC-signed results from the game server, each match id once; XP (150 + 100/kill + 250 win / 100 draw) and levels (500, 750, 1000… XP) computed by the API; `GET /profiles/:guestId`. Browser keeps a random guest id (not a secure identity; Supabase replaces it in Phase 4); menu shows level/XP, refreshed after each match. E2E checks XP after a full bot match.
 - Secure guest identity (replaces the unsigned guest id): `packages/auth` issues HMAC-signed guest tokens (`POST /guests`); the game server verifies them on join and only verified guests earn XP. Rate limits per IP: guest creation (burst 30, 0.5/s), profile reads, room joins (burst 20, 1/s) — generous because many players can share one IP.

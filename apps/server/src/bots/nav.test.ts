@@ -38,6 +38,11 @@ describe('NavGrid on the greybox', () => {
     expect(fj).toBeDefined();
   });
 
+  it('roam goals are only on the reachable floor (not the unreachable ledge top)', () => {
+    const ledge = grid.cellOf(-20, -20);
+    expect(grid.walkableCells().some(([i, j]) => i === ledge[0] && j === ledge[1])).toBe(false);
+  });
+
   it('finds a path across the map in a few ms', () => {
     const t = performance.now();
     const path = grid.findPath([-25, 0, 25], [25, 0, -25]);

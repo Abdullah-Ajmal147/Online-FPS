@@ -92,6 +92,8 @@ export class BotBrain {
     private readonly nav: NavGrid,
     private readonly diff: Difficulty,
     seed: number,
+    /** Path searches left this tick, shared by all bots (keeps tick time flat). */
+    private readonly planBudget: { left: number } = { left: Infinity },
   ) {
     this.random = createRng(seed);
   }
@@ -209,12 +211,14 @@ export class BotBrain {
   private roam(me: SimPlayer): number {
     const pos = me.sim.move.position;
     if (this.path.length === 0) {
+      // One search per bot per tick at most, and only while the shared budget lasts: when many
+      // bots need a plan at once (respawn, match start) they spread over a few ticks.
+      if (this.planBudget.left <= 0) return 0;
+      this.planBudget.left--;
       const cells = this.nav.walkableCells();
-      for (let tries = 0; tries < 5 && this.path.length === 0; tries++) {
-        const [i, j] = cells[Math.floor(this.random() * cells.length)]!;
-        const [x, z] = this.nav.center(i, j);
-        this.path = this.nav.findPath(pos, [x, 0, z]) ?? [];
-      }
+      const [i, j] = cells[Math.floor(this.random() * cells.length)]!;
+      const [x, z] = this.nav.center(i, j);
+      this.path = this.nav.findPath(pos, [x, 0, z]) ?? [];
       if (this.path.length === 0) return 0;
     }
     let next = this.path[0]!;

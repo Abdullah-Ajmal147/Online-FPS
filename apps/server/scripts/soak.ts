@@ -42,6 +42,12 @@ while (summaries.length < matches) {
     );
   }
 }
+const slow = tickMicros.map((us, i) => [us, i] as const).filter(([us]) => us > 4000);
+const worst = tickMicros.reduce((best, us, i) => (us > tickMicros[best]! ? i : best), 0);
+console.log(
+  `\nticks over 4 ms: ${slow.length} of ${tickMicros.length} (${((100 * slow.length) / tickMicros.length).toFixed(3)}%); ` +
+    `worst at tick ${worst} (${(worst / TICK_RATE).toFixed(1)} s); slow ticks in the first 10 s: ${slow.filter(([, i]) => i < 600).length}`,
+);
 tickMicros.sort((a, b) => a - b);
 const pct = (p: number) => (tickMicros[Math.floor((tickMicros.length - 1) * p)]! / 1000).toFixed(3);
 console.log(
