@@ -202,6 +202,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.9)
+      '@sentinel/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       hono:
         specifier: ^4.13.9
         version: 4.13.9
@@ -255,6 +258,9 @@ importers:
       '@colyseus/ws-transport':
         specifier: ^0.18.3
         version: 0.18.3(@colyseus/core@0.18.16)(express@5.2.1(supports-color@10.2.2))
+      '@sentinel/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@sentinel/content':
         specifier: workspace:*
         version: link:../../packages/content
@@ -280,6 +286,12 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+
+  packages/auth:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.4
+        version: 22.20.4
 
   packages/content:
     dependencies:

@@ -11,22 +11,51 @@ export interface Profile {
   deaths: number;
 }
 
-const GUEST_KEY = 'sentinel.guest';
+const TOKEN_KEY = 'sentinel.guestToken';
 
 /**
- * This browser's guest id (Phase 4 lite): a random UUID kept in localStorage. It lets XP
- * persist without an account. It is NOT a secure identity — anyone who copies it can use it;
- * Supabase guest accounts replace it in Phase 4.
+ * This browser's guest identity: a token signed by the API (`g1.<guestId>.<issued>.<sig>`),
+ * kept in localStorage. The game server verifies it on join, so XP can only go to the guest
+ * who holds the token. Accounts (Supabase) can replace guests in Phase 4.
  */
-export function guestId(): string {
+let cached: { guestId: string; token: string } | null = null;
+
+function readStored(): { guestId: string; token: string } | null {
   try {
-    const existing = localStorage.getItem(GUEST_KEY);
-    if (existing) return existing;
-    const id = crypto.randomUUID();
-    localStorage.setItem(GUEST_KEY, id);
-    return id;
+    const token = localStorage.getItem(TOKEN_KEY);
+    const guestId = token?.split('.')[1];
+    return token && guestId ? { guestId, token } : null;
   } catch {
-    return crypto.randomUUID(); // storage blocked: progress won't persist this time
+    return null;
+  }
+}
+
+/** Our guest token, asking the API for a new guest the first time. Null if the API is down. */
+export async function ensureGuest(): Promise<{ guestId: string; token: string } | null> {
+  cached ??= readStored();
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${apiUrl()}/guests`, { method: 'POST' });
+    if (!res.ok) return null;
+    cached = (await res.json()) as { guestId: string; token: string };
+    try {
+      localStorage.setItem(TOKEN_KEY, cached.token);
+    } catch {
+      // storage blocked: this session still works, progress won't survive a reload
+    }
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+/** Forget a token the API or server refused (e.g. expired), so a fresh guest is created. */
+export function forgetGuest(): void {
+  cached = null;
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
   }
 }
 
@@ -41,8 +70,10 @@ export function apiUrl(): string {
 
 /** Load this guest's level and XP into the store (quietly does nothing if the API is down). */
 export async function refreshProfile(): Promise<void> {
+  const guest = await ensureGuest();
+  if (!guest) return;
   try {
-    const res = await fetch(`${apiUrl()}/profiles/${guestId()}`);
+    const res = await fetch(`${apiUrl()}/profiles/${guest.guestId}`);
     if (!res.ok) return;
     setStatus({ profile: (await res.json()) as Profile });
   } catch {

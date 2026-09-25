@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Hono } from 'hono';
+import { issueGuestToken, RateLimiter } from '@sentinel/auth';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
 import type { Store } from './db.ts';
@@ -39,10 +40,30 @@ function validSignature(body: string, signature: string | undefined, secret: str
   return timingSafeEqual(expected, Buffer.from(signature, 'hex'));
 }
 
+export interface AppOptions {
+  /** How to find the caller's IP for rate limits (the Node listener passes the socket address). */
+  clientIp?: (c: Context) => string;
+  /**
+   * New guests per IP: burst, then per second. Generous on purpose: many players can share
+   * one IP (schools, offices, internet cafés, mobile carriers).
+   */
+  guestLimit?: { burst: number; perSecond: number };
+}
+
 /** The API app, separate from the Node listener so tests can call it directly. */
-export function createApp(store: Store, secret: string): Hono {
+export function createApp(store: Store, secret: string, opts: AppOptions = {}): Hono {
   const app = new Hono();
   app.use('*', cors());
+  const ipOf = opts.clientIp ?? (() => 'local');
+  const g = opts.guestLimit ?? { burst: 30, perSecond: 0.5 };
+  const guestLimit = new RateLimiter(g.burst, g.perSecond);
+  const readLimit = new RateLimiter(60, 5);
+
+  /** New guest: a random id and a token signed with the server secret (Phase 4 lite). */
+  app.post('/guests', (c) => {
+    if (!guestLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
+    return c.json(issueGuestToken(secret));
+  });
 
   app.get('/healthz', (c) => c.json({ ok: true, service: 'api' }));
 
@@ -80,6 +101,7 @@ export function createApp(store: Store, secret: string): Hono {
 
   /** Public profile: level, XP and totals (defaults for a new guest). */
   app.get('/profiles/:guestId', (c) => {
+    if (!readLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
     const guestId = c.req.param('guestId');
     if (!GUEST_ID.test(guestId)) return c.json({ error: 'bad guest id' }, 400);
     const row = store.profile(guestId);

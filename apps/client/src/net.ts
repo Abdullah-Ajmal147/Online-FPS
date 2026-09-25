@@ -47,13 +47,13 @@ export class Connection {
   private room: Room | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
 
-  async connect(handlers: NetHandlers, name: string, guest: string): Promise<void> {
+  async connect(handlers: NetHandlers, name: string, token: string | null): Promise<void> {
     const client = new Client(serverUrl());
     try {
       const room = await client.joinOrCreate('match', {
         protocolVersion: PROTOCOL_VERSION,
         name,
-        guest,
+        ...(token ? { token } : {}),
       });
       this.room = room;
 

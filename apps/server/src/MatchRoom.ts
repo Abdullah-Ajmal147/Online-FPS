@@ -1,4 +1,5 @@
-import { Room, ServerError, type Client } from '@colyseus/core';
+import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
+import { RateLimiter, verifyGuestToken } from '@sentinel/auth';
 import { defaultLoadout, maps, modes, movement } from '@sentinel/content';
 import {
   MessageType,
@@ -46,7 +47,12 @@ interface Seat {
   lastPingMs: number;
 }
 
-const GUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/**
+ * Joins per IP (Phase 4 task 10): burst 20, then one per second. Stops join floods while
+ * leaving room for many players behind one IP (schools, cafés, mobile carriers).
+ */
+const joinLimit = new RateLimiter(20, 1);
+const API_SECRET = process.env.SENTINEL_API_SECRET ?? 'dev-only-secret';
 
 const envNumber = (name: string, fallback: number) => {
   const v = Number(process.env[name]);
@@ -152,21 +158,31 @@ export class MatchRoom extends Room {
     });
   }
 
-  override onAuth(_client: Client, options: unknown): boolean {
+  /**
+   * Runs before joining: protocol check, per-IP join rate limit, and the guest token. A valid
+   * token becomes `client.auth.guestId` (progression); no token is fine, it just earns no XP.
+   */
+  override onAuth(
+    _client: Client,
+    options: unknown,
+    context: AuthContext,
+  ): { guestId: string | null } {
     if (!isProtocolCompatible(options)) {
       throw new ServerError(RELOAD_REQUIRED_CODE, RELOAD_REQUIRED);
     }
-    return true;
+    if (!joinLimit.take(context.ip ?? 'unknown'))
+      throw new ServerError(429, 'too many joins, try again shortly');
+    const token = (options as { token?: unknown }).token;
+    return { guestId: verifyGuestToken(token, API_SECRET) };
   }
 
-  override onJoin(client: Client, options?: { name?: unknown; guest?: unknown }): void {
+  override onJoin(client: Client, options?: { name?: unknown }): void {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
     const team = this.bots ? this.bots.teamForHuman() : undefined;
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
     const player = this.sim.addPlayer({
       name: sanitizeName(options?.name),
-      guestId:
-        typeof options?.guest === 'string' && GUEST_ID.test(options.guest) ? options.guest : null,
+      guestId: (client.auth as { guestId?: string | null } | undefined)?.guestId ?? null,
       ...(team === undefined ? {} : { team }),
     });
     this.seats.set(client.sessionId, {

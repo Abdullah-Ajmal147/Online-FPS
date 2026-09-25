@@ -49,6 +49,27 @@ describe('xp rules', () => {
   });
 });
 
+describe('guests', () => {
+  it('POST /guests issues a signed token for a new guest id', async () => {
+    const a = app();
+    const res = await a.request('/guests', { method: 'POST' });
+    const body = (await res.json()) as { guestId: string; token: string };
+    expect(body.token.split('.')[1]).toBe(body.guestId);
+    const { verifyGuestToken } = await import('@sentinel/auth');
+    expect(verifyGuestToken(body.token, SECRET)).toBe(body.guestId);
+  });
+
+  it('rate-limits guest creation per IP', async () => {
+    const a = createApp(new Store(':memory:'), SECRET, {
+      guestLimit: { burst: 5, perSecond: 0.1 },
+    });
+    const codes = [];
+    for (let i = 0; i < 8; i++) codes.push((await a.request('/guests', { method: 'POST' })).status);
+    expect(codes.filter((c) => c === 200)).toHaveLength(5);
+    expect(codes.at(-1)).toBe(429);
+  });
+});
+
 describe('api', () => {
   it('GET /healthz', async () => {
     const res = await app().request('/healthz');

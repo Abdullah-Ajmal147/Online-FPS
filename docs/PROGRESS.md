@@ -150,9 +150,10 @@ Exit tests:
 
 Open issues carried forward:
 
-- **Balance:** in the soak, Ember (team 1) won 8/10. Relay Yard is not symmetric (balcony stairs on Aegis's end, ramp on Ember's; side-lane cover differs). Check in playtests, then mirror the map if the gap holds.
+- ~~Balance: team 1 won 8/10 on the asymmetric Relay Yard~~ → map made point-symmetric (test-enforced); re-run 4/6.
 - Deploy to a VPS/Fly.io with HTTPS/WSS (owner account), then run the exit tests remotely.
 - 47 ms worst-case tick spike in the soak: add tick-time monitoring (Phase 7).
 - Phase 4 (lite, pulled forward for the end-to-end game): API with SQLite (`node:sqlite`) — `POST /matches` accepts only HMAC-signed results from the game server, each match id once; XP (150 + 100/kill + 250 win / 100 draw) and levels (500, 750, 1000… XP) computed by the API; `GET /profiles/:guestId`. Browser keeps a random guest id (not a secure identity; Supabase replaces it in Phase 4); menu shows level/XP, refreshed after each match. E2E checks XP after a full bot match.
+- Secure guest identity (replaces the unsigned guest id): `packages/auth` issues HMAC-signed guest tokens (`POST /guests`); the game server verifies them on join and only verified guests earn XP. Rate limits per IP: guest creation (burst 30, 0.5/s), profile reads, room joins (burst 20, 1/s) — generous because many players can share one IP.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

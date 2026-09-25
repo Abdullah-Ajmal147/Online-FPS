@@ -12,6 +12,7 @@
   "dependencies": {
     "@colyseus/core": "^0.18.16",
     "@colyseus/ws-transport": "^0.18.3",
+    "@sentinel/auth": "workspace:*",
     "@sentinel/content": "workspace:*",
     "@sentinel/protocol": "workspace:*",
     "@sentinel/shared": "workspace:*",

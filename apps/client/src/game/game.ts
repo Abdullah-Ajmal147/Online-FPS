@@ -41,7 +41,7 @@ import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
 import type { Settings } from '../settings.ts';
-import { guestId, refreshProfile } from '../profile.ts';
+import { ensureGuest, refreshProfile } from '../profile.ts';
 import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
 import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
@@ -345,6 +345,7 @@ export async function startGame(
     setStatus({ match: null });
   };
 
+  const guest = await ensureGuest(); // signed guest token (XP); the game works without it
   void conn.connect(
     {
       onHello: (hello) => {
@@ -361,7 +362,7 @@ export async function startGame(
       onDisconnect,
     },
     settings().name,
-    guestId(),
+    guest?.token ?? null,
   );
 
   // --- Shots ---
