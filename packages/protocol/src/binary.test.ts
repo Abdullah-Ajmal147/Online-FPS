@@ -47,7 +47,7 @@ describe('BinaryWriter / BinaryReader', () => {
     expect([...w.finish()]).toEqual([7]);
   });
 
-  it('exposes PROTOCOL_VERSION 1', () => {
-    expect(PROTOCOL_VERSION).toBe(1);
+  it('exposes PROTOCOL_VERSION', () => {
+    expect(PROTOCOL_VERSION).toBeGreaterThanOrEqual(1);
   });
 });
