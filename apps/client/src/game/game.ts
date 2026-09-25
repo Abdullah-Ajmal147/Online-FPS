@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { defaultLoadout, maps, movement } from '@sentinel/content';
+import { defaultLoadout, maps, movement, type GameMap } from '@sentinel/content';
 import type { GameEvent, Snapshot } from '@sentinel/protocol';
 import {
   Predictor,
@@ -22,7 +22,9 @@ import {
   rayPlayer,
   yawFromDegrees,
   yawToRadians,
+  type MovementContext,
   type ShotRequest,
+  type SimContext,
   type SimState,
 } from '@sentinel/shared';
 import { GameAudio } from '../audio.ts';
@@ -30,8 +32,8 @@ import { verticalFovDegrees } from '../camera.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes } from '../map.ts';
 import { Connection } from '../net.ts';
-import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '../net/clock.ts';
-import { InterpolationDelay, RemoteBuffer, type RemotePose } from '../net/interpolator.ts';
+import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
+import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
 import type { Settings } from '../settings.ts';
 import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
 import { Effects } from './effects.ts';
@@ -68,14 +70,9 @@ export async function startGame(
     : 'WebGL 2';
   console.info(`[renderer] backend: ${backend}`);
 
-  const map = maps.greybox!;
-  const solids = expandMap(map);
-
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fb6c9);
   scene.fog = new THREE.Fog(0x9fb6c9, 60, 140);
-  const mapMeshes = buildMapMeshes(solids);
-  scene.add(mapMeshes);
   scene.add(new THREE.HemisphereLight(0xdfeeff, 0x3a3f47, 1.4));
   const sun = new THREE.DirectionalLight(0xffffff, 2.2);
   sun.position.set(20, 40, 15);
@@ -97,21 +94,37 @@ export async function startGame(
   window.addEventListener('resize', resize);
 
   const viewmodel = new Viewmodel(camera);
-  const effects = new Effects(scene, mapMeshes);
   const audio = new GameAudio();
-
-  // --- Simulation (same code the server runs) ---
   const rapier = await initPhysics();
-  const world = buildWorld(rapier, solids);
-  const moveCtx = createMovementContext(rapier, world, movement);
-  const simCtx = createSimContext(moveCtx, defaultLoadout);
-  const body = createPlayerBody(moveCtx);
-  const spawn = map.spawns[0]!;
-  const freshSim = (): SimState => ({
-    move: createPlayerState(spawn.position, yawFromDegrees(spawn.yawDeg)),
-    weapon: createWeaponState(simCtx.loadout),
-  });
-  const predictor = new Predictor(freshSim(), simCtx, body);
+
+  // --- Map + simulation (same code the server runs). Rebuilt when the server names its map. ---
+  let map!: GameMap;
+  let mapMeshes: THREE.Group | null = null;
+  let moveCtx!: MovementContext;
+  let simCtx!: SimContext;
+  let predictor!: Predictor; // all assigned by loadMap() right below
+  const effects = new Effects(scene);
+  const freshSim = (): SimState => {
+    const spawn = map.spawns[0]!;
+    return {
+      move: createPlayerState(spawn.position, yawFromDegrees(spawn.yawDeg)),
+      weapon: createWeaponState(simCtx.loadout),
+    };
+  };
+  function loadMap(id: string): void {
+    const next = maps[id];
+    if (!next) throw new Error(`unknown map "${id}"`);
+    map = next;
+    const solids = expandMap(map);
+    if (mapMeshes) scene.remove(mapMeshes);
+    mapMeshes = buildMapMeshes(solids);
+    scene.add(mapMeshes);
+    effects.setSolids(mapMeshes);
+    moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
+    simCtx = createSimContext(moveCtx, defaultLoadout);
+    predictor = new Predictor(freshSim(), simCtx, createPlayerBody(moveCtx));
+  }
+  loadMap('greybox'); // offline practice until the server tells us its map
   let prevState: SimState = predictor.state;
 
   const input = new InputCapture(
@@ -177,14 +190,16 @@ export async function startGame(
     if (own) {
       const alive = own.respawnTicks === 0;
       if (!spawnedFromServer || own.lifeId !== lifeId) {
-        // Joined or respawned: take the server's state and predict from there.
+        // Joined or respawned: take the server's state and predict from there
+        // (on respawn, replaying inputs the server hasn't applied yet).
+        const joining = !spawnedFromServer;
         spawnedFromServer = true;
         lifeId = own.lifeId;
         const look = predictor.state.move;
-        predictor.reset({
-          move: { ...own.sim.move, yaw: look.yaw, pitch: look.pitch },
-          weapon: own.sim.weapon,
-        });
+        predictor.reset(
+          { move: { ...own.sim.move, yaw: look.yaw, pitch: look.pitch }, weapon: own.sim.weapon },
+          joining ? undefined : snap.lastProcessedSeq,
+        );
         prevState = predictor.state;
       } else if (alive) {
         const before = predictor.state.move.position;
@@ -284,6 +299,10 @@ export async function startGame(
     onHello: (hello) => {
       myId = hello.playerId;
       myTeamCache = hello.team;
+      if (hello.mapId !== map.id) {
+        loadMap(hello.mapId);
+        prevState = predictor.state;
+      }
     },
     onSnapshot,
     onEvents,

@@ -120,7 +120,11 @@ export function adsFraction(state: WeaponState, spec: WeaponSpec): number {
 export function currentSpread(state: WeaponState, spec: WeaponSpec, move: MoveInfo): number {
   const s = spec.spread;
   const base = s.hip + Math.round(((s.ads - s.hip) * state.adsTicks) / spec.adsTicks);
-  return base + (move.moving ? s.moving : 0) + (move.airborne ? s.airborne : 0) + state.bloom;
+  // Aiming down sights keeps a spray tight: bloom shrinks to 15% at full ADS (recoil, which
+  // the player can pull against, is what makes sustained ADS fire hard, not random spread).
+  const bloom =
+    state.bloom - Math.round((state.bloom * 85 * state.adsTicks) / (100 * spec.adsTicks));
+  return base + (move.moving ? s.moving : 0) + (move.airborne ? s.airborne : 0) + bloom;
 }
 
 /** Movement speed multiplier for the held weapon (slower while aiming). */

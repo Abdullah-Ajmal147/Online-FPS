@@ -9,6 +9,7 @@ import {
   WeaponSchema,
 } from './schemas.ts';
 import teamDeathmatchJson from './modes/team-deathmatch.json' with { type: 'json' };
+import arenaJson from './maps/arena.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
 import kestrelJson from './weapons/kestrel-ar.json' with { type: 'json' };
@@ -23,6 +24,8 @@ export const modes: Record<string, Mode> = {
 
 export const maps: Record<string, GameMap> = {
   greybox: MapSchema.parse(greyboxJson),
+  /** Open test arena with a clear line between spawns (netcode and hit-registration tests). */
+  arena: MapSchema.parse(arenaJson),
 };
 
 export const movement: Movement = MovementSchema.parse(movementJson);

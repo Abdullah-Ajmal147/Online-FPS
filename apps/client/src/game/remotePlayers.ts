@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { movement } from '@sentinel/content';
-import type { RemotePose } from '../net/interpolator.ts';
+import type { RemotePose } from '@sentinel/shared';
 
 /** Faction colours from docs/GAME_DESIGN.md: Aegis Directive blue, Ember Syndicate orange. */
 const TEAM_COLORS = [0x2f81f7, 0xf0883e];

@@ -62,9 +62,11 @@ describe('FakeLag', () => {
     expect(got).toEqual([...Array(200).keys()]);
   });
 
-  it('reads the preset from the environment', () => {
+  it('reads a preset or a custom rtt:jitter:loss from the environment', () => {
     expect(presetFromEnv(undefined)).toBeNull();
-    expect(presetFromEnv('bad')).toBe('bad');
+    expect(presetFromEnv('bad')).toEqual(LAG_PRESETS.bad);
+    expect(presetFromEnv('150:20:0.03')).toEqual({ rttMs: 150, jitterMs: 20, loss: 0.03 });
     expect(() => presetFromEnv('terrible')).toThrow();
+    expect(() => presetFromEnv('150:20:2')).toThrow();
   });
 });

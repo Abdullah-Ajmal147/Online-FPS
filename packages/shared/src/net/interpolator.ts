@@ -1,5 +1,19 @@
-import type { EntityState } from '@sentinel/protocol';
-import { TICKS_PER_SNAPSHOT, type Vec3 } from '@sentinel/shared';
+import { TICKS_PER_SNAPSHOT } from '../constants.ts';
+import type { Vec3 } from '../map/solids.ts';
+
+/** One remote player as a snapshot describes it (see packages/protocol EntityState). */
+export interface EntityState {
+  id: number;
+  team: number;
+  alive: boolean;
+  crouching: boolean;
+  grounded: boolean;
+  position: Vec3;
+  yaw: number;
+  pitch: number;
+  weaponSlot: number;
+  shotCount: number;
+}
 
 /** Remote players are drawn this far in the past: 2 snapshots (~66 ms), adaptive up to 100 ms. */
 export const BASE_DELAY_TICKS = 2 * TICKS_PER_SNAPSHOT;

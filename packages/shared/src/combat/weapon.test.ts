@@ -117,6 +117,15 @@ describe('aiming, spread and recoil', () => {
     expect(weaponSpeedScale(state, rifle)).toBeCloseTo(defaultLoadout[0].adsMoveSpeedMultiplier, 6);
   });
 
+  it('bloom from sustained fire is mostly suppressed while aiming down sights', () => {
+    const hipSpray = run(30, Button.Fire).state;
+    const adsSpray = run(30, Button.Fire | Button.Aim, run(rifle.adsTicks, Button.Aim).state).state;
+    const hipExtra = currentSpread(hipSpray, rifle, still) - rifle.spread.hip;
+    const adsExtra = currentSpread(adsSpray, rifle, still) - rifle.spread.ads;
+    expect(hipExtra).toBeGreaterThan(0);
+    expect(adsExtra).toBeLessThanOrEqual(Math.ceil(hipExtra * 0.15) + 1);
+  });
+
   it('moving and jumping widen spread', () => {
     const s = createWeaponState(loadout);
     expect(currentSpread(s, rifle, { ...still, moving: true })).toBeGreaterThan(

@@ -8,7 +8,7 @@ These numbers are the contract between client and server. Change them only with 
 | Snapshot rate (server → client)              | 30 Hz                                                  |
 | Input rate (client → server)                 | 60 Hz, each packet repeats the last 3 inputs           |
 | Interpolation delay for remote players       | 2 snapshots (~66 ms), adaptive up to 100 ms            |
-| Max lag-compensation rewind                  | 200 ms                                                 |
+| Max lag-compensation rewind                  | 300 ms (ADR 0006)                                      |
 | History kept on server for rewind            | 1 s of hitbox transforms per player                    |
 | Transport                                    | WebSocket, binary frames, behind `Transport` interface |
 
@@ -43,7 +43,7 @@ These numbers are the contract between client and server. Change them only with 
 - Firing is a button bit inside `InputCmd`; the server uses that input's `yaw`, `pitch`
   and the client's interpolation delay to decide what the shooter saw.
 - Server: validate fire rate / ammo from server weapon state → compute
-  `rewindTime = clamp(now - (rtt/2 + interpDelay), now - 200 ms, now)` → move other
+  `rewindTime = clamp(viewTick, now - 300 ms, now)` (ADR 0005, 0006) → move other
   players' hitboxes to their recorded transforms at `rewindTime` → raycast from
   the server's own eye position with the given angles → restore → apply damage.
 - The client plays muzzle flash, tracer and a _predicted_ hit marker; the damage

@@ -1,5 +1,6 @@
 import {
   INPUT_REDUNDANCY,
+  type EntityState,
   type OwnState,
   type SequencedInput,
   type Vec3,
@@ -41,6 +42,8 @@ export interface Hello {
   playerId: number;
   /** 0 = Aegis Directive, 1 = Ember Syndicate. */
   team: number;
+  /** Map the server runs (id in packages/content maps); the client loads the same one. */
+  mapId: string;
 }
 
 export function encodeHello(msg: Hello): Uint8Array {
@@ -49,12 +52,19 @@ export function encodeHello(msg: Hello): Uint8Array {
     .u8(msg.serverTickRate)
     .u8(msg.playerId)
     .u8(msg.team)
+    .string(msg.mapId)
     .finish();
 }
 
 export function decodeHello(bytes: Uint8Array): Hello {
   const r = new BinaryReader(bytes);
-  return { protocolVersion: r.u16(), serverTickRate: r.u8(), playerId: r.u8(), team: r.u8() };
+  return {
+    protocolVersion: r.u16(),
+    serverTickRate: r.u8(),
+    playerId: r.u8(),
+    team: r.u8(),
+    mapId: r.string(),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -125,20 +135,8 @@ export interface OwnSnapshot {
   respawnTicks: number;
 }
 
-export interface EntityState {
-  id: number;
-  team: number;
-  alive: boolean;
-  crouching: boolean;
-  grounded: boolean;
-  /** Metres, quantized to 1/64 m on the wire (int16: maps must stay within ±511 m). */
-  position: Vec3;
-  yaw: number;
-  pitch: number;
-  weaponSlot: number;
-  /** Wrapping count of shots fired: when it changes, draw muzzle flashes/tracers. */
-  shotCount: number;
-}
+/** Other players in a snapshot. Positions are int16 at 1/64 m on the wire (ADR 0004). */
+export type { EntityState };
 
 export interface Snapshot {
   serverTick: number;

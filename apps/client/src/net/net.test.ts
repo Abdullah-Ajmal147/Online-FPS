@@ -17,8 +17,8 @@ import {
   type SimContext,
   type SimState,
 } from '@sentinel/shared';
-import { InterpolationDelay, MAX_EXTRAPOLATION_TICKS, RemoteBuffer } from './interpolator.ts';
-import { ServerClock, inputPacing } from './clock.ts';
+import { InterpolationDelay, MAX_EXTRAPOLATION_TICKS, RemoteBuffer } from '@sentinel/shared';
+import { ServerClock, inputPacing } from '@sentinel/shared';
 
 let rapier: Rapier;
 beforeAll(async () => {

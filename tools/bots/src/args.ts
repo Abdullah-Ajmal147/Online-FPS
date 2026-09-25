@@ -6,11 +6,13 @@ export interface BotArgs {
   duration?: number;
   /** Write bot 1's inputs (as sent) to this JSON file when --duration ends. */
   record?: string;
+  /** wander (default) | duel: one strafing target + one shooter (Phase 2 hit-registration test). */
+  mode: 'wander' | 'duel';
 }
 
 /** Parses `--count 11 --room <id> --url http://localhost:2567`. */
 export function parseArgs(argv: readonly string[]): BotArgs {
-  const args: BotArgs = { count: 1, url: 'http://localhost:2567' };
+  const args: BotArgs = { count: 1, url: 'http://localhost:2567', mode: 'wander' };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     const value = argv[i + 1];
@@ -28,6 +30,11 @@ export function parseArgs(argv: readonly string[]): BotArgs {
         break;
       case '--url':
         args.url = value;
+        break;
+      case '--mode':
+        if (value !== 'wander' && value !== 'duel')
+          throw new Error('--mode must be wander or duel');
+        args.mode = value;
         break;
       case '--record':
         args.record = value;

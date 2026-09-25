@@ -72,14 +72,26 @@ export class Predictor {
   }
 
   /**
-   * Start over from a state the server gave us (our spawn when we join or respawn). Clears the
-   * input history: inputs predicted before this must never be replayed on top of it.
-   * The seq counter keeps counting; the server takes our first seq as its baseline.
+   * Start over from a state the server gave us.
+   * - Joining (`replayAfterSeq` omitted): drop all history. Inputs predicted offline must never
+   *   be replayed; the server takes our first seq as its baseline.
+   * - Respawning: the server already applied `lastProcessedSeq`; inputs after it are still in
+   *   flight and WILL be applied on top of this state, so replay them here too.
    */
-  reset(state: SimState): void {
-    this.state = state;
-    this.history = [];
+  reset(state: SimState, replayAfterSeq?: number): void {
     this.renderOffset.fill(0);
+    if (replayAfterSeq === undefined) {
+      this.state = state;
+      this.history = [];
+      return;
+    }
+    this.history = this.history.filter((e) => e.seq > replayAfterSeq);
+    let s = state;
+    for (const e of this.history) {
+      s = stepSim(s, e.input, this.ctx, this.body).state;
+      e.state = s;
+    }
+    this.state = s;
   }
 
   /**

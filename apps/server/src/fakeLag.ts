@@ -19,14 +19,19 @@ export const LAG_PRESETS = {
 
 export type LagPresetName = keyof typeof LAG_PRESETS;
 
-export function presetFromEnv(value: string | undefined): LagPresetName | null {
+/**
+ * SENTINEL_LAG: a preset name (good | normal | bad) or a custom "rttMs:jitterMs:loss",
+ * e.g. "150:20:0.03" for the Phase 2 hit-registration test at 150 ms.
+ */
+export function presetFromEnv(value: string | undefined): LagPreset | null {
   if (!value) return null;
-  if (value in LAG_PRESETS) return value as LagPresetName;
+  if (value in LAG_PRESETS) return LAG_PRESETS[value as LagPresetName];
+  const m = /^(\d+):(\d+):(0(?:\.\d+)?|1)$/.exec(value);
+  if (m) return { rttMs: Number(m[1]), jitterMs: Number(m[2]), loss: Number(m[3]) };
   throw new Error(
-    `SENTINEL_LAG must be one of ${Object.keys(LAG_PRESETS).join(', ')}, got "${value}"`,
+    `SENTINEL_LAG must be ${Object.keys(LAG_PRESETS).join(', ')} or "rtt:jitter:loss", got "${value}"`,
   );
 }
-
 type Schedule = (fn: () => void, delayMs: number) => void;
 
 /**

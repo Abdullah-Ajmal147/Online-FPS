@@ -1,4 +1,4 @@
-import { TICK_RATE } from '@sentinel/shared';
+import { TICK_RATE } from '../constants.ts';
 
 /**
  * Estimates the server's current tick from snapshot arrivals. Each snapshot tells us
@@ -22,5 +22,3 @@ export class ServerClock {
     return this.offsetTicks === null ? null : this.offsetTicks + (nowMs * TICK_RATE) / 1000;
   }
 }
-
-export { TARGET_QUEUE_DEPTH, inputPacing } from '@sentinel/shared';

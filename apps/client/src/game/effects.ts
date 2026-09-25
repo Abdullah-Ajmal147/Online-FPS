@@ -19,12 +19,15 @@ export class Effects {
   private readonly flashGeo = new THREE.SphereGeometry(0.06, 8, 6);
   private readonly impactGeo = new THREE.CircleGeometry(0.05, 10);
 
-  constructor(
-    private readonly scene: THREE.Scene,
-    /** What shots can hit visually (the map meshes). */
-    private readonly solids: THREE.Object3D,
-  ) {
+  /** What shots can hit visually (the map meshes); set when a map loads. */
+  private solids: THREE.Object3D = new THREE.Group();
+
+  constructor(private readonly scene: THREE.Scene) {
     this.raycaster.far = 150;
+  }
+
+  setSolids(solids: THREE.Object3D): void {
+    this.solids = solids;
   }
 
   /** Where a ray hits the map (visual only; the server decides real hits). */

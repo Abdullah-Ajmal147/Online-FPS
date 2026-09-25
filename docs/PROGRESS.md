@@ -1,6 +1,6 @@
 # Progress
 
-**Current phase:** 2 — Gunplay
+**Current phase:** 3 — Match loop + bots
 
 ## Phase 0 — Setup
 
@@ -91,8 +91,8 @@ Open issues carried forward:
 
 ## Phase 2 — Gunplay
 
-Status: in progress. The owner asked for a complete end-to-end game and delegated decisions
-(2026-09-25), so Phases 2–3 continue without per-task approval stops; decisions go in ADRs.
+Status: **done 2026-09-25**. The owner asked for a complete end-to-end game and delegated
+decisions (2026-09-25), so Phases 2–3 continue without per-task approval stops; decisions go in ADRs.
 
 Tasks done:
 
@@ -103,5 +103,34 @@ Tasks done:
 - 7 (greybox version). Procedural viewmodel (kick, ADS, reload dip, switch), muzzle flash, tracers, impact marks, recoil on camera, spread-driven crosshair, predicted + confirmed hit markers, damage direction arcs, kill feed, death screen, synthesized Web Audio with 3D positioned remote shots (no asset files; ADR pending in Phase 5 for real assets).
 - 8. Anti-cheat basics are the shared weapon rules on the server: a client firing at 2× rate gets no extra shots (unit test).
 - Protocol v3: inputs carry `viewTick`, own block carries weapon + health + lifeId, entities carry alive/weapon/shot counter (int16 positions, ADR 0004 update), reliable `Events` (kill/hit/damaged). E2E: two browsers, one shoots the other, server confirms hits.
+- 9. Bots: shared `Bot` client (prediction + interpolation like a browser), `--mode duel` = strafing target + aim bot that aims at the target as drawn and counts on-target shots vs server hit confirmations. Server can run a map from `SENTINEL_MAP` (Hello carries the map id, protocol v4) and test-only `SENTINEL_TEST_NO_DEATH`.
+- Fixes found by the hit-registration test: rewind cap 200 → 300 ms (ADR 0006: real rewind = RTT + interp + input buffer ≈ 283 ms at 150 ms); respawn replays in-flight inputs (was 3% corrections for a dying player); bloom suppressed to 15% while aiming (sprays were randomly missing).
+
+Exit tests:
+
+- [x] Bot test at 150 ms ping: **150/150 = 100%** of on-target shots registered (arena, 60 s, 3% loss); corrections 0%. For reference, `bad` preset (261 ms): 22% — beyond the 300 ms cap, players that far need a closer region.
+- [x] A test client firing at 2× the allowed rate gets 0 extra shots (unit test)
+- [~] Owner plays 30 minutes and signs off on feel — owner asked to continue to the end-to-end game; playtest with the finished match loop
+- [x] All weapon numbers come from data files (`packages/content/src/weapons/*.json`)
+
+What we learned:
+
+- Measure before trusting formulas: NETCODE's `rtt/2 + interp` rewind left out the snapshot's one-way age; the bot duel exposed it in one run.
+- Separate netcode from game design in tests: spread, bloom and shots at already-dead targets all looked like "hit-reg failures" until isolated.
+- Prettier reformats code between edits; scripted exact-text edits must re-read the file (a tolerant edit helper now reports misses instead of silently skipping).
+
+Open issues carried forward:
+
+- Rewind cap for high-ping regions (300 ms) — tune with playtests; consider region-based matchmaking first.
+- Real weapon/character models and sounds (Phase 5 content pipeline; licenses in docs/LICENSES.md).
+- Owner feel sign-off for movement and gunplay (online).
+
+## Phase 3 — Match loop + bots
+
+Status: in progress (owner delegated decisions; continuing without per-task stops).
+
+Tasks done:
+
+- (none yet)
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

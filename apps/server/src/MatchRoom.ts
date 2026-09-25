@@ -17,7 +17,7 @@ import {
   TICK_RATE,
   initPhysics,
 } from '@sentinel/shared';
-import { FakeLag, LAG_PRESETS, presetFromEnv } from './fakeLag.ts';
+import { FakeLag, presetFromEnv } from './fakeLag.ts';
 import { isProtocolCompatible } from './protocol-check.ts';
 import { MatchSim } from './sim.ts';
 import { PUMP_INTERVAL_MS, TickLoop } from './tickLoop.ts';
@@ -53,21 +53,27 @@ export class MatchRoom extends Room {
   private seats = new Map<string, Seat>();
   /** Set by `pnpm dev:lag --preset <name>` (SENTINEL_LAG). Never on in production. */
   private lag: FakeLag | null = null;
+  private mapId = 'greybox';
 
   override async onCreate(): Promise<void> {
-    const presetName = presetFromEnv(process.env.SENTINEL_LAG);
-    if (presetName) {
-      this.lag = new FakeLag(LAG_PRESETS[presetName], Date.now() & 0xffff);
-      console.warn(`[match] fake lag ON: ${presetName} ${JSON.stringify(LAG_PRESETS[presetName])}`);
+    const preset = presetFromEnv(process.env.SENTINEL_LAG);
+    if (preset) {
+      this.lag = new FakeLag(preset, Date.now() & 0xffff);
+      console.warn(`[match] fake lag ON: ${JSON.stringify(preset)}`);
     }
+    // SENTINEL_MAP picks the map (tests use the open "arena"); Phase 3 rotates real maps.
+    this.mapId = process.env.SENTINEL_MAP ?? 'greybox';
+    const map = maps[this.mapId];
+    if (!map)
+      throw new Error(
+        `SENTINEL_MAP: unknown map "${this.mapId}" (have ${Object.keys(maps).join(', ')})`,
+      );
     const rapier = await initPhysics();
-    this.sim = new MatchSim(
-      rapier,
-      maps.greybox!,
-      movement,
-      defaultLoadout,
-      Date.now() & 0xffffffff,
-    );
+    this.sim = new MatchSim(rapier, map, movement, defaultLoadout, Date.now() & 0xffffffff);
+    if (process.env.SENTINEL_TEST_NO_DEATH) {
+      this.sim.noDeath = true;
+      console.warn('[match] TEST MODE: players cannot die (SENTINEL_TEST_NO_DEATH)');
+    }
     this.loop = new TickLoop(() => this.tick());
     this.setSimulationInterval(() => this.loop.pump(), PUMP_INTERVAL_MS);
 
@@ -171,6 +177,7 @@ export class MatchRoom extends Room {
         serverTickRate: TICK_RATE,
         playerId: player.id,
         team: player.team,
+        mapId: this.mapId,
       }),
     );
   }

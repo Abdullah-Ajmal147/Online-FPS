@@ -66,14 +66,20 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 3 (Phase 2: weapons, health, events, view tick)', () => {
-    expect(PROTOCOL_VERSION).toBe(3);
+  it('is 4 (Phase 2: weapons, health, events, view tick, map in Hello)', () => {
+    expect(PROTOCOL_VERSION).toBe(4);
   });
 });
 
 describe('Hello', () => {
   it('round-trips', () => {
-    const msg = { protocolVersion: PROTOCOL_VERSION, serverTickRate: 60, playerId: 7, team: 1 };
+    const msg = {
+      protocolVersion: PROTOCOL_VERSION,
+      serverTickRate: 60,
+      playerId: 7,
+      team: 1,
+      mapId: 'greybox',
+    };
     expect(decodeHello(encodeHello(msg))).toEqual(msg);
   });
 });

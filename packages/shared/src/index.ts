@@ -10,3 +10,5 @@ export * from './net/pacing.ts';
 export * from './combat/weapon.ts';
 export * from './combat/sim.ts';
 export * from './combat/hitbox.ts';
+export * from './net/clock.ts';
+export * from './net/interpolator.ts';

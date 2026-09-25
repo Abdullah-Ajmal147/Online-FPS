@@ -86,6 +86,11 @@ export class MatchSim {
   events: { to: number | null; event: GameEvent }[] = [];
   /** Shots resolved by the last step (tests, debugging). */
   lastShots: ShotResult[] = [];
+  /**
+   * Test-only (SENTINEL_TEST_NO_DEATH): health never drops below 1, so hit-registration tests
+   * aren't skewed by shots at targets that just died. Never set in real matches.
+   */
+  noDeath = false;
   private readonly ctx: SimContext;
   private readonly random: () => number;
   private spawnCursor = [0, 0];
@@ -271,7 +276,7 @@ export class MatchSim {
     slot: number,
   ): void {
     if (!victim.alive) return;
-    victim.health = Math.max(0, victim.health - damage);
+    victim.health = Math.max(this.noDeath ? 1 : 0, victim.health - damage);
     victim.lastDamageTick = this.tick;
     const killed = victim.health === 0;
     this.events.push({
