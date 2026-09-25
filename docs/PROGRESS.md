@@ -1,6 +1,6 @@
 # Progress
 
-**Current phase:** 1 — Networked movement
+**Current phase:** 2 — Gunplay
 
 ## Phase 0 — Setup
 
@@ -51,7 +51,7 @@ Open issues carried forward:
 
 ## Phase 1 — Networked movement
 
-Status: in progress (plan approved 2026-09-25: no player collision, starting movement numbers, hold-to-sprint + toggle option)
+Status: **done 2026-09-25** (plan approved 2026-09-25: no player collision, starting movement numbers, hold-to-sprint + toggle option)
 
 Tasks done:
 
@@ -66,5 +66,36 @@ Tasks done:
 - 9. F3 debug overlay: fps, ping, snapshot loss, server tick time, correction %, last error, server input-queue depth, interpolation delay, players seen.
 - 10. Replay test (`apps/server/src/replay.test.ts`): 1,000 inputs recorded from a real bot session (`pnpm bots -- --record`) through the client predictor and the server `MatchSim` at ~130 ms RTT: **exact match, zero corrections**; within 1 cm with 10% input + 10% snapshot loss. It caught three join-time bugs (fixed): idle steps during the start buffer, offline seqs rejected as garbage, practice history replayed after spawn.
 - Netcode review of tasks 5–10 fixed: catch-up "debt" drops inputs already simulated with a guess (keeps presses) so a hitch no longer moves you twice or adds seconds of lag; silent clients stop after 250 ms; 150 msg/s limit + ping limit; SnapshotAck handler; range-checked binary writes; slide timers capped to fit u8; spawn required per team; replay runs through the wire format with 11 real players in the path; remote teleports snap; disconnect returns to practice mode. ADR 0004: full snapshots (no delta compression) within budget. Re-measured: normal 0.03% corrections.
+
+Exit tests:
+
+- [x] Two browser tabs see each other move (Playwright e2e `two players in two tabs see each other move`)
+- [x] Replay test: exact match after 1,000 recorded inputs (limit was 1 cm)
+- [x] Prediction corrections < 1% at 120 ms: 0.03% with 11 bots (`bad` preset 0.94%)
+- [~] Owner sign-off on movement feel: signed off in offline practice ("movement feels good"); owner asked to continue to an end-to-end game, online re-check still open
+
+What we learned:
+
+- Rounding the simulation to the 1/64 m wire grid would have broken speeds and diagonals; float32 state + exact own-state snapshots gives exact prediction (ADR 0003).
+- Rapier's character controller stalls if gravity pushes the capsule into its skin while grounded; don't push down when grounded, rely on snap-to-ground. Keep velocity and clip it against wall normals instead of deriving it from the moved distance (stairs braked every step otherwise).
+- The replay test was worth it: it found three join-time bugs no unit test did.
+- One server step per tick is the anti-speedhack rule, but guessed ticks must be "paid back" when late inputs arrive, or hitches double-move the player and leave seconds of queue lag.
+- Headless Chromium renders in software here (~4 fps): use bots for netcode measurements, Playwright for functional checks.
+
+Open issues carried forward:
+
+- Owner online movement-feel check (two tabs, `pnpm dev:lag --preset normal`).
+- `weaponSlot` must be range-checked once weapons exist (review L8).
+- Cross-browser determinism (Firefox/WebKit state hash vs Node) not yet tested (ADR 0003).
+- WebGPU path still not seen running.
+
+## Phase 2 — Gunplay
+
+Status: in progress. The owner asked for a complete end-to-end game and delegated decisions
+(2026-09-25), so Phases 2–3 continue without per-task approval stops; decisions go in ADRs.
+
+Tasks done:
+
+- (none yet)
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
