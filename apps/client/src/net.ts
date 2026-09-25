@@ -47,10 +47,14 @@ export class Connection {
   private room: Room | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
 
-  async connect(handlers: NetHandlers, name: string): Promise<void> {
+  async connect(handlers: NetHandlers, name: string, guest: string): Promise<void> {
     const client = new Client(serverUrl());
     try {
-      const room = await client.joinOrCreate('match', { protocolVersion: PROTOCOL_VERSION, name });
+      const room = await client.joinOrCreate('match', {
+        protocolVersion: PROTOCOL_VERSION,
+        name,
+        guest,
+      });
       this.room = room;
 
       room.onMessage(MessageType.Hello, (payload: Uint8Array) => {

@@ -1,5 +1,6 @@
 import { h, render } from 'preact';
 import { startGame, type Game } from './game/game.ts';
+import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { setStatus } from './store.ts';
 import { App } from './ui/App.tsx';
@@ -16,6 +17,7 @@ const rerender = () =>
         settings = next;
         saveSettings(next);
         rerender();
+        void refreshProfile();
       },
       onPlay: () => void game?.requestPlay(),
     }),

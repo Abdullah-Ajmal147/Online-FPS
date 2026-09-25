@@ -30,6 +30,14 @@ test('full match with bots: join, play a 20 s match, see results, next match sta
   const ended = await match();
   expect(ended!.players.reduce((n, p) => n + p.kills, 0)).toBeGreaterThan(0);
 
+  // The server reported the match to the API; our guest profile now has XP (≥ participation).
+  const profile = () =>
+    page.evaluate(async () => (await import('/src/store.ts')).getStatus().profile);
+  await expect
+    .poll(async () => (await profile())?.xp ?? 0, { timeout: 10_000 })
+    .toBeGreaterThanOrEqual(150);
+  expect((await profile())!.matches).toBe(1);
+
   // After the results, a new match starts.
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).not.toBe('ended');
 });

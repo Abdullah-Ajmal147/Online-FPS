@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { useStatus } from './Hud.tsx';
 import {
   ACTIONS,
   ACTION_LABELS,
@@ -42,6 +43,7 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
       <div class="menu-card">
         <h1>Sentinel Strike</h1>
         <p class="menu-sub">Team Deathmatch · 6v6 · Relay Yard</p>
+        <ProfileCard />
         <button class="play" data-testid="play" onClick={onPlay}>
           Click to play
         </button>
@@ -124,6 +126,27 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
             Reset to defaults
           </button>
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** Level, XP bar and totals for this guest (hidden if the API is unreachable). */
+function ProfileCard() {
+  const p = useStatus().profile;
+  if (!p) return null;
+  const pct = p.xpForNext ? Math.round((100 * p.xpIntoLevel) / p.xpForNext) : 100;
+  return (
+    <div class="profile-card" data-testid="profile">
+      <div class="profile-level">
+        Level <b>{p.level}</b>
+        <span>{p.xp.toLocaleString()} XP</span>
+      </div>
+      <div class="xp-bar">
+        <div class="xp-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <div class="profile-stats">
+        {p.matches} matches · {p.wins} wins · {p.kills} kills
       </div>
     </div>
   );

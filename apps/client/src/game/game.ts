@@ -41,6 +41,7 @@ import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
 import type { Settings } from '../settings.ts';
+import { guestId, refreshProfile } from '../profile.ts';
 import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
 import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
@@ -164,6 +165,7 @@ export async function startGame(
     id === myId ? 'You' : (names.get(id) ?? `${TEAM_NAMES[teamOf.get(id) ?? 0]} ${id}`);
   /** Countdown and results: the server freezes everyone, so we send no movement or fire. */
   let frozen = false;
+  let lastPhase: number = MatchPhase.Warmup;
 
   const PHASES = ['warmup', 'countdown', 'live', 'ended'] as const;
   const onMatchInfo = (info: MatchInfo) => {
@@ -171,7 +173,13 @@ export async function startGame(
       names.set(p.id, p.name);
       teamOf.set(p.id, p.team);
     }
+    const wasEnded = frozen && lastPhase === MatchPhase.Ended;
     frozen = info.phase === MatchPhase.Countdown || info.phase === MatchPhase.Ended;
+    // Match just ended: the server reports it to the API; show the new XP shortly after.
+    if (info.phase === MatchPhase.Ended && lastPhase !== MatchPhase.Ended && !wasEnded) {
+      setTimeout(() => void refreshProfile(), 2000);
+    }
+    lastPhase = info.phase;
     const mine = myTeam();
     const mvp = info.players.find((p) => p.id === info.mvp);
     setStatus({
@@ -353,6 +361,7 @@ export async function startGame(
       onDisconnect,
     },
     settings().name,
+    guestId(),
   );
 
   // --- Shots ---

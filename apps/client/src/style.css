@@ -554,3 +554,38 @@ body {
   margin-top: 14px;
   color: #8b949e;
 }
+
+.profile-card {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #161b22;
+}
+
+.profile-level {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+}
+
+.profile-level span {
+  color: #8b949e;
+}
+
+.xp-bar {
+  height: 6px;
+  margin: 6px 0;
+  border-radius: 3px;
+  background: #30363d;
+  overflow: hidden;
+}
+
+.xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2f81f7, #56d364);
+}
+
+.profile-stats {
+  font-size: 12px;
+  color: #8b949e;
+}

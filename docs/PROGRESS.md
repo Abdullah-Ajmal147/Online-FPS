@@ -139,5 +139,6 @@ Tasks done:
 - 7. First real map **Relay Yard** (original, 44×68 m, three lanes, central platform with ramps, balcony with stairs/ramp, spawn barriers). Default map.
 - 9. Match summary JSON logged at match end (`[match-summary] {...}`).
 - Tests: full bots-only match on Relay Yard in-process (fights, winner, MVP, < 4 ms/tick); e2e full match flow against a bot-filled server with 20 s matches.
+- Phase 4 (lite, pulled forward for the end-to-end game): API with SQLite (`node:sqlite`) — `POST /matches` accepts only HMAC-signed results from the game server, each match id once; XP (150 + 100/kill + 250 win / 100 draw) and levels (500, 750, 1000… XP) computed by the API; `GET /profiles/:guestId`. Browser keeps a random guest id (not a secure identity; Supabase replaces it in Phase 4); menu shows level/XP, refreshed after each match. E2E checks XP after a full bot match.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

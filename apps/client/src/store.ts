@@ -1,4 +1,5 @@
 /** Tiny observable store shared by the game code and the Preact HUD. */
+import type { Profile } from './profile.ts';
 export interface PlayerDebug {
   position: readonly [number, number, number];
   speed: number;
@@ -79,6 +80,8 @@ export interface ClientStatus {
   fps: number;
   combat: CombatHud | null;
   match: MatchHud | null;
+  /** Guest level/XP from the API, null until loaded (or if the API is down). */
+  profile: Profile | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -92,6 +95,7 @@ let status: ClientStatus = {
   fps: 0,
   combat: null,
   match: null,
+  profile: null,
 };
 const listeners = new Set<Listener>();
 

@@ -4,6 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Two game servers:
  *   :2567 — no bots, open arena, long warm-up: functional tests (movement, two players, combat)
  *   :2568 — bots fill to 12, Relay Yard, 20 s matches: the full match-flow test (?server=…)
+ *   :8787 — progression API (in-memory DB); the :2568 server reports finished matches to it
  * Game servers are never reused (they need these exact settings), so stop `pnpm dev` first.
  */
 export default defineConfig({
@@ -34,6 +35,15 @@ export default defineConfig({
         SENTINEL_MATCH_SECONDS: '20',
         SENTINEL_RESULTS_SECONDS: '6',
       },
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
+      reuseExistingServer: false,
+    },
+    {
+      // Progression API with a throwaway in-memory database.
+      command: 'node_modules/.bin/tsx src/index.ts',
+      cwd: 'apps/api',
+      url: 'http://localhost:8787/healthz',
+      env: { SENTINEL_DB: ':memory:' },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
       reuseExistingServer: false,
     },

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MatchPhase, NO_WINNER, type MatchInfo, type MatchPhaseId } from '@sentinel/protocol';
 import { TICK_RATE } from '@sentinel/shared';
 import type { GameMode } from './mode.ts';
@@ -13,6 +14,8 @@ export interface MatchTimings {
 
 /** One match's summary (logged as JSON at the end, sent to the API in Phase 4). */
 export interface MatchSummary {
+  /** Unique per match: the API counts each id once. */
+  matchId: string;
   mode: string;
   map: string;
   winner: number;
@@ -21,6 +24,8 @@ export interface MatchSummary {
   mvp: number;
   players: {
     id: number;
+    /** Guest profile id (humans only; bots and unknown guests get null). */
+    guestId: string | null;
     name: string;
     team: number;
     bot: boolean;
@@ -167,6 +172,7 @@ export class Match {
 
   private summary(): MatchSummary {
     return {
+      matchId: randomUUID(),
       mode: this.mode.def.id,
       map: this.mapId,
       winner: this.winner,
@@ -175,6 +181,7 @@ export class Match {
       mvp: this.mvp,
       players: [...this.sim.players.values()].map((p) => ({
         id: p.id,
+        guestId: p.bot ? null : p.guestId,
         name: p.name,
         team: p.team,
         bot: p.bot,

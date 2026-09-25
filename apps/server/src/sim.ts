@@ -53,6 +53,8 @@ export interface SimPlayer {
   id: number;
   team: number;
   name: string;
+  /** Guest profile id for progression (humans; validated by the room). */
+  guestId: string | null;
   /** Server bot: its input comes from `botInput` (set by the bot controller each tick). */
   bot: boolean;
   botInput: TickInput | null;
@@ -126,7 +128,9 @@ export class MatchSim {
     return counts;
   }
 
-  addPlayer(opts: { name?: string; bot?: boolean; team?: number } = {}): SimPlayer {
+  addPlayer(
+    opts: { name?: string; bot?: boolean; team?: number; guestId?: string | null } = {},
+  ): SimPlayer {
     if (this.isFull) throw new Error('match is full');
     let id = 1;
     while (this.players.has(id)) id++;
@@ -136,6 +140,7 @@ export class MatchSim {
       id,
       team,
       name: opts.name ?? `Player ${id}`,
+      guestId: opts.guestId ?? null,
       bot: opts.bot ?? false,
       botInput: null,
       protectedUntil: this.tick + SPAWN_PROTECTION_TICKS,

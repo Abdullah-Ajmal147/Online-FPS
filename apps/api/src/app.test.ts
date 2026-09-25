@@ -1,10 +1,115 @@
 import { describe, expect, it } from 'vitest';
-import { app } from './app.ts';
+import { createApp, sign } from './app.ts';
+import { Store } from './db.ts';
+import { levelFor, xpForMatch, xpToNext } from './xp.ts';
+
+const SECRET = 'test-secret';
+const GUEST = '0f8c2a6e-1b2c-4d3e-8f90-123456789abc';
+const OTHER = '9e8d7c6b-5a49-4838-a271-605f4e3d2c1b';
+
+function app() {
+  return createApp(new Store(':memory:'), SECRET);
+}
+
+function result(matchId: string, winner = 0) {
+  return {
+    matchId,
+    mode: 'team-deathmatch',
+    map: 'relay-yard',
+    winner,
+    durationSeconds: 600,
+    players: [
+      { guestId: GUEST, name: 'Ayesha', team: 0, bot: false, kills: 7, deaths: 3 },
+      { guestId: null, name: 'Bot Heron', team: 1, bot: true, kills: 5, deaths: 7 },
+      { guestId: OTHER, name: 'Omar', team: 1, bot: false, kills: 2, deaths: 4 },
+    ],
+  };
+}
+
+async function post(a: ReturnType<typeof app>, body: unknown, secret = SECRET) {
+  const text = JSON.stringify(body);
+  return a.request('/matches', {
+    method: 'POST',
+    body: text,
+    headers: { 'content-type': 'application/json', 'x-sentinel-signature': sign(text, secret) },
+  });
+}
+
+describe('xp rules', () => {
+  it('levels need 500, 750, 1000… XP', () => {
+    expect(xpToNext(1)).toBe(500);
+    expect(levelFor(0)).toEqual({ level: 1, xpIntoLevel: 0, xpForNext: 500 });
+    expect(levelFor(1250)).toEqual({ level: 3, xpIntoLevel: 0, xpForNext: 1000 });
+  });
+
+  it('awards participation + kills + result', () => {
+    expect(xpForMatch({ kills: 7, team: 0 }, 0)).toBe(150 + 700 + 250);
+    expect(xpForMatch({ kills: 2, team: 1 }, 0)).toBe(150 + 200);
+    expect(xpForMatch({ kills: 0, team: 1 }, 2)).toBe(150 + 100);
+  });
+});
 
 describe('api', () => {
-  it('GET /healthz returns ok', async () => {
-    const res = await app.request('/healthz');
-    expect(res.status).toBe(200);
+  it('GET /healthz', async () => {
+    const res = await app().request('/healthz');
     expect(await res.json()).toEqual({ ok: true, service: 'api' });
+  });
+
+  it('a signed match result awards XP to humans only, and profiles show it', async () => {
+    const a = app();
+    const res = await post(a, result('11111111-1111-4111-8111-111111111111'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { awarded: { guestId: string; xp: number }[] };
+    expect(body.awarded).toEqual([
+      { guestId: GUEST, xp: 1100 },
+      { guestId: OTHER, xp: 350 },
+    ]);
+    const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(profile).toMatchObject({
+      name: 'Ayesha',
+      xp: 1100,
+      level: 2,
+      matches: 1,
+      wins: 1,
+      kills: 7,
+      deaths: 3,
+    });
+  });
+
+  it('rejects a forged result (wrong or missing signature) — Phase 4 exit test', async () => {
+    const a = app();
+    expect(
+      (await post(a, result('22222222-2222-4222-8222-222222222222'), 'guessed-secret')).status,
+    ).toBe(401);
+    const res = await a.request('/matches', {
+      method: 'POST',
+      body: JSON.stringify(result('33333333-3333-4333-8333-333333333333')),
+    });
+    expect(res.status).toBe(401);
+    const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as { xp: number };
+    expect(profile.xp).toBe(0);
+  });
+
+  it('counts each match once (replayed result rejected)', async () => {
+    const a = app();
+    const r = result('44444444-4444-4444-8444-444444444444');
+    expect((await post(a, r)).status).toBe(200);
+    expect((await post(a, r)).status).toBe(409);
+    const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as { matches: number };
+    expect(profile.matches).toBe(1);
+  });
+
+  it('validates input', async () => {
+    const a = app();
+    expect((await post(a, { nope: true })).status).toBe(400);
+    expect((await a.request('/profiles/not-a-uuid')).status).toBe(400);
+    const fresh = (await (await a.request(`/profiles/${OTHER}`)).json()) as {
+      level: number;
+      xp: number;
+    };
+    expect(fresh).toMatchObject({ level: 1, xp: 0 });
   });
 });
