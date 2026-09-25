@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs';
 import { Client, type Room } from '@colyseus/sdk';
 import { maps, movement } from '@sentinel/content';
 import {
@@ -19,6 +20,7 @@ import {
   expandMap,
   initPhysics,
   inputPacing,
+  type PlayerInput,
 } from '@sentinel/shared';
 import { parseArgs } from './args.ts';
 import { WanderBrain } from './brain.ts';
@@ -43,6 +45,7 @@ interface Bot {
   queueDepth: number;
   accumulatorMs: number;
   rttMs: number[];
+  recorded: PlayerInput[];
 }
 
 const bots: Bot[] = [];
@@ -62,6 +65,7 @@ for (let i = 0; i < args.count; i++) {
     queueDepth: TARGET_QUEUE_DEPTH,
     accumulatorMs: 0,
     rttMs: [],
+    recorded: [],
   };
   room.onMessage(MessageType.Snapshot, (bytes: Uint8Array) => {
     const snap = decodeSnapshot(bytes);
@@ -71,7 +75,7 @@ for (let i = 0; i < args.count; i++) {
     if (!snap.own) return;
     if (!bot.spawned) {
       bot.spawned = true;
-      bot.predictor.state = { ...snap.own, yaw: 0, pitch: 0 };
+      bot.predictor.reset({ ...snap.own, yaw: 0, pitch: 0 });
     } else {
       bot.predictor.onServerState(snap.own, snap.lastProcessedSeq);
     }
@@ -95,7 +99,9 @@ const loop = setInterval(() => {
     bot.accumulatorMs += elapsed * inputPacing(bot.queueDepth);
     while (bot.accumulatorMs >= TICK_DT * 1000) {
       bot.accumulatorMs -= TICK_DT * 1000;
-      bot.predictor.tick({ ...bot.brain.next(), weaponSlot: 0 });
+      const input = bot.brain.next();
+      if (args.record && bot === bots[0]) bot.recorded.push(input);
+      bot.predictor.tick({ ...input, weaponSlot: 0 });
       bot.room.sendBytes(
         MessageType.InputCmd,
         encodeInputCmd({ ackServerTick: bot.ack, inputs: bot.predictor.recentInputs() }),
@@ -126,6 +132,10 @@ if (args.duration) {
     console.log(rows.join('\n'));
     const pct = (100 * corrections) / Math.max(1, snaps);
     console.log(`[bots] SUMMARY corrections ${pct.toFixed(2)}% of ${snaps} snapshots`);
+    if (args.record) {
+      writeFileSync(args.record, JSON.stringify({ inputs: bots[0]!.recorded }) + '\n');
+      console.log(`[bots] recorded ${bots[0]!.recorded.length} inputs to ${args.record}`);
+    }
     for (const b of bots) void b.room.leave();
     setTimeout(() => process.exit(0), 500);
   }, args.duration * 1000);

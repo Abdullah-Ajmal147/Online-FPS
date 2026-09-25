@@ -64,5 +64,6 @@ Tasks done:
 - 7. Client prediction + reconciliation (exact-match fast path, blend < 5 cm over 100 ms, else snap), remote interpolation 2 snapshots behind (adaptive to 100 ms, ≤ 50 ms extrapolation), input pacing on server queue depth. Bots now wander with inputs only.
 - 8. Fake lag (`pnpm dev:lag --preset good|normal|bad`, server-side): per-direction FIFO delay with jitter, loss on fast-path messages only, seeded. Predictor moved to `packages/shared` so bots run real prediction; `pnpm bots -- --count 11 --duration 60` prints the correction rate. Measured with 11 bots: **normal 0.08%**, **bad 0.94%** corrections (target < 1%).
 - 9. F3 debug overlay: fps, ping, snapshot loss, server tick time, correction %, last error, server input-queue depth, interpolation delay, players seen.
+- 10. Replay test (`apps/server/src/replay.test.ts`): 1,000 inputs recorded from a real bot session (`pnpm bots -- --record`) through the client predictor and the server `MatchSim` at ~130 ms RTT: **exact match, zero corrections**; within 1 cm with 10% input + 10% snapshot loss. It caught three join-time bugs (fixed): idle steps during the start buffer, offline seqs rejected as garbage, practice history replayed after spawn.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

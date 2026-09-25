@@ -4,6 +4,8 @@ export interface BotArgs {
   url: string;
   /** Stop after this many seconds and print a summary (for automated netcode tests). */
   duration?: number;
+  /** Write bot 1's inputs (as sent) to this JSON file when --duration ends. */
+  record?: string;
 }
 
 /** Parses `--count 11 --room <id> --url http://localhost:2567`. */
@@ -26,6 +28,9 @@ export function parseArgs(argv: readonly string[]): BotArgs {
         break;
       case '--url':
         args.url = value;
+        break;
+      case '--record':
+        args.record = value;
         break;
       case '--duration': {
         const n = Number(value);
