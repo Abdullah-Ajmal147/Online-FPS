@@ -10,7 +10,7 @@ Tasks done:
 
 - 1. pnpm workspace: `apps/{client,server,api}`, `packages/{shared,protocol,content}`, `tools/bots`; strict shared `tsconfig.base.json`
 - 2. ESLint (flat config, typescript-eslint) + Prettier; root scripts `dev`, `dev:lag`, `test`, `test:e2e`, `typecheck`, `lint`, `bots`, `build`.
-  ESLint blocks `window`/`document`/`performance`/`process`/`Date.now`/`Math.random` in `packages/shared` (rule 2).
+     ESLint blocks `window`/`document`/`performance`/`process`/`Date.now`/`Math.random` in `packages/shared` (rule 2).
 - 3. Client: Vite + Three.js `WebGPURenderer` spinning cube; logs and shows active backend (WebGPU / WebGL 2)
 - 4. Server: Colyseus `MatchRoom` (`match`), max 12 players, rejects wrong `protocolVersion` with `RELOAD_REQUIRED`; `GET /healthz` on :2567
 - 5. API: Hono `GET /healthz` on :8787
