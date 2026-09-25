@@ -1,0 +1,47 @@
+# Progress
+
+**Current phase:** 0 — Setup
+
+## Phase 0 — Setup
+
+Status: in progress (tasks 1–8 done and verified locally; 9 written but CI not yet run; 10 waiting on owner)
+
+Tasks done:
+
+- 1. pnpm workspace: `apps/{client,server,api}`, `packages/{shared,protocol,content}`, `tools/bots`; strict shared `tsconfig.base.json`
+- 2. ESLint (flat config, typescript-eslint) + Prettier; root scripts `dev`, `dev:lag`, `test`, `test:e2e`, `typecheck`, `lint`, `bots`, `build`.
+  ESLint blocks `window`/`document`/`performance`/`process`/`Date.now`/`Math.random` in `packages/shared` (rule 2).
+- 3. Client: Vite + Three.js `WebGPURenderer` spinning cube; logs and shows active backend (WebGPU / WebGL 2)
+- 4. Server: Colyseus `MatchRoom` (`match`), max 12 players, rejects wrong `protocolVersion` with `RELOAD_REQUIRED`; `GET /healthz` on :2567
+- 5. API: Hono `GET /healthz` on :8787
+- 6. Protocol: `PROTOCOL_VERSION = 1`, DataView `BinaryWriter`/`BinaryReader`, binary `Hello` message; round-trip tests
+- 7. Client joins the room and shows "connected, protocol v1" after the server's binary `Hello` arrives
+- 8. Vitest across workspace (17 tests); Playwright test checks the "connected" text and the renderer backend
+- 9. `.github/workflows/ci.yml`: install, lint, typecheck, test, build, e2e. **Not run yet — needs a GitHub remote + push.**
+- Also: `packages/content` has a zod `ModeSchema` + Team Deathmatch data; `tools/bots` joins N idle bots.
+
+Exit tests:
+
+- [x] `pnpm dev` starts all three apps; the browser shows the cube and "connected, protocol v1" (checked in Chrome)
+- [x] `pnpm test` and `pnpm test:e2e` pass locally
+- [ ] CI is green on a push
+- [x] `docs/PROGRESS.md` updated
+
+What we learned:
+
+- Tooling versions: Node 22.23 LTS, pnpm 12.6, TypeScript 6.0 (TS 7 is not supported by typescript-eslint yet), Vite 8, Vitest 5, Colyseus 0.18 (`@colyseus/core` + `@colyseus/ws-transport`, client `@colyseus/sdk`), Three 0.186.
+- pnpm 12 uses `allowBuilds:` in `pnpm-workspace.yaml` (not `onlyBuiltDependencies`).
+- Workspace packages export TypeScript source (`.ts` import extensions); server/api bundle them with tsdown (`noExternal: /^@sentinel\//`).
+- Portable packages compile without DOM/Node libs; `packages/protocol/src/globals.d.ts` declares only TextEncoder/TextDecoder.
+- Playwright must launch servers directly (not via `pnpm --filter … dev` / `tsx watch`), or it hangs on shutdown.
+- Bug fixed: HUD stayed on "connecting…" when updates arrived before Preact's `useEffect` subscribed (always in hidden tabs). `subscribe()` now calls the listener immediately.
+- Headless Chromium and the Chrome used for testing ran the WebGL 2 fallback; WebGPU path still needs a check in a WebGPU-enabled browser.
+- `pnpm dev:lag --preset <good|normal|bad>` sets `SENTINEL_LAG`, but the fake-lag layer is Phase 1 task 8 (server only warns for now).
+
+Open issues carried forward:
+
+- Task 10: owner answers the open questions in `docs/GAME_DESIGN.md`.
+- Push to GitHub and confirm CI is green.
+- Client bundle 964 KB (271 KB gzip), mostly Three.js; fine for the 15 MB budget, split later if needed.
+
+<!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
