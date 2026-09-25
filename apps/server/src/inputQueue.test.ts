@@ -68,7 +68,7 @@ describe('InputQueue', () => {
     expect(q.depth).toBe(MAX_QUEUED_INPUTS - 1);
   });
 
-  it('keeps a whole 0.25 s catch-up burst from a slow client (15 inputs)', () => {
+  it('keeps a whole 0.25 s catch-up burst (15 inputs) on top of the normal queue', () => {
     const q = started();
     for (let s = 3; s < 3 + 15; s++) q.push(input(s));
     expect(q.depth).toBe(START_BUFFER + 15);

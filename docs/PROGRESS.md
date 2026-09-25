@@ -39,7 +39,7 @@ What we learned:
 - Run `pnpm lint` after editing docs too: Prettier checks Markdown, and CI caught an unformatted PROGRESS.md.
 - Headless Chromium and the Chrome used for testing ran the WebGL 2 fallback; WebGPU path still needs a check in a WebGPU-enabled browser.
 - Chrome automation tabs report `visibilityState: hidden`: no animation frames and no pointer lock, so the game can't be play-tested there; use Playwright (headless is visible to itself) for scripted play sessions.
-- Headless Chromium renders in software here (~4 fps with two pages): client catch-up bursts overflowed the old input-queue cap of 8 and caused corrections; cap raised to 16.
+- Headless Chromium renders in software here (~4 fps with two pages): client catch-up bursts overflowed the old input-queue cap of 8 and caused corrections; cap raised to 20 (15-tick burst + 2 queued).
 - `pnpm dev:lag --preset <good|normal|bad>` sets `SENTINEL_LAG`, but the fake-lag layer is Phase 1 task 8 (server only warns for now).
 
 Open issues carried forward:
@@ -60,7 +60,7 @@ Tasks done:
 - 3. Input: pointer lock (raw `unadjustedMovement` where supported), rebindable keys (crouch on C, not Ctrl: Ctrl+W closes the tab), sensitivity in °/count, hold or toggle sprint; settings saved per browser.
 - 4. First-person camera: horizontal FOV setting (default 90°), head bob off by default, crouch eye height eased. Local practice mode runs the shared `step()` at a fixed 60 Hz with render interpolation (becomes client prediction in task 7).
 - 5. Protocol v2: `InputCmd` (last 3 inputs + ack, 30 bytes), `Snapshot` (own state exact float32 per ADR 0003, others at 1/64 m; 12 players ≈ 7.6 KB/s, no delta compression needed), `SnapshotAck`, `Ping`/`Pong`. Decoder rejects malformed client bytes.
-- 6. Server: 60 Hz accumulator loop, 30 Hz snapshots, per-player `InputQueue` (seq order, duplicates dropped, start buffer 2, cap 16, exactly one step per tick so flooding gains nothing). 12-player tick ≈ 0.5 ms.
+- 6. Server: 60 Hz accumulator loop, 30 Hz snapshots, per-player `InputQueue` (seq order, duplicates dropped, start buffer 2, cap 20, exactly one step per tick so flooding gains nothing). 12-player tick ≈ 0.5 ms.
 - 7. Client prediction + reconciliation (exact-match fast path, blend < 5 cm over 100 ms, else snap), remote interpolation 2 snapshots behind (adaptive to 100 ms, ≤ 50 ms extrapolation), input pacing on server queue depth. Bots now wander with inputs only.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

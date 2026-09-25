@@ -2,11 +2,12 @@ import type { PlayerInput } from '@sentinel/shared';
 import type { SequencedInput } from '@sentinel/protocol';
 
 /**
- * Most inputs we hold per player (≈266 ms). A client catching up after a frame hitch may send
- * up to 15 ticks at once (its loop caps catch-up at 0.25 s), so the cap must be above that;
- * dropping them would force corrections. Flooding still gains nothing: one step per tick.
+ * Most inputs we hold per player (≈333 ms). A client catching up after a frame hitch may send
+ * up to 15 ticks at once (its loop caps catch-up at 0.25 s) on top of the ~2 normally queued,
+ * so the cap must be above 17; dropping them would force corrections.
+ * Flooding still gains nothing: the server takes one input per tick.
  */
-export const MAX_QUEUED_INPUTS = 16;
+export const MAX_QUEUED_INPUTS = 20;
 /** Inputs to collect before a new player starts consuming them: absorbs network jitter. */
 export const START_BUFFER = 2;
 /** A seq this far beyond the last processed one is garbage, not a real input. */
