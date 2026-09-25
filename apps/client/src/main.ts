@@ -1,6 +1,5 @@
 import { h, render } from 'preact';
 import { startGame, type Game } from './game/game.ts';
-import { connect } from './net.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { setStatus } from './store.ts';
 import { App } from './ui/App.tsx';
@@ -33,5 +32,3 @@ startGame(canvas, () => settings)
     setStatus({ backend: g.backend });
   })
   .catch((err: unknown) => console.error('[game] failed to start:', err));
-
-void connect();

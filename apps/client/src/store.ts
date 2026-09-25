@@ -7,6 +7,18 @@ export interface PlayerDebug {
   sliding: boolean;
 }
 
+export interface NetStats {
+  rttMs: number | null;
+  /** Percentage of own-state snapshots that caused a prediction correction. */
+  correctionPct: number;
+  lastErrorCm: number;
+  snapshotLossPct: number;
+  serverTickMs: number;
+  inputQueueDepth: number;
+  interpDelayMs: number;
+  remotePlayers: number;
+}
+
 export interface ClientStatus {
   backend: 'WebGPU' | 'WebGL 2' | 'starting';
   net: { state: 'connecting' | 'connected' | 'error'; text: string };
@@ -14,6 +26,9 @@ export interface ClientStatus {
   playing: boolean;
   /** Null until the local simulation has started. */
   player: PlayerDebug | null;
+  /** Null in offline practice mode. */
+  netStats: NetStats | null;
+  fps: number;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -23,6 +38,8 @@ let status: ClientStatus = {
   net: { state: 'connecting', text: 'connecting…' },
   playing: false,
   player: null,
+  netStats: null,
+  fps: 0,
 };
 const listeners = new Set<Listener>();
 

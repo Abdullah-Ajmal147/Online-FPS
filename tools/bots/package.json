@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@colyseus/sdk": "^0.18.4",
-    "@sentinel/protocol": "workspace:*"
+    "@sentinel/protocol": "workspace:*",
+    "@sentinel/shared": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.15"
