@@ -1,0 +1,8 @@
+{
+  "id": "team-deathmatch",
+  "name": "Team Deathmatch",
+  "teams": 2,
+  "playersPerTeam": 6,
+  "timeLimitSeconds": 600,
+  "scoreLimit": 75
+}
