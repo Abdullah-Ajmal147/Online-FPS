@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { MatchPhase, NO_WINNER, type MatchInfo, type MatchPhaseId } from '@sentinel/protocol';
 import { TICK_RATE } from '@sentinel/shared';
 import type { GameMode } from './mode.ts';
-import type { MatchSim } from './sim.ts';
+import type { MatchSim, SimPlayer } from './sim.ts';
 
 export interface MatchTimings {
   warmupSeconds: number;
@@ -31,6 +31,8 @@ export interface MatchSummary {
     bot: boolean;
     kills: number;
     deaths: number;
+    /** Time actually spent in the live match (the API requires a minimum for XP). */
+    secondsPlayed: number;
   }[];
 }
 
@@ -131,6 +133,7 @@ export class Match {
       case MatchPhase.Countdown:
         this.mode.reset();
         this.sim.resetStats();
+        this.departed = [];
         this.sim.respawnAll();
         this.sim.frozen = true;
         this.phaseEndsAt = this.sim.tick + this.ticks(this.timings.countdownSeconds);
@@ -170,6 +173,30 @@ export class Match {
     return best;
   }
 
+  /** Humans who left during the live match keep their row (stats and time played). */
+  private departed: MatchSummary['players'] = [];
+
+  /** Call before removing a player from the sim. */
+  playerLeaving(id: number): void {
+    const p = this.sim.players.get(id);
+    if (!p || p.bot || this.phase !== MatchPhase.Live) return;
+    this.departed.push(this.row(p));
+  }
+
+  private row(p: SimPlayer): MatchSummary['players'][number] {
+    const from = Math.max(p.joinedAtTick, this.liveStartedAt);
+    return {
+      id: p.id,
+      guestId: p.bot ? null : p.guestId,
+      name: p.name,
+      team: p.team,
+      bot: p.bot,
+      kills: p.kills,
+      deaths: p.deaths,
+      secondsPlayed: Math.max(0, Math.round((this.sim.tick - from) / TICK_RATE)),
+    };
+  }
+
   private summary(): MatchSummary {
     return {
       matchId: randomUUID(),
@@ -179,15 +206,7 @@ export class Match {
       teamScores: this.mode.teamScores(),
       durationSeconds: Math.round((this.sim.tick - this.liveStartedAt) / TICK_RATE),
       mvp: this.mvp,
-      players: [...this.sim.players.values()].map((p) => ({
-        id: p.id,
-        guestId: p.bot ? null : p.guestId,
-        name: p.name,
-        team: p.team,
-        bot: p.bot,
-        kills: p.kills,
-        deaths: p.deaths,
-      })),
+      players: [...[...this.sim.players.values()].map((p) => this.row(p)), ...this.departed],
     };
   }
 

@@ -128,12 +128,20 @@ export class NavGrid {
   }
 
   /** All walkable cells (for picking roam goals). */
-  walkableCells(): [number, number][] {
-    const out: [number, number][] = [];
-    for (let j = 0; j < this.h; j++)
-      for (let i = 0; i < this.w; i++) if (this.walkable(i, j)) out.push([i, j]);
-    return out;
+  /** All walkable cells (for picking roam goals). Computed once; the grid never changes. */
+  walkableCells(): readonly [number, number][] {
+    if (!this.cellsCache) {
+      const out: [number, number][] = [];
+      for (let j = 0; j < this.h; j++)
+        for (let i = 0; i < this.w; i++) if (this.walkable(i, j)) out.push([i, j]);
+      this.cellsCache = out;
+    }
+    return this.cellsCache;
   }
+
+  private cellsCache: [number, number][] | null = null;
+  /** A* scratch buffers, reused across searches (no per-path allocation). */
+  private scratch: { g: Float32Array; came: Int32Array; closed: Uint8Array } | null = null;
 
   /**
    * A* over the grid (octile distance). Returns world-space waypoints (cell centres at ground
@@ -146,9 +154,15 @@ export class NavGrid {
     const idx = (i: number, j: number) => j * this.w + i;
     const startI = idx(...start);
     const goalI = idx(...goal);
-    const g = new Float32Array(this.w * this.h).fill(Infinity);
-    const came = new Int32Array(this.w * this.h).fill(-1);
-    const closed = new Uint8Array(this.w * this.h);
+    this.scratch ??= {
+      g: new Float32Array(this.w * this.h),
+      came: new Int32Array(this.w * this.h),
+      closed: new Uint8Array(this.w * this.h),
+    };
+    const { g, came, closed } = this.scratch;
+    g.fill(Infinity);
+    came.fill(-1);
+    closed.fill(0);
     const open = new MinHeap();
     const hCost = (i: number) => {
       const dx = Math.abs((i % this.w) - goal[0]);

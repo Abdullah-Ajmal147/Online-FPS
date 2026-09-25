@@ -17,14 +17,15 @@ import {
   type Snapshot,
 } from '@sentinel/protocol';
 import { setStatus } from './store.ts';
+import { urlFromQuery } from './urls.ts';
 
 /**
  * Game server to join: `?server=` in the page URL (tests, and later region picking), then the
  * build-time VITE_SERVER_URL, then the same host on port 2567.
  */
 function serverUrl(): string {
-  const fromQuery = new URLSearchParams(location.search).get('server');
-  if (fromQuery && /^https?:\/\//.test(fromQuery)) return fromQuery;
+  const fromQuery = urlFromQuery('server');
+  if (fromQuery) return fromQuery;
   const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
   if (fromEnv) return fromEnv;
   const protocol = location.protocol === 'https:' ? 'https' : 'http';

@@ -14,6 +14,12 @@ describe('sanitizeName', () => {
     expect(sanitizeName('  lots   of   space  ')).toBe('lots of space');
   });
 
+  it('reserves the "Bot " prefix for real bots', () => {
+    expect(sanitizeName('Bot Heron')).toBe('Heron');
+    expect(sanitizeName('bot   x')).toBe('x');
+    expect(sanitizeName('Botany')).toBe('Botany');
+  });
+
   it('limits length and falls back to Player', () => {
     expect(sanitizeName('x'.repeat(50))).toHaveLength(MAX_NAME_LENGTH);
     expect(sanitizeName('')).toBe('Player');

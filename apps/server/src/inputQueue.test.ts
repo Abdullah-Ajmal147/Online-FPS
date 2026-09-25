@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Button } from '@sentinel/shared';
-import { InputQueue, MAX_QUEUED_INPUTS, MAX_REPEAT_TICKS, START_BUFFER } from './inputQueue.ts';
+import {
+  GUESS_FIRE_TICKS,
+  InputQueue,
+  MAX_QUEUED_INPUTS,
+  MAX_REPEAT_TICKS,
+  START_BUFFER,
+} from './inputQueue.ts';
 
 const input = (seq: number, buttons = seq) => ({
   seq,
@@ -149,5 +155,32 @@ describe('InputQueue', () => {
     q.push(input(1_000_000));
     q.push({ ...input(5), seq: 5.5 });
     expect(q.depth).toBe(START_BUFFER - 1);
+  });
+});
+
+describe('InputQueue: guessed ticks', () => {
+  it('repeats movement, keeps a held trigger only briefly, never reloads, when inputs are missing', () => {
+    const q = new InputQueue();
+    q.push(input(1, Button.Forward | Button.Fire | Button.Reload));
+    q.push(input(2, Button.Forward | Button.Fire | Button.Reload));
+    q.next();
+    q.next();
+    for (let t = 1; t <= GUESS_FIRE_TICKS; t++) {
+      const guessed = q.next()!;
+      expect(guessed.buttons & Button.Fire).toBeTruthy(); // short jitter gap: keep firing
+      expect(guessed.buttons & Button.Reload).toBe(0);
+    }
+    const later = q.next()!;
+    expect(later.buttons & Button.Forward).toBeTruthy();
+    expect(later.buttons & Button.Fire).toBe(0); // longer gap: stop firing on a guess
+  });
+});
+
+describe('InputQueue: hostile seqs', () => {
+  it('ignores seqs beyond u32, even as the first (baseline) input', () => {
+    const q = new InputQueue();
+    q.push({ seq: 2 ** 32, buttons: 1, yaw: 0, pitch: 0, weaponSlot: 0, viewTick: 0 });
+    q.push({ seq: 2 ** 32 + 1, buttons: 1, yaw: 0, pitch: 0, weaponSlot: 0, viewTick: 0 });
+    expect(q.depth).toBe(0);
   });
 });

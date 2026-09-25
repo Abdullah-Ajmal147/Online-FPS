@@ -14,6 +14,7 @@ import {
   MatchSim,
   REGEN_DELAY_TICKS,
   RESPAWN_TICKS,
+  governViewTick,
   type SimPlayer,
 } from './sim.ts';
 
@@ -239,7 +240,7 @@ describe('MatchSim: shooting', () => {
     expect(mate.health).toBe(MAX_HEALTH);
   });
 
-  it('lag compensation: hits where the target WAS at the shooter view tick (within 200 ms)', () => {
+  it('lag compensation: hits where the target WAS at the shooter view tick (within the 300 ms cap)', () => {
     const { sim, shooter, target } = duel();
     // Record target standing at x=0 for a while, then teleport it 2 m to the side.
     aimIn(sim, shooter, aimPitch(1.67, 1.1, 10));
@@ -260,7 +261,7 @@ describe('MatchSim: shooting', () => {
     expect(sim.lastShots[0]?.hit?.victim).toBe(target.id);
   });
 
-  it('never rewinds more than 200 ms, whatever the client claims', () => {
+  it('never rewinds more than 300 ms, whatever the client claims', () => {
     const { sim, shooter, target } = duel();
     aimIn(sim, shooter, aimPitch(1.67, 1.1, 10));
     place(target, [2, 0, 0]);
@@ -345,5 +346,90 @@ describe('MatchSim: performance', () => {
       if (t > 60) total += sim.lastTickMicros;
     }
     expect(total / 539 / 1000).toBeLessThan(4);
+  });
+});
+
+describe('MatchSim: review fixes', () => {
+  it('governViewTick: steady clients pass, per-shot jumps are refused, slow drift is followed', () => {
+    const g = { avgOffset: null as number | null };
+    expect(governViewTick(g, 96, 100)).toBe(96); // first input sets the baseline (offset 4)
+    expect(governViewTick(g, 97, 101)).toBe(97);
+    expect(governViewTick(g, 85, 102)).toBeCloseTo(96, 0); // "backtrack" 17 ticks → ±2 of offset 4
+    // An honest client whose interpolation delay grows from 4 to 6 ticks is followed.
+    let t = 103;
+    for (let i = 0; i < 300; i++, t++) governViewTick(g, t - 6, t);
+    expect(governViewTick(g, t - 6, t)).toBeCloseTo(t - 6, 1);
+  });
+
+  it('a client steadily ~2 ticks behind cannot suddenly rewind 17 ticks for one shot', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer();
+    const target = sim.addPlayer();
+    place(shooter, [0, 0, 10]);
+    place(target, [0, 0, 0]);
+    const pitch = aimPitch(1.67, 1.1, 10);
+    aimIn(sim, shooter, pitch); // viewTick = sim.tick each input: ~steady
+    place(target, [3, 0, 0]); // target moved away (it was on the line 17 ticks ago)
+    for (let i = 0; i < 20; i++) feed(sim, shooter, 1, Button.Aim, { pitch });
+    const seq = shooter.queue.lastProcessedSeq + shooter.queue.depth + 1;
+    shooter.queue.push({
+      seq,
+      buttons: AIM_FIRE,
+      yaw: 0,
+      pitch,
+      weaponSlot: 0,
+      viewTick: sim.tick - 17,
+    });
+    sim.step();
+    sim.step();
+    expect(sim.lastShots.concat().every((s) => s.hit === null)).toBe(true);
+    expect(target.health).toBe(MAX_HEALTH);
+  });
+
+  it('same-tick trade: both lethal shots count, whoever joined first', () => {
+    const sim = newSim(arena);
+    const a = sim.addPlayer(); // id 1, team 0
+    const b = sim.addPlayer(); // id 2, team 1
+    place(a, [0, 0, 10]);
+    place(b, [0, 0, 0]);
+    b.sim = { ...b.sim, move: { ...b.sim.move, yaw: 32768 } }; // b faces +Z towards a
+    const pa = aimPitch(1.67, 1.1, 10);
+    // Both aim in, then fire on the same tick.
+    for (let i = 0; i < 22; i++) {
+      for (const [p, yaw, fire] of [
+        [a, 0, i >= 20],
+        [b, 32768, i >= 20],
+      ] as const) {
+        const seq = p.queue.lastProcessedSeq + p.queue.depth + 1;
+        p.queue.push({
+          seq,
+          buttons: Button.Aim | (fire ? Button.Fire : 0),
+          yaw,
+          pitch: pa,
+          weaponSlot: 0,
+          viewTick: sim.tick,
+        });
+        if (i === 0)
+          p.queue.push({
+            seq: seq + 1,
+            buttons: Button.Aim,
+            yaw,
+            pitch: pa,
+            weaponSlot: 0,
+            viewTick: sim.tick,
+          });
+      }
+      if (i === 19) {
+        // One shot from lethal, and no regeneration before the trade.
+        for (const p of [a, b]) {
+          p.health = 10;
+          p.lastDamageTick = sim.tick;
+        }
+      }
+      sim.step();
+      if (!a.alive || !b.alive) break;
+    }
+    expect(a.alive).toBe(false);
+    expect(b.alive).toBe(false);
   });
 });

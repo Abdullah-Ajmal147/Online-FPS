@@ -38,3 +38,19 @@ describe('RateLimiter', () => {
     expect(rl.take('a')).toBe(false);
   });
 });
+
+describe('resolveApiSecret', () => {
+  it('uses the dev secret only outside production', async () => {
+    const { DEV_SECRET, resolveApiSecret } = await import('./secret.ts');
+    expect(resolveApiSecret({})).toBe(DEV_SECRET);
+    expect(() => resolveApiSecret({ NODE_ENV: 'production' })).toThrow();
+    expect(() =>
+      resolveApiSecret({ NODE_ENV: 'production', SENTINEL_API_SECRET: DEV_SECRET }),
+    ).toThrow();
+    expect(() =>
+      resolveApiSecret({ NODE_ENV: 'production', SENTINEL_API_SECRET: 'short' }),
+    ).toThrow();
+    const good = 'x'.repeat(40);
+    expect(resolveApiSecret({ NODE_ENV: 'production', SENTINEL_API_SECRET: good })).toBe(good);
+  });
+});

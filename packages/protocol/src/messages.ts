@@ -111,6 +111,8 @@ export function decodeInputCmd(bytes: Uint8Array): InputCmd {
   const count = r.u8();
   if (count < 1 || count > INPUT_REDUNDANCY) throw new RangeError(`bad InputCmd count ${count}`);
   const firstSeq = r.u32();
+  // Seqs must stay u32 end to end (they come back in snapshots as lastProcessedSeq).
+  if (firstSeq + count - 1 > 0xffffffff) throw new RangeError('InputCmd seq overflow');
   const inputs: SequencedInput[] = [];
   for (let i = 0; i < count; i++) {
     const buttons = r.u16();

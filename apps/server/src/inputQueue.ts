@@ -26,6 +26,14 @@ export const MAX_REPEAT_TICKS = 15; // 250 ms: rides out jitter, stops a tabbed-
  */
 const PRESS_BUTTONS = Button.Jump | Button.Crouch | Button.Fire | Button.Reload;
 
+/**
+ * Guessed (starved) ticks: a held trigger is kept for at most this many ticks (50 ms), which
+ * covers ordinary jitter gaps so honest automatic fire isn't lost, while limiting a trigger
+ * released right at a gap to at most one extra round (600 rpm = one shot per 6 ticks).
+ * Reload is never guessed.
+ */
+export const GUESS_FIRE_TICKS = 3;
+
 const IDLE: TickInput = { buttons: 0, yaw: 0, pitch: 0, viewTick: 0 };
 
 /**
@@ -57,7 +65,7 @@ export class InputQueue {
 
   push(input: SequencedInput): void {
     const { seq } = input;
-    if (!Number.isInteger(seq) || seq <= this.lastProcessedSeq) return; // old or resent
+    if (!Number.isInteger(seq) || seq > 0xffffffff || seq <= this.lastProcessedSeq) return; // old/resent/invalid
     // The first inputs set the baseline (a client may have counted seqs offline before joining).
     // After that, a huge jump is garbage.
     if (this.lastProcessedSeq > 0 && seq > this.lastProcessedSeq + MAX_SEQ_JUMP) return;
@@ -84,7 +92,11 @@ export class InputQueue {
       this.debt++;
       // A guessed tick: the client's view moved on by one tick too.
       const viewTick = this.lastInput.viewTick + this.debt;
-      if (this.debt <= MAX_REPEAT_TICKS) return { ...this.lastInput, viewTick };
+      // Keep moving and looking; keep a held trigger only briefly; never reload on a guess.
+      if (this.debt <= MAX_REPEAT_TICKS) {
+        const forbidden = Button.Reload | (this.debt > GUESS_FIRE_TICKS ? Button.Fire : 0);
+        return { ...this.lastInput, buttons: this.lastInput.buttons & ~forbidden, viewTick };
+      }
       const { yaw, pitch, weaponSlot } = this.lastInput;
       return {
         buttons: IDLE.buttons,

@@ -39,7 +39,8 @@ These numbers are the contract between client and server. Change them only with 
 
 ## Hit registration (hitscan)
 
-- (Implemented as a per-input `viewTick` — see ADR 0005.)
+- (Implemented as a per-input `viewTick` — see ADR 0005 — governed per player to ±2 ticks of its
+  average offset, so it can't be chosen per shot.)
 - Firing is a button bit inside `InputCmd`; the server uses that input's `yaw`, `pitch`
   and the client's interpolation delay to decide what the shooter saw.
 - Server: validate fire rate / ammo from server weapon state → compute

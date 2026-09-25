@@ -28,3 +28,11 @@ shooter actually saw.
 - +5 bytes per input on the wire (u32 tick + u8 fraction).
 - Spread is random on the server only; the client shows its own guess (tracers, predicted hit
   marker) and the server's result is final.
+
+## Amendment (2026-09-25, netcode review H1)
+
+A raw client-chosen `viewTick` allowed a "backtrack" cheat: picking a different rewind point
+for every shot inside the window. The server now governs it per player: it keeps a slow moving
+average of the view offset (server tick − viewTick) and accepts only view ticks within ±2 ticks
+of it. Honest drift (jitter, interpolation-delay changes) is followed; per-shot jumps are not.
+Measured after the change: 150/150 on-target shots registered at 150 ms.

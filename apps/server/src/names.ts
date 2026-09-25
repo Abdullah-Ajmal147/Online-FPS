@@ -13,6 +13,7 @@ export function sanitizeName(raw: unknown): string {
     .replace(/[^\p{L}\p{N} _.-]/gu, '')
     .replace(/\s+/g, ' ')
     .trim()
+    .replace(/^bot\s+/i, '') // "Bot …" is reserved for real bots
     .slice(0, MAX_NAME_LENGTH)
     .trim();
   return clean.length > 0 ? clean : 'Player';

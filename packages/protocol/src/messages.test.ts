@@ -118,6 +118,14 @@ describe('InputCmd', () => {
     expect(() => decodeInputCmd(zero)).toThrow(RangeError);
   });
 
+  it('rejects seqs that would overflow u32 (a crafted packet once crashed the server)', () => {
+    const packet = encodeInputCmd({ ackServerTick: 1, inputs });
+    new DataView(packet.buffer).setUint32(5, 0xfffffffe, true); // firstSeq; 3 inputs → overflow
+    expect(() => decodeInputCmd(packet)).toThrow(RangeError);
+    new DataView(packet.buffer).setUint32(5, 0xfffffffd, true); // last seq exactly 0xffffffff: ok
+    expect(() => decodeInputCmd(packet)).not.toThrow();
+  });
+
   it('refuses to encode non-consecutive seqs', () => {
     expect(() =>
       encodeInputCmd({ ackServerTick: 1, inputs: [inputs[0]!, { ...inputs[2]! }] }),

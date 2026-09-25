@@ -90,6 +90,23 @@ describe('Match phases', () => {
     expect(match.phase).toBe(MatchPhase.Warmup);
   });
 
+  it('keeps a player who left mid-match in the result, with the time they played', () => {
+    const { sim, match, run } = setup(4);
+    let summary: MatchSummary | null = null;
+    match.onMatchEnd = (s) => (summary = s);
+    run(2.05); // into live
+    run(1);
+    const leaver = [...sim.players.values()][0]!;
+    leaver.kills = 3;
+    match.playerLeaving(leaver.id);
+    sim.removePlayer(leaver.id);
+    run(4);
+    const row = summary!.players.find((p) => p.name === 'A');
+    expect(row).toMatchObject({ kills: 3 });
+    expect(row!.secondsPlayed).toBeGreaterThanOrEqual(1);
+    expect(row!.secondsPlayed).toBeLessThanOrEqual(2);
+  });
+
   it('reports the scoreboard with names in MatchInfo', () => {
     const { match } = setup();
     expect(match.info().players.map((p) => p.name)).toEqual(['A', 'B']);

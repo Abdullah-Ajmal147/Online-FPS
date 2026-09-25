@@ -85,8 +85,10 @@ export interface AimStats {
 export class AimBrain implements Brain {
   readonly stats: AimStats = { onTarget: 0, registered: 0 };
   private targetId: number | null = null;
+  private ticks = 0;
 
   next(view: BotView): PlayerInput {
+    this.ticks++;
     const enemy = nearestEnemy(view);
     if (!enemy || !view.alive) return { buttons: Button.Aim, yaw: 0, pitch: 0 };
     this.targetId = enemy[0];
@@ -104,7 +106,9 @@ export class AimBrain implements Brain {
     const settled =
       currentSpread(w, spec, { moving: false, airborne: false, sprinting: false }) <=
       spec.spread.ads + 10;
-    const fire = w.adsTicks >= spec.adsTicks && settled;
+    // Wait out the target's 1.5 s spawn protection (protected players take no damage, so
+    // shots at them would look like registration failures).
+    const fire = w.adsTicks >= spec.adsTicks && settled && this.ticks > 2.5 * 60;
     return { buttons: Button.Aim | (fire ? Button.Fire : 0), yaw, pitch, weaponSlot: 0 };
   }
 

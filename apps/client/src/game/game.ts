@@ -447,8 +447,12 @@ export async function startGame(
     for (let i = 0; i < fixed.ticks; i++) {
       prevState = predictor.state;
       const sample = input.sample();
-      if (frozen) sample.buttons = 0; // the server isn't moving anyone right now
-      const { shot } = predictor.tick({ ...sample, weaponSlot: sample.weaponSlot ?? 0, viewTick });
+      // Frozen (countdown/results) or dead: the server doesn't step us, so neither do we.
+      const skip = spawnedFromServer && (frozen || !hud.alive);
+      const { shot } = predictor.tick(
+        { ...sample, weaponSlot: sample.weaponSlot ?? 0, viewTick },
+        { skip },
+      );
       if (shot && hud.alive) ownShot(shot);
       if (conn.connected && spawnedFromServer) {
         conn.sendInput({ ackServerTick: latestServerTick, inputs: predictor.recentInputs() });

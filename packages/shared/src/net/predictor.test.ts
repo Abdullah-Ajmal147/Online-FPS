@@ -59,3 +59,20 @@ describe('Predictor.reset', () => {
     expect(p.state).toEqual(expected);
   });
 });
+
+describe('Predictor skip ticks', () => {
+  it('sends but does not simulate skipped ticks, in live ticks and in replays', () => {
+    const { ctx, body, spawn } = setup();
+    const p = new Predictor(spawn, ctx, body);
+    const before = p.state;
+    const r = p.tick(input(1), { skip: true });
+    expect(r.sent.seq).toBe(1);
+    expect(p.state).toBe(before);
+    p.tick(input(2));
+    // Reconcile from the spawn with nothing acked: replay must skip seq 1 again.
+    p.reset(spawn, 0);
+    const server = setup();
+    const expected = stepSim(spawn, input(2), server.ctx, server.body).state;
+    expect(p.state).toEqual(expected);
+  });
+});

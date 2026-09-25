@@ -19,9 +19,33 @@ function result(matchId: string, winner = 0) {
     winner,
     durationSeconds: 600,
     players: [
-      { guestId: GUEST, name: 'Ayesha', team: 0, bot: false, kills: 7, deaths: 3 },
-      { guestId: null, name: 'Bot Heron', team: 1, bot: true, kills: 5, deaths: 7 },
-      { guestId: OTHER, name: 'Omar', team: 1, bot: false, kills: 2, deaths: 4 },
+      {
+        guestId: GUEST,
+        name: 'Ayesha',
+        team: 0,
+        bot: false,
+        kills: 7,
+        deaths: 3,
+        secondsPlayed: 600,
+      },
+      {
+        guestId: null,
+        name: 'Bot Heron',
+        team: 1,
+        bot: true,
+        kills: 5,
+        deaths: 7,
+        secondsPlayed: 600,
+      },
+      {
+        guestId: OTHER,
+        name: 'Omar',
+        team: 1,
+        bot: false,
+        kills: 2,
+        deaths: 4,
+        secondsPlayed: 420,
+      },
     ],
   };
 }
@@ -121,6 +145,15 @@ describe('api', () => {
     expect((await post(a, r)).status).toBe(409);
     const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as { matches: number };
     expect(profile.matches).toBe(1);
+  });
+
+  it('gives no XP for joining at the last moment, and counts a guest only once', async () => {
+    const a = app();
+    const r = result('55555555-5555-4555-8555-555555555555');
+    r.players[0]!.secondsPlayed = 20; // joined 20 s before the end of a 10-minute match
+    r.players.push({ ...r.players[2]! }); // same guest twice
+    const body = (await (await post(a, r)).json()) as { awarded: { guestId: string }[] };
+    expect(body.awarded.map((x) => x.guestId)).toEqual([OTHER]);
   });
 
   it('validates input', async () => {

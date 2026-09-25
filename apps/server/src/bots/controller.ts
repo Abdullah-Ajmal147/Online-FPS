@@ -71,8 +71,15 @@ export class BotController {
     if (bot) this.remove(bot.id);
   }
 
-  /** Team a joining human should take (the smaller one, counting bots). */
+  /**
+   * Team for a joining human: the one with fewer humans (so real players spread out and don't
+   * end up all on one side against bots), then the one with fewer players overall. In a full
+   * match that team always still has a bot to swap out, so teams stay 6v6.
+   */
   teamForHuman(): number {
+    const humans: [number, number] = [0, 0];
+    for (const p of this.sim.players.values()) if (!p.bot) humans[p.team as 0 | 1]++;
+    if (humans[0] !== humans[1]) return humans[0] < humans[1] ? 0 : 1;
     const [a, b] = this.sim.teamCounts();
     return a <= b ? 0 : 1;
   }

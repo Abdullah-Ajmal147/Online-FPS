@@ -11,7 +11,18 @@ const summary: MatchSummary = {
   teamScores: [75, 60],
   durationSeconds: 512,
   mvp: 1,
-  players: [{ id: 1, guestId: null, name: 'Bot Heron', team: 0, bot: true, kills: 12, deaths: 4 }],
+  players: [
+    {
+      id: 1,
+      guestId: null,
+      name: 'Bot Heron',
+      team: 0,
+      bot: true,
+      kills: 12,
+      deaths: 4,
+      secondsPlayed: 512,
+    },
+  ],
 };
 
 describe('api reporter', () => {

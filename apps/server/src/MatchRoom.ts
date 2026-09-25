@@ -1,5 +1,5 @@
 import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
-import { RateLimiter, verifyGuestToken } from '@sentinel/auth';
+import { RateLimiter, resolveApiSecret, verifyGuestToken } from '@sentinel/auth';
 import { defaultLoadout, maps, modes, movement } from '@sentinel/content';
 import {
   MessageType,
@@ -52,7 +52,7 @@ interface Seat {
  * leaving room for many players behind one IP (schools, cafés, mobile carriers).
  */
 const joinLimit = new RateLimiter(20, 1);
-const API_SECRET = process.env.SENTINEL_API_SECRET ?? 'dev-only-secret';
+const API_SECRET = resolveApiSecret(process.env);
 
 const envNumber = (name: string, fallback: number) => {
   const v = Number(process.env[name]);
@@ -182,7 +182,9 @@ export class MatchRoom extends Room {
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
     const player = this.sim.addPlayer({
       name: sanitizeName(options?.name),
-      guestId: (client.auth as { guestId?: string | null } | undefined)?.guestId ?? null,
+      guestId: this.uniqueGuest(
+        (client.auth as { guestId?: string | null } | undefined)?.guestId ?? null,
+      ),
       ...(team === undefined ? {} : { team }),
     });
     this.seats.set(client.sessionId, {
@@ -207,9 +209,19 @@ export class MatchRoom extends Room {
     this.sendMatchInfo();
   }
 
+  /** One seat per guest earns XP: a second tab with the same guest plays without progression. */
+  private uniqueGuest(guestId: string | null): string | null {
+    if (!guestId) return null;
+    for (const p of this.sim.players.values()) if (p.guestId === guestId) return null;
+    return guestId;
+  }
+
   override onLeave(client: Client): void {
     const seat = this.seats.get(client.sessionId);
-    if (seat) this.sim.removePlayer(seat.playerId);
+    if (seat) {
+      this.match.playerLeaving(seat.playerId); // keeps their stats in this match's result
+      this.sim.removePlayer(seat.playerId);
+    }
     this.seats.delete(client.sessionId);
     this.lag?.forget(client.sessionId);
     this.bots?.fill();
@@ -231,7 +243,29 @@ export class MatchRoom extends Room {
     for (const input of cmd.inputs) queue?.push(input);
   }
 
+  /**
+   * One server tick. Never lets an exception escape: Colyseus does not catch errors in the
+   * simulation interval, and an uncaught error would stop the whole process (every match).
+   * A failing tick is logged and skipped; repeated failures close just this room.
+   */
   private tick(): void {
+    try {
+      this.tickUnsafe();
+      this.consecutiveTickErrors = 0;
+    } catch (err) {
+      this.tickErrors++;
+      console.error(`[match ${this.roomId}] tick ${this.sim.tick} failed:`, err);
+      if (++this.consecutiveTickErrors >= 30) {
+        console.error(`[match ${this.roomId}] 30 failing ticks in a row: closing this room`);
+        void this.disconnect();
+      }
+    }
+  }
+
+  private tickErrors = 0;
+  private consecutiveTickErrors = 0;
+
+  private tickUnsafe(): void {
     this.bots?.think();
     this.sim.step();
     const phaseChanged = this.match.update();

@@ -5,6 +5,7 @@ import express from 'express';
 import { PROTOCOL_VERSION } from '@sentinel/protocol';
 import { MatchRoom } from './MatchRoom.ts';
 import { createApiReporter } from './apiReporter.ts';
+import { resolveApiSecret } from '@sentinel/auth';
 
 const port = Number(process.env.PORT ?? 2567);
 
@@ -30,7 +31,7 @@ server.define('match', MatchRoom);
 const apiUrl = process.env.SENTINEL_API_URL ?? 'http://localhost:8787';
 const report = createApiReporter({
   url: apiUrl,
-  secret: process.env.SENTINEL_API_SECRET ?? 'dev-only-secret',
+  secret: resolveApiSecret(process.env),
 });
 MatchRoom.onMatchEnd = (summary) => void report(summary);
 

@@ -180,11 +180,10 @@ export class Bot {
       };
       const input = this.brain.next(view);
       if (record) this.recorded.push(input);
-      const { shot } = this.predictor.tick({
-        ...input,
-        weaponSlot: input.weaponSlot ?? 0,
-        viewTick,
-      });
+      const { shot } = this.predictor.tick(
+        { ...input, weaponSlot: input.weaponSlot ?? 0, viewTick },
+        { skip: !this.alive }, // dead: the server consumes but doesn't step our inputs
+      );
       if (shot && this.alive) this.brain.onShot?.(shot, view);
       this.room.sendBytes(
         MessageType.InputCmd,

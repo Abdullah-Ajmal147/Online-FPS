@@ -24,9 +24,10 @@ const MatchResultSchema = z.object({
         bot: z.boolean(),
         kills: z.number().int().nonnegative(),
         deaths: z.number().int().nonnegative(),
+        secondsPlayed: z.number().nonnegative(),
       }),
     )
-    .max(12),
+    .max(24), // players present at the end plus those who left during the match
 });
 
 /** HMAC-SHA256 of the raw body with the shared server secret, hex. */
@@ -85,8 +86,12 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     if (!store.recordMatch(parsed.matchId, parsed))
       return c.json({ error: 'match already recorded' }, 409);
     const awarded: { guestId: string; xp: number }[] = [];
+    const seen = new Set<string>();
     for (const p of parsed.players) {
-      if (p.bot || !p.guestId) continue;
+      if (p.bot || !p.guestId || seen.has(p.guestId)) continue; // each guest once per match
+      seen.add(p.guestId);
+      // No XP for joining in the last seconds: at least 60 s, or a quarter of a short match.
+      if (p.secondsPlayed < Math.min(60, parsed.durationSeconds / 4)) continue;
       const xp = xpForMatch(p, parsed.winner);
       store.addResult(p.guestId, p.name, {
         xp,

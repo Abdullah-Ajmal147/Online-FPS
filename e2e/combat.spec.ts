@@ -74,6 +74,9 @@ test('one player shoots another: the server registers hits and the victim takes 
   expect(hurt).toBe(true);
   const shooterHud = await combat(a);
   expect(shooterHud!.ammo).toBeLessThan(30); // shots were fired (predicted + server-confirmed ammo)
-  // The shooter saw a server-confirmed hit marker (not just a predicted one).
-  expect(['hit', 'head', 'kill']).toContain(shooterHud!.hitKind);
+  // The shooter saw a server-confirmed hit marker (not just a predicted one). The last shot's
+  // marker may still be "predicted" for a round trip, so wait for the confirmation.
+  await expect
+    .poll(async () => (await combat(a))!.hitKind, { timeout: 5_000 })
+    .toMatch(/^(hit|head|kill)$/);
 });

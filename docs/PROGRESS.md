@@ -140,6 +140,7 @@ Tasks done:
 - 8 (local part). `Dockerfile` (Debian trixie base: pnpm 12's native binary segfaults on bookworm) + `docker-compose.yml`: the game server serves the built client on :2567, API on :8787 with SQLite on a volume. Verified: compose up → page loads from the game server, joins, 11 bots, profile card. CI builds the image. Remote VPS/HTTPS deploy needs the owner's hosting account.
 - 9. Match summary JSON logged at match end (`[match-summary] {...}`).
 - Tests: full bots-only match on Relay Yard in-process (fights, winner, MVP, < 4 ms/tick); e2e full match flow against a bot-filled server with 20 s matches.
+- Netcode review of Phases 2–3 fixed: **C1** a crafted InputCmd (seq near 2^32) crashed the whole process → decoder rejects it, and a failing tick is now logged and skipped (30 in a row close only that room); **H1** view-tick "backtrack" cheat → per-player governor (ADR 0005 amendment); **H2** production refuses to start without a real `SENTINEL_API_SECRET` (compose requires it); **H3** one XP seat per guest (server + API); **M1** same-tick trades both count; **M2** guessed ticks keep a held trigger ≤ 3 ticks and never reload; **M3** humans spread across teams; **M4** XP needs ≥ 60 s played (or ¼ of a short match), leavers keep their stats; **M5** `?server=`/`?api=` only in dev or for allow-listed hosts; lows: schema bounds, client skips frozen/dead ticks like the server, hitbox history kept across respawn, cached spawn/nav work, "Bot " name prefix reserved. Hit-reg re-measured: 150/150 at 150 ms.
 - Soak (`apps/server/scripts/soak.ts`): 10 full bot-filled TDM matches back to back on Relay Yard, no crash; every match went to 75 kills (~145 kills, 6.5–8.5 min each); tick median 0.32 ms, p99 2.7 ms, one 47 ms spike (GC/JIT warm-up, to watch).
 
 Exit tests:
@@ -153,6 +154,7 @@ Open issues carried forward:
 - ~~Balance: team 1 won 8/10 on the asymmetric Relay Yard~~ → map made point-symmetric (test-enforced); re-run 4/6.
 - Deploy to a VPS/Fly.io with HTTPS/WSS (owner account), then run the exit tests remotely.
 - 47 ms worst-case tick spike in the soak: add tick-time monitoring (Phase 7).
+- Snapshots send every player's position to everyone (wallhack-able): add interest management / PVS before public launch (review L7).
 - Phase 4 (lite, pulled forward for the end-to-end game): API with SQLite (`node:sqlite`) — `POST /matches` accepts only HMAC-signed results from the game server, each match id once; XP (150 + 100/kill + 250 win / 100 draw) and levels (500, 750, 1000… XP) computed by the API; `GET /profiles/:guestId`. Browser keeps a random guest id (not a secure identity; Supabase replaces it in Phase 4); menu shows level/XP, refreshed after each match. E2E checks XP after a full bot match.
 - Secure guest identity (replaces the unsigned guest id): `packages/auth` issues HMAC-signed guest tokens (`POST /guests`); the game server verifies them on join and only verified guests earn XP. Rate limits per IP: guest creation (burst 30, 0.5/s), profile reads, room joins (burst 20, 1/s) — generous because many players can share one IP.
 

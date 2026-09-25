@@ -1,4 +1,5 @@
 import { setStatus } from './store.ts';
+import { urlFromQuery } from './urls.ts';
 
 export interface Profile {
   level: number;
@@ -61,8 +62,8 @@ export function forgetGuest(): void {
 
 /** API base URL: `?api=` in the page URL, then VITE_API_URL, then this host on port 8787. */
 export function apiUrl(): string {
-  const fromQuery = new URLSearchParams(location.search).get('api');
-  if (fromQuery && /^https?:\/\//.test(fromQuery)) return fromQuery;
+  const fromQuery = urlFromQuery('api');
+  if (fromQuery) return fromQuery;
   const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
   if (fromEnv) return fromEnv;
   return `${location.protocol}//${location.hostname}:8787`;

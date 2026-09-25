@@ -159,7 +159,7 @@ export const WeaponSchema = z
     slot: z.union([z.literal(0), z.literal(1)]),
     fireMode: z.enum(['auto', 'semi']),
     /** Rounds per minute. At most 3600 (one shot per 60 Hz tick). */
-    rpm: z.number().positive().max(3600),
+    rpm: z.number().min(15).max(3600), // ≥ 15 keeps the cooldown within its u8 wire field
     damage: z.object({
       head: z.number().int().positive().max(255),
       torso: z.number().int().positive().max(255),
@@ -187,7 +187,10 @@ export const WeaponSchema = z
     }),
     recoil: z.object({
       /** Per shot: [up, right] kick in degrees. After the last entry the last one repeats. */
-      pattern: z.array(z.tuple([z.number(), z.number()])).min(1),
+      pattern: z
+        .array(z.tuple([z.number().min(-10).max(10), z.number().min(-10).max(10)]))
+        .min(1)
+        .max(255),
       adsMultiplier: z.number().min(0).max(2),
       recoveryPerSecond: z.number().nonnegative(),
     }),

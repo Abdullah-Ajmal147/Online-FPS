@@ -34,6 +34,8 @@ interface Entry {
   input: SequencedInput;
   /** State after applying this input. */
   state: SimState;
+  /** Sent but not simulated (we were frozen or dead: the server doesn't step us either). */
+  skip: boolean;
 }
 
 export interface PredictionStats {
@@ -88,7 +90,7 @@ export class Predictor {
     this.history = this.history.filter((e) => e.seq > replayAfterSeq);
     let s = state;
     for (const e of this.history) {
-      s = stepSim(s, e.input, this.ctx, this.body).state;
+      if (!e.skip) s = stepSim(s, e.input, this.ctx, this.body).state;
       e.state = s;
     }
     this.state = s;
@@ -99,11 +101,19 @@ export class Predictor {
    * (for muzzle flash, tracer and predicted hit marker; the server decides the real hit).
    * Replays during reconciliation never report shots, so effects never play twice.
    */
-  tick(input: Omit<SequencedInput, 'seq'>): { sent: SequencedInput; shot: ShotRequest | null } {
+  tick(
+    input: Omit<SequencedInput, 'seq'>,
+    opts: { skip?: boolean } = {},
+  ): { sent: SequencedInput; shot: ShotRequest | null } {
     const sent: SequencedInput = { ...input, seq: ++this.seq };
-    const r = stepSim(this.state, sent, this.ctx, this.body);
+    // While frozen (countdown/results) or dead the server consumes our inputs without stepping
+    // us, so we do the same: the input is still sent and numbered, the state doesn't change.
+    const skip = opts.skip ?? false;
+    const r = skip
+      ? { state: this.state, shot: null }
+      : stepSim(this.state, sent, this.ctx, this.body);
     this.state = r.state;
-    this.history.push({ seq: sent.seq, input: sent, state: this.state });
+    this.history.push({ seq: sent.seq, input: sent, state: this.state, skip });
     if (this.history.length > HISTORY) this.history.shift();
     return { sent, shot: r.shot };
   }
@@ -135,7 +145,7 @@ export class Predictor {
       weapon: own.weapon,
     };
     for (const e of this.history) {
-      s = stepSim(s, e.input, this.ctx, this.body).state;
+      if (!e.skip) s = stepSim(s, e.input, this.ctx, this.body).state;
       e.state = s;
     }
     this.state = s;

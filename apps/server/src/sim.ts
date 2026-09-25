@@ -37,6 +37,35 @@ export const REGEN_DELAY_TICKS = 4 * TICK_RATE;
 export const REGEN_PER_TICK = 1;
 /** Lag compensation never rewinds further than this (NETCODE.md, ADR 0005). */
 export const MAX_REWIND_TICKS = Math.round((MAX_REWIND_MS / 1000) * TICK_RATE);
+/**
+ * Anti-"backtrack" (review H1). A client says which tick it was looking at (viewTick, ADR 0005);
+ * a cheater could pick a different one for every shot to hit players who already reached cover.
+ * We keep a slow moving average of each player's view offset (server tick − viewTick) and only
+ * accept view ticks within ±VIEW_TICK_TOLERANCE of it. Honest offsets drift slowly (jitter,
+ * interpolation delay changes) and are followed; a per-shot jump of many ticks is not. Raising
+ * the average slowly is the same as having high ping, which the 300 ms cap already bounds.
+ */
+export const VIEW_TICK_TOLERANCE = 2;
+const VIEW_OFFSET_SMOOTHING = 0.02;
+
+export interface ViewTickGovernor {
+  avgOffset: number | null;
+}
+
+export function governViewTick(g: ViewTickGovernor, claimed: number, tick: number): number {
+  const offset = tick - claimed;
+  if (g.avgOffset === null || !Number.isFinite(g.avgOffset)) {
+    g.avgOffset = offset;
+    return claimed;
+  }
+  const allowed = Math.max(
+    g.avgOffset - VIEW_TICK_TOLERANCE,
+    Math.min(g.avgOffset + VIEW_TICK_TOLERANCE, offset),
+  );
+  g.avgOffset += (allowed - g.avgOffset) * VIEW_OFFSET_SMOOTHING;
+  return tick - allowed;
+}
+
 /** Spawn protection: 1.5 s, or until you fire (Phase 3). */
 export const SPAWN_PROTECTION_TICKS = Math.round(1.5 * TICK_RATE);
 /** One second of hitbox history per player. */
@@ -58,6 +87,8 @@ export interface SimPlayer {
   /** Server bot: its input comes from `botInput` (set by the bot controller each tick). */
   bot: boolean;
   botInput: TickInput | null;
+  /** Tick this player joined (time played in a match counts from here). */
+  joinedAtTick: number;
   /** Damage is ignored before this tick (spawn protection). */
   protectedUntil: number;
   body: PlayerBody;
@@ -72,6 +103,9 @@ export interface SimPlayer {
   kills: number;
   deaths: number;
   history: HistoryEntry[];
+  /** View tick after anti-backtrack governing (see governViewTick). */
+  viewTick: number;
+  viewGovernor: ViewTickGovernor;
 }
 
 /** A resolved shot, for tests and effects. */
@@ -144,6 +178,7 @@ export class MatchSim {
       bot: opts.bot ?? false,
       botInput: null,
       protectedUntil: this.tick + SPAWN_PROTECTION_TICKS,
+      joinedAtTick: this.tick,
       body: createPlayerBody(this.ctx.movement),
       sim: this.freshSim(team),
       queue: new InputQueue(),
@@ -156,6 +191,8 @@ export class MatchSim {
       kills: 0,
       deaths: 0,
       history: [],
+      viewTick: 0,
+      viewGovernor: { avgOffset: null },
     };
     this.players.set(id, player);
     return player;
@@ -184,20 +221,24 @@ export class MatchSim {
     for (const p of this.players.values()) {
       // Always consumed, even while dead or frozen, so seqs keep flowing.
       const input = p.bot ? p.botInput : p.queue.next();
-      if (!input || !p.alive || this.frozen) continue;
+      if (!input) continue;
+      p.viewTick = governViewTick(p.viewGovernor, input.viewTick, this.tick);
+      if (!p.alive || this.frozen) continue;
       const r = stepSim(p.sim, input, this.ctx, p.body);
       p.sim = r.state;
       if (r.shot) {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
-        shots.push({ shooter: p, shot: r.shot, viewTick: input.viewTick });
+        shots.push({ shooter: p, shot: r.shot, viewTick: p.viewTick });
       }
       if (p.sim.move.position[1] < this.map.killY) this.kill(p, null, 0, false);
     }
 
     this.tick++;
     this.recordHistory();
-    for (const s of shots) if (s.shooter.alive) this.resolveShot(s.shooter, s.shot, s.viewTick);
+    // Every shot fired this tick counts, even if its shooter was killed by an earlier shot in
+    // this same loop: both players pulled the trigger while alive (fair trades, not join order).
+    for (const s of shots) this.resolveShot(s.shooter, s.shot, s.viewTick);
     this.updateLife();
     this.lastTickMicros = (performance.now() - start) * 1000;
   }
@@ -253,7 +294,7 @@ export class MatchSim {
 
   /**
    * Hitscan with lag compensation (docs/NETCODE.md, ADR 0005): move every other player's
-   * hitboxes back to what the shooter saw (their view tick, at most 200 ms ago), cast from the
+   * hitboxes back to what the shooter saw (their governed view tick, at most 300 ms ago, ADR 0005/0006), cast from the
    * shooter's current server-side eye along the shot's angles plus random spread, and let the
    * map block the shot.
    */
@@ -362,7 +403,8 @@ export class MatchSim {
     p.health = MAX_HEALTH;
     p.respawnTicks = 0;
     p.lifeId = (p.lifeId + 1) & 0xff;
-    p.history = [];
+    // History is kept: ticks while dead are recorded alive=false, so a rewind into the time
+    // before this respawn never finds the player "alive at the spawn point".
     p.protectedUntil = this.tick + SPAWN_PROTECTION_TICKS;
   }
 
@@ -457,6 +499,7 @@ export class MatchSim {
   private spawnState(team: number) {
     const spawns = this.map.spawns.filter((s) => s.team === team);
     const enemies = [...this.players.values()].filter((p) => p.team !== team && p.alive);
+    const enemyEyes = enemies.map((e) => this.eyeOf(e)); // once, not per spawn
     const start = this.spawnCursor[team]!++;
     let best = spawns[start % spawns.length]!;
     let bestScore = -Infinity;
@@ -465,12 +508,12 @@ export class MatchSim {
       const head: Vec3 = [s.position[0], s.position[1] + 1.6, s.position[2]];
       let nearest = 1000;
       let seen = false;
-      for (const e of enemies) {
+      enemies.forEach((e, k) => {
         const p = e.sim.move.position;
         const d = Math.hypot(p[0] - s.position[0], p[2] - s.position[2]);
         nearest = Math.min(nearest, d);
-        if (!seen && d < 80 && this.lineOfSight(this.eyeOf(e), head)) seen = true;
-      }
+        if (!seen && d < 80 && this.lineOfSight(enemyEyes[k]!, head)) seen = true;
+      });
       const score = nearest - (seen ? 10_000 : 0);
       if (score > bestScore) {
         bestScore = score;
