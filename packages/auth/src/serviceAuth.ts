@@ -67,3 +67,16 @@ export function resolveUnlockAll(env: Record<string, string | undefined>): boole
 export function publicCode(secret: string, guestId: string): string {
   return createHmac('sha256', secret).update(`code:v1:${guestId}`).digest('hex').slice(0, 16); // 64 bits: no collisions at any realistic scale
 }
+
+/**
+ * A player's IP as a keyed hash: lets bans cover a connection without storing IP addresses.
+ * Only the game server (which sees the IP) and the API (which stores the hash) use it.
+ */
+export function ipHash(secret: string, ip: string): string {
+  return createHmac('sha256', secret).update(`ip:v1:${ip}`).digest('hex').slice(0, 16);
+}
+
+/** Opaque id of the shadow pool (moderated players' rooms): says nothing to a client. */
+export function shadowPoolId(secret: string): string {
+  return createHmac('sha256', secret).update('pool:v1:shadow').digest('hex').slice(0, 12);
+}

@@ -15,13 +15,13 @@ describe('access fetcher', () => {
         return new Response(JSON.stringify({ level: 7, weaponKills: { 'kestrel-ar': 40 } }));
       }) as typeof fetch,
     });
-    expect(await fetchAccess(GUEST)).toEqual({
+    expect(await fetchAccess(GUEST, 'aaaaaaaaaaaaaaaa')).toEqual({
       level: 7,
       weaponKills: { 'kestrel-ar': 40 },
       unlockAll: false,
       status: 'ok',
     });
-    expect(seen!.url).toBe(`http://api/access/${GUEST}`);
+    expect(seen!.url).toBe(`http://api/access?guest=${GUEST}&ip=aaaaaaaaaaaaaaaa`);
     expect(seen!.sig).toMatch(/^[0-9a-f]{64}$/);
     expect(Number(seen!.time)).toBeGreaterThan(0);
   });
@@ -30,14 +30,14 @@ describe('access fetcher', () => {
     const answer = (async () =>
       new Response(JSON.stringify({ level: 1, weaponKills: {}, unlockAll: true }))) as typeof fetch;
     const strict = createAccessFetcher({ url: 'http://api', secret: 's', fetchImpl: answer });
-    expect((await strict(GUEST))!.unlockAll).toBe(false);
+    expect((await strict(GUEST, 'aaaaaaaaaaaaaaaa'))!.unlockAll).toBe(false);
     const dev = createAccessFetcher({
       url: 'http://api',
       secret: 's',
       fetchImpl: answer,
       allowUnlockAll: true,
     });
-    expect((await dev(GUEST))!.unlockAll).toBe(true);
+    expect((await dev(GUEST, 'aaaaaaaaaaaaaaaa'))!.unlockAll).toBe(true);
   });
 
   it('unknown when there is no guest, the API is down or answers badly (null)', async () => {
@@ -48,8 +48,8 @@ describe('access fetcher', () => {
         throw new Error('ECONNREFUSED');
       }) as typeof fetch,
     });
-    expect(await down(GUEST)).toBeNull();
-    expect(await down(null)).toBeNull();
+    expect(await down(GUEST, 'aaaaaaaaaaaaaaaa')).toBeNull();
+    expect(await down(null, 'aaaaaaaaaaaaaaaa')).toBeNull();
     expect(() => parseAccess({ level: 0, weaponKills: {} })).toThrow();
     expect(() => parseAccess('x')).toThrow();
     expect(parseAccess({ level: 3, weaponKills: { a: -1, b: 2 } }).weaponKills).toEqual({ b: 2 });

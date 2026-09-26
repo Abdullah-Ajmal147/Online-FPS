@@ -5,6 +5,12 @@ import { Store } from './db.ts';
 import { levelFor, xpForMatch, xpToNext } from './xp.ts';
 
 const SECRET = 'test-secret';
+const IP_HASH = '1234567890abcdef';
+/** The game server's signed access lookup (guest + IP hash). */
+const accessReq = (guest: string, ip = IP_HASH, secret = SECRET) => ({
+  url: `/access?guest=${guest}&ip=${ip}`,
+  init: { headers: serviceHeaders(secret, 'access', `${guest}|${ip}`) },
+});
 const GUEST = '0f8c2a6e-1b2c-4d3e-8f90-123456789abc';
 const OTHER = '9e8d7c6b-5a49-4838-a271-605f4e3d2c1b';
 
@@ -176,7 +182,7 @@ describe('api', () => {
 
 describe('unlocks', () => {
   const access = (a: ReturnType<typeof app>, guestId: string, secret = SECRET) =>
-    a.request(`/access/${guestId}`, { headers: serviceHeaders(secret, 'access', guestId) });
+    a.request(accessReq(guestId, IP_HASH, secret).url, accessReq(guestId, IP_HASH, secret).init);
 
   it('headshots add XP and weapon kills are stored per weapon', async () => {
     const a = app();
@@ -196,7 +202,7 @@ describe('unlocks', () => {
 
   it('only the game server (signed) can read access; the public profile shows weapon kills', async () => {
     const a = app();
-    expect((await a.request(`/access/${GUEST}`)).status).toBe(401);
+    expect((await a.request(accessReq(GUEST).url)).status).toBe(401);
     expect((await access(a, GUEST, 'wrong')).status).toBe(401);
     const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as {
       weaponKills: object;
@@ -283,9 +289,7 @@ describe('service request hardening (review)', () => {
     const odd = result('cccccccc-0000-4000-8000-000000000003') as { players: object[] };
     odd.players[0] = { ...odd.players[0], weaponKills: { 'kestrel-ar': 3, 'laser-cannon': 2 } };
     expect((await post(a, odd)).status).toBe(200);
-    const res = await a.request(`/access/${GUEST}`, {
-      headers: serviceHeaders(SECRET, 'access', GUEST),
-    });
+    const res = await a.request(accessReq(GUEST).url, accessReq(GUEST).init);
     expect(((await res.json()) as { weaponKills: object }).weaponKills).toEqual({
       'kestrel-ar': 3,
     });
@@ -295,7 +299,7 @@ describe('service request hardening (review)', () => {
     const a = app();
     let limited = false;
     for (let i = 0; i < 80 && !limited; i++) {
-      limited = (await a.request(`/access/${GUEST}`)).status === 429;
+      limited = (await a.request(accessReq(GUEST).url)).status === 429;
     }
     expect(limited).toBe(true);
   });
@@ -422,7 +426,19 @@ describe('moderation (Phase 7)', () => {
       code: string;
       reports: number;
     }[];
-    expect(queue.find((q) => q.code === target)!.reports).toBeGreaterThanOrEqual(2);
+    // Counted per distinct reporter (repeats by one person don't pile up).
+    expect(queue.find((q) => q.code === target)!.reports).toBe(1);
+    const second = await guestToken(a);
+    expect((await report({ token: second, code: target, reason: 'cheating' })).status).toBe(202);
+    const again = (await (await a.request('/admin/api/queue', { headers: auth })).json()) as {
+      code: string;
+      reports: number;
+    }[];
+    expect(again.find((q) => q.code === target)!.reports).toBe(2);
+    // Unknown players can't be reported (no queue flooding with made-up codes).
+    expect(
+      (await report({ token: second, code: '0123456789abcdef', reason: 'abuse' })).status,
+    ).toBe(404);
   });
 
   it('ban / shadow-ban reach the game server through /access', async () => {
@@ -431,15 +447,15 @@ describe('moderation (Phase 7)', () => {
     const code = await codeOf(a, GUEST);
     const access = async () =>
       (
-        (await (
-          await a.request(`/access/${GUEST}`, { headers: serviceHeaders(SECRET, 'access', GUEST) })
-        ).json()) as { status: string }
+        (await (await a.request(accessReq(GUEST).url, accessReq(GUEST).init)).json()) as {
+          status: string;
+        }
       ).status;
     expect(await access()).toBe('ok');
     const set = (status: string) =>
       a.request(`/admin/api/players/${code}/status`, {
         method: 'POST',
-        headers: { ...auth, 'content-type': 'application/json' },
+        headers: { ...auth, 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
         body: JSON.stringify({ status }),
       });
     expect((await set('shadow')).status).toBe(200);
@@ -447,5 +463,94 @@ describe('moderation (Phase 7)', () => {
     expect((await set('banned')).status).toBe(200);
     expect(await access()).toBe('banned');
     expect((await set('nonsense')).status).toBe(400);
+  });
+});
+
+describe('moderation hardening (review)', () => {
+  const ADMIN = 'correct-horse-battery';
+  const auth = { authorization: `Basic ${Buffer.from(`admin:${ADMIN}`).toString('base64')}` };
+  const modApp = () =>
+    createApp(new Store(':memory:'), SECRET, {
+      adminPassword: ADMIN,
+      clientIp: (c) => c.req.header('x-test-ip') ?? 'local',
+    });
+  const statusOf = async (a: ReturnType<typeof app>, guest: string, ip = IP_HASH) =>
+    (
+      (await (await a.request(accessReq(guest, ip).url, accessReq(guest, ip).init)).json()) as {
+        status: string;
+      }
+    ).status;
+
+  it('admin writes must be same-origin JSON (CSRF)', async () => {
+    const a = modApp();
+    await statusOf(a, GUEST); // first join creates the profile
+    const code = ((await (await a.request(`/profiles/${GUEST}`)).json()) as { code: string }).code;
+    const url = `/admin/api/players/${code}/status`;
+    const body = JSON.stringify({ status: 'banned' });
+    const plain = await a.request(url, {
+      method: 'POST',
+      body,
+      headers: { ...auth, 'content-type': 'text/plain', 'sec-fetch-site': 'same-origin' },
+    });
+    expect(plain.status).toBe(403);
+    const crossSite = await a.request(url, {
+      method: 'POST',
+      body,
+      headers: { ...auth, 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' },
+    });
+    expect(crossSite.status).toBe(403);
+    expect(await statusOf(a, GUEST)).toBe('ok');
+    const page = await a.request('/admin', { headers: auth });
+    expect(page.headers.get('x-frame-options')).toBe('DENY');
+    expect(page.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('after 10 wrong passwords even the right one is refused for a while', async () => {
+    const a = modApp();
+    const wrong = { authorization: `Basic ${Buffer.from('admin:nope').toString('base64')}` };
+    for (let i = 0; i < 10; i++)
+      await a.request('/admin/api/queue', { headers: { ...wrong, 'x-test-ip': '9.9.9.9' } });
+    const locked = await a.request('/admin/api/queue', {
+      headers: { ...auth, 'x-test-ip': '9.9.9.9' },
+    });
+    expect(locked.status).toBe(429);
+    // Another address is unaffected.
+    expect(
+      (await a.request('/admin/api/queue', { headers: { ...auth, 'x-test-ip': '8.8.8.8' } }))
+        .status,
+    ).toBe(200);
+  });
+
+  it('a ban also covers the connection: a new guest or no guest from that IP is banned', async () => {
+    const a = modApp();
+    expect(await statusOf(a, GUEST, 'aaaaaaaaaaaaaaaa')).toBe('ok');
+    const code = ((await (await a.request(`/profiles/${GUEST}`)).json()) as { code: string }).code;
+    await a.request(`/admin/api/players/${code}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'banned' }),
+      headers: { ...auth, 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
+    });
+    expect(await statusOf(a, OTHER, 'aaaaaaaaaaaaaaaa')).toBe('banned'); // new guest, same IP
+    expect(await statusOf(a, '', 'aaaaaaaaaaaaaaaa')).toBe('banned'); // no token at all
+    expect(await statusOf(a, OTHER, 'bbbbbbbbbbbbbbbb')).toBe('ok'); // elsewhere, other guest
+    // Clearing lifts both.
+    await a.request(`/admin/api/players/${code}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'ok' }),
+      headers: { ...auth, 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
+    });
+    expect(await statusOf(a, '', 'aaaaaaaaaaaaaaaa')).toBe('ok');
+  });
+
+  it('guest tokens no longer create database rows; the first join does', async () => {
+    const a = modApp();
+    const g = (await (await a.request('/guests', { method: 'POST' })).json()) as {
+      guestId: string;
+    };
+    const code = ((await (await a.request(`/profiles/${g.guestId}`)).json()) as { code: string })
+      .code;
+    expect((await a.request(`/players/${code}`)).status).toBe(404);
+    await statusOf(a, g.guestId);
+    expect((await a.request(`/players/${code}`)).status).toBe(200);
   });
 });

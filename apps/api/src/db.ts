@@ -72,6 +72,14 @@ export class Store {
         at INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS reports_target ON reports (target_code);
+      CREATE UNIQUE INDEX IF NOT EXISTS reports_once
+        ON reports (reporter, target_code, COALESCE(match_id, ''));
+      CREATE INDEX IF NOT EXISTS match_logs_at ON match_logs (at);
+      CREATE TABLE IF NOT EXISTS ip_status (
+        ip_hash TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS matches (
         match_id TEXT PRIMARY KEY,
         received_at INTEGER NOT NULL,
@@ -90,6 +98,12 @@ export class Store {
       // 'banned' (can't join).
       if (!columns.some((c) => c.name === 'status')) {
         this.db.exec("ALTER TABLE profiles ADD COLUMN status TEXT NOT NULL DEFAULT 'ok'");
+      }
+      if (!columns.some((c) => c.name === 'last_ip')) {
+        this.db.exec('ALTER TABLE profiles ADD COLUMN last_ip TEXT');
+      }
+      if (!columns.some((c) => c.name === 'reviewed_at')) {
+        this.db.exec('ALTER TABLE profiles ADD COLUMN reviewed_at INTEGER NOT NULL DEFAULT 0');
       }
       this.db.exec('DROP INDEX IF EXISTS profiles_code');
       this.db.exec('COMMIT');
@@ -200,7 +214,16 @@ export class Store {
     this.db
       .prepare('INSERT OR REPLACE INTO match_logs (match_id, at, data) VALUES (?, ?, ?)')
       .run(matchId, at, JSON.stringify(log));
-    this.db.prepare('DELETE FROM match_logs WHERE at < ?').run(at - Store.LOG_DAYS * 86_400_000);
+    this.pruneLogs(at);
+  }
+
+  /** Delete match logs past LOG_DAYS (also run on a timer: privacy promise). */
+  pruneLogs(now: number): void {
+    this.db.prepare('DELETE FROM match_logs WHERE at < ?').run(now - Store.LOG_DAYS * 86_400_000);
+  }
+
+  profileExists(code: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM profiles WHERE code = ?').get(code);
   }
 
   /** The stored result of a match (players with guest ids, teams, stats). */
@@ -235,15 +258,32 @@ export class Store {
   }): void {
     this.db
       .prepare(
-        'INSERT INTO reports (reporter, target_code, reason, match_id, at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT OR IGNORE INTO reports (reporter, target_code, reason, match_id, at) VALUES (?, ?, ?, ?, ?)',
       )
       .run(r.reporter, r.targetCode, r.reason, r.matchId, r.at);
   }
 
-  setStatus(code: string, status: 'ok' | 'shadow' | 'banned'): boolean {
-    return (
-      this.db.prepare('UPDATE profiles SET status = ? WHERE code = ?').run(status, code).changes > 0
-    );
+  /**
+   * Moderator action: the profile's status, the same on the IP it last played from (a new
+   * guest from that connection doesn't start clean), and the review time (the queue then
+   * only counts newer reports and flags).
+   */
+  setStatus(code: string, status: 'ok' | 'shadow' | 'banned', at: number): boolean {
+    const row = this.db.prepare('SELECT last_ip FROM profiles WHERE code = ?').get(code) as
+      { last_ip: string | null } | undefined;
+    if (!row) return false;
+    this.db
+      .prepare('UPDATE profiles SET status = ?, reviewed_at = ? WHERE code = ?')
+      .run(status, at, code);
+    if (row.last_ip) {
+      if (status === 'ok')
+        this.db.prepare('DELETE FROM ip_status WHERE ip_hash = ?').run(row.last_ip);
+      else
+        this.db
+          .prepare('INSERT OR REPLACE INTO ip_status (ip_hash, status, at) VALUES (?, ?, ?)')
+          .run(row.last_ip, status, at);
+    }
+    return true;
   }
 
   statusOf(guestId: string): 'ok' | 'shadow' | 'banned' {
@@ -263,9 +303,12 @@ export class Store {
   }[] {
     return this.db
       .prepare(
-        `WITH r AS (SELECT target_code AS code, COUNT(*) AS n, MAX(at) AS last FROM reports GROUP BY target_code),
+        `WITH r AS (SELECT rp.target_code AS code, COUNT(DISTINCT rp.reporter) AS n, MAX(rp.at) AS last
+                    FROM reports rp LEFT JOIN profiles t ON t.code = rp.target_code
+                    WHERE rp.at > COALESCE(t.reviewed_at, 0) GROUP BY rp.target_code),
               f AS (SELECT p.code AS code, COUNT(*) AS n, MAX(pf.at) AS last FROM player_flags pf
-                    JOIN profiles p ON p.guest_id = pf.guest_id GROUP BY p.code),
+                    JOIN profiles p ON p.guest_id = pf.guest_id
+                    WHERE pf.at > p.reviewed_at GROUP BY p.code),
               codes AS (SELECT code FROM r UNION SELECT code FROM f)
          SELECT codes.code AS code, p.name AS name, COALESCE(p.status, 'ok') AS status,
                 COALESCE(r.n, 0) AS reports, COALESCE(f.n, 0) AS flaggedMatches,
@@ -358,13 +401,25 @@ export class Store {
     }
   }
 
-  createProfile(guestId: string, code: string, at: number): void {
+  /** First join creates the row; every join records the IP hash (for IP bans). */
+  touchProfile(guestId: string, code: string, ipHash: string, at: number): void {
     this.db
       .prepare(
-        `INSERT OR IGNORE INTO profiles (guest_id, name, xp, matches, wins, kills, deaths, updated_at, code)
-         VALUES (?, 'Player', 0, 0, 0, 0, 0, ?, ?)`,
+        `INSERT INTO profiles (guest_id, name, xp, matches, wins, kills, deaths, updated_at, code, last_ip)
+         VALUES (?, 'Player', 0, 0, 0, 0, 0, ?, ?, ?)
+         ON CONFLICT(guest_id) DO UPDATE SET last_ip = excluded.last_ip`,
       )
-      .run(guestId, at, code);
+      .run(guestId, at, code, ipHash);
+  }
+
+  /** The stricter of the profile's and the IP's moderation status. */
+  worstStatus(guestId: string | null, ipHash: string): 'ok' | 'shadow' | 'banned' {
+    const rank = { ok: 0, shadow: 1, banned: 2 } as const;
+    const ip = this.db.prepare('SELECT status FROM ip_status WHERE ip_hash = ?').get(ipHash) as
+      { status: 'ok' | 'shadow' | 'banned' } | undefined;
+    const a = guestId ? this.statusOf(guestId) : 'ok';
+    const b = ip?.status ?? 'ok';
+    return rank[a] >= rank[b] ? a : b;
   }
 
   /** Public lookup by player code: name, XP and when they last played (no guest id). */

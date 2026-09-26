@@ -92,6 +92,13 @@ Admin page: `https://<domain>/api/admin` (user `admin`, `SENTINEL_ADMIN_PASSWORD
 
 A flag alone isn't proof: look at the replay and several matches before acting.
 
+Bans and shadow-bans cover the profile **and the connection it last played from** (stored only
+as a keyed hash of the IP), so a new guest or a player without a profile from that connection
+is caught too. If the API is unreachable, game servers still apply bans they saw in the last
+hour; unknown players are let in (availability over strictness). The admin page locks an
+address out for 15 minutes after 10 wrong passwords, only accepts same-origin JSON writes,
+and can't be framed.
+
 ## Capacity (load test, `apps/server/scripts/load.ts`)
 
 Measured on the development machine, bots in every slot, all snapshots encoded:

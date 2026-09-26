@@ -108,7 +108,8 @@ test('report → admin shadow-ban → the player is matched in a separate pool',
   ).json()) as { code: string; reports: number }[];
   expect(queue.find((q) => q.code === hostCode)?.reports).toBeGreaterThanOrEqual(1);
   const set = await request.post(`http://localhost:8787/admin/api/players/${hostCode}/status`, {
-    headers: admin,
+    // The admin page's own requests are same-origin JSON (anything else is refused: CSRF).
+    headers: { ...admin, 'sec-fetch-site': 'same-origin' },
     data: { status: 'shadow' },
   });
   expect(set.status()).toBe(200);

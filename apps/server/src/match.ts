@@ -213,7 +213,9 @@ export class Match {
   private recordLog(): void {
     const t = Math.round(((this.sim.tick - this.liveStartedAt) / TICK_RATE) * 10) / 10;
     const r = (v: number) => Math.round(v * 10) / 10;
-    if ((this.sim.tick - this.liveStartedAt) % TICK_RATE === 0) {
+    // Capped like the API accepts (4000 s of samples, 3000 kills): an overlong match keeps
+    // its first part rather than losing the whole result.
+    if (this.log.samples.length < 4000 && (this.sim.tick - this.liveStartedAt) % TICK_RATE === 0) {
       this.log.samples.push([
         t,
         [...this.sim.players.values()]
@@ -222,7 +224,7 @@ export class Match {
       ]);
     }
     for (const { event } of this.sim.events) {
-      if (event.type !== 'kill') continue;
+      if (event.type !== 'kill' || this.log.kills.length >= 3000) continue;
       const k = this.sim.players.get(event.killer)?.sim.move.position;
       const v = this.sim.players.get(event.victim)?.sim.move.position;
       this.log.kills.push([

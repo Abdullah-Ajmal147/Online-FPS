@@ -1,6 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
-import { RateLimiter, resolveApiSecret, verifyGuestToken, publicCode } from '@sentinel/auth';
+import {
+  RateLimiter,
+  resolveApiSecret,
+  verifyGuestToken,
+  publicCode,
+  ipHash,
+  shadowPoolId,
+} from '@sentinel/auth';
 import {
   defaultLoadout,
   maps,
@@ -75,6 +82,8 @@ interface Seat {
   access: Access;
   /** Random party invite token (in Hello; friends join with it). */
   inviteToken: string;
+  /** Keyed hash of the player's IP (moderation lookups). */
+  ipHash: string;
   /** Chat rate-limit key: the guest profile, else the IP (a reconnect doesn't reset it). */
   chatKey: string;
 }
@@ -87,6 +96,8 @@ const joinLimit = new RateLimiter(20, 1);
 /** Chat per player: a burst of 4 lines, then one every 1.5 s. */
 const chatLimit = new RateLimiter(4, 1 / 1.5);
 const API_SECRET = resolveApiSecret(process.env);
+/** Opaque id of the shadow pool (moderated players' rooms). */
+const SHADOW_POOL = shadowPoolId(API_SECRET);
 
 const envNumber = (name: string, fallback: number) => {
   const v = Number(process.env[name]);
@@ -120,13 +131,19 @@ export class MatchRoom extends Room {
   /** Called with each finished match (MatchRoom logs it; Phase 4 posts it to the API). */
   static onMatchEnd: ((summary: MatchSummary) => Promise<unknown>) | null = null;
   /** What a player has unlocked, or null if unknown (index.ts wires the API; tests: unknown). */
-  static fetchAccess: (guestId: string | null) => Promise<Access | null> = async () => null;
+  static fetchAccess: (guestId: string | null, ipHash: string) => Promise<Access | null> =
+    async () => null;
 
   /** Matchmaking pool: 'shadow' rooms only hold shadow-banned players (index.ts filterBy). */
   private pool: 'normal' | 'shadow' = 'normal';
 
   override async onCreate(options?: { pool?: unknown }): Promise<void> {
-    this.pool = options?.pool === 'shadow' ? 'shadow' : 'normal';
+    // Only two pools exist: none (normal) or the opaque shadow id. Anything else is refused
+    // here, before a physics world and bots are built (no private-room or room-spam tricks).
+    if (options?.pool !== undefined && options.pool !== SHADOW_POOL) {
+      throw new ServerError(400, 'unknown pool');
+    }
+    this.pool = options?.pool === SHADOW_POOL ? 'shadow' : 'normal';
     const preset = presetFromEnv(process.env.SENTINEL_LAG);
     if (preset) {
       this.lag = new FakeLag(preset, Date.now() & 0xffff);
@@ -276,15 +293,19 @@ export class MatchRoom extends Room {
     const token = (options as { token?: unknown }).token;
     const guestId = verifyGuestToken(token, API_SECRET);
     // Unlocks come from the API (server-reported progress), never from the client.
-    const access = (await MatchRoom.fetchAccess(guestId)) ?? NEW_PLAYER;
+    // Moderation covers the profile and the connection (IP, as a keyed hash): a banned player
+    // can't come back as a new guest or without a token from the same connection.
+    const ipHashValue = ipHash(API_SECRET, context.ip ?? 'unknown');
+    const access = (await MatchRoom.fetchAccess(guestId, ipHashValue)) ?? NEW_PLAYER;
     if (access.status === 'banned') {
       counters.rejectedJoins.inc();
       throw new ServerError(4403, 'BANNED');
     }
     // Shadow pool (Phase 7 task 6): shadow-banned players only ever play each other. A join
-    // into the wrong pool is refused with the right pool's name; the client retries there.
+    // into the wrong pool is refused with an opaque reroute id the client follows.
     const pool = access.status === 'shadow' ? 'shadow' : 'normal';
-    if (pool !== this.pool) throw new ServerError(4409, `POOL:${pool}`);
+    if (pool !== this.pool)
+      throw new ServerError(4409, `REROUTE:${pool === 'shadow' ? SHADOW_POOL : ''}`);
     return { guestId, access, ip: context.ip ?? null };
   }
 
@@ -334,6 +355,7 @@ export class MatchRoom extends Room {
       guestId,
       access,
       inviteToken: randomBytes(9).toString('base64url'),
+      ipHash: ipHash(API_SECRET, auth?.ip ?? 'unknown'),
       chatKey: guestId ?? `ip:${auth?.ip ?? client.sessionId}`,
     });
     counters.joins.inc();
@@ -378,7 +400,7 @@ export class MatchRoom extends Room {
     for (const seat of this.seats.values()) {
       if (!seat.guestId) continue;
       // If the API can't answer, the player keeps what they had.
-      void MatchRoom.fetchAccess(seat.guestId).then((access) => {
+      void MatchRoom.fetchAccess(seat.guestId, seat.ipHash).then((access) => {
         if (!access) return;
         seat.access = access;
         // Banned since joining: out now. (Shadow status applies from the next join.)

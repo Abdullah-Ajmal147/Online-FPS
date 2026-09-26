@@ -207,8 +207,11 @@ async function joinWithPool(client: Client, options: Record<string, unknown>): P
     return await client.joinOrCreate('match', options);
   } catch (err) {
     const msg = String((err as { message?: unknown }).message ?? err);
-    const pool = /POOL:(\w+)/.exec(msg)?.[1];
-    if (pool) return client.joinOrCreate('match', { ...options, pool });
+    const reroute = /REROUTE:(\w*)/.exec(msg);
+    if (reroute) {
+      const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== 'pool'));
+      return client.joinOrCreate('match', reroute[1] ? { ...rest, pool: reroute[1] } : rest);
+    }
     if (msg.includes('BANNED'))
       throw new Error('This account is banned from matches.', { cause: err });
     throw err;

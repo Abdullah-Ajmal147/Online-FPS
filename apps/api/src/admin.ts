@@ -1,5 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
-import { RateLimiter } from '@sentinel/auth';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import type { Store } from './db.ts';
@@ -7,44 +6,69 @@ import type { Store } from './db.ts';
 /**
  * Moderation (Phase 7 task 5): a small admin page on the API. Off unless
  * SENTINEL_ADMIN_PASSWORD (12+ characters) is set; HTTP Basic auth (user "admin") behind
- * Caddy's HTTPS; failed logins are rate-limited per IP.
+ * Caddy's HTTPS; 10 wrong passwords lock an IP out for 15 minutes (a global cap too);
+ * writes must be same-origin JSON (no CSRF); the page can't be framed.
  */
 export function mountAdmin(
   app: Hono,
   store: Store,
   password: string | undefined,
   codeOf: (guestId: string) => string,
+  clientIp: (c: Context) => string,
+  now: () => number,
 ): void {
   if (!password || password.length < 12) return; // admin disabled: every /admin path is a 404
-  const expected = Buffer.from(`admin:${password}`);
-  const failures = new RateLimiter(10, 1 / 60);
-  const ipOf = (c: Context) => c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  const digest = (v: string) => createHash('sha256').update(v).digest();
+  const expected = digest(`admin:${password}`);
+  // Lockout is checked BEFORE the password: while locked, even the right password is refused.
+  const perIp = new Map<string, { fails: number; first: number; until: number }>();
+  let globalFails = 0;
+  let globalWindow = 0;
 
   app.use('/admin/*', async (c, next) => {
+    const ip = clientIp(c);
+    const t = now();
+    const entry = perIp.get(ip);
+    if (entry && entry.until > t) return c.text('too many attempts, try later', 429);
+    if (t - globalWindow > 60_000) {
+      globalWindow = t;
+      globalFails = 0;
+    }
+    if (globalFails > 100) return c.text('too many attempts, try later', 429);
     const header = c.req.header('authorization') ?? '';
     const given = header.startsWith('Basic ')
-      ? Buffer.from(Buffer.from(header.slice(6), 'base64').toString('utf8'))
-      : Buffer.alloc(0);
-    const ok = given.length === expected.length && timingSafeEqual(given, expected);
-    if (!ok) {
-      if (!failures.take(ipOf(c))) return c.text('too many attempts', 429);
+      ? Buffer.from(header.slice(6), 'base64').toString('utf8')
+      : '';
+    // Equal-length digests: the comparison leaks neither content nor length.
+    if (!timingSafeEqual(digest(given), expected)) {
+      globalFails++;
+      // Failures within a 10-minute window count together; an older streak starts over.
+      const e = entry && t - entry.first < 600_000 ? entry : { fails: 0, first: t, until: 0 };
+      e.fails++;
+      if (e.fails >= 10) e.until = t + 15 * 60_000; // 10 wrong in a row: 15 minutes out
+      perIp.set(ip, e);
       c.header('WWW-Authenticate', 'Basic realm="Sentinel admin"');
       return c.text('authentication required', 401);
     }
-    await next();
-  });
-  app.use('/admin', async (c, next) => {
-    // Same check for the page itself.
-    const header = c.req.header('authorization') ?? '';
-    const given = header.startsWith('Basic ')
-      ? Buffer.from(Buffer.from(header.slice(6), 'base64').toString('utf8'))
-      : Buffer.alloc(0);
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-      if (!failures.take(ipOf(c))) return c.text('too many attempts', 429);
-      c.header('WWW-Authenticate', 'Basic realm="Sentinel admin"');
-      return c.text('authentication required', 401);
+    perIp.delete(ip);
+    // Writes only as same-origin JSON: a form on another site can't ban or unban (CSRF).
+    if (c.req.method !== 'GET') {
+      const type = c.req.header('content-type') ?? '';
+      const site = c.req.header('sec-fetch-site');
+      const origin = c.req.header('origin');
+      const host = c.req.header('host');
+      const sameOrigin =
+        site === 'same-origin' ||
+        (origin !== undefined && host !== undefined && new URL(origin).host === host);
+      if (!type.startsWith('application/json') || !sameOrigin) return c.text('forbidden', 403);
     }
     await next();
+    c.header('X-Frame-Options', 'DENY');
+    c.header('Cache-Control', 'no-store');
+    c.header(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
+    );
   });
 
   app.get('/admin', (c) => c.html(ADMIN_PAGE));
@@ -55,6 +79,7 @@ export function mountAdmin(
   });
   app.get('/admin/api/matches/:id/log', (c) => {
     const id = c.req.param('id');
+    if (!/^[0-9a-f-]{36}$/.test(id)) return c.json({ error: 'bad match id' }, 400);
     const log = store.matchLog(id);
     if (!log) return c.json({ error: 'no log (older than 14 days?)' }, 404);
     // Which in-match player is the one we're looking at (?code=…), and everyone's team.
@@ -72,7 +97,7 @@ export function mountAdmin(
   app.post('/admin/api/players/:code/status', async (c) => {
     const parsed = StatusSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'bad status' }, 400);
-    return store.setStatus(c.req.param('code'), parsed.data.status)
+    return store.setStatus(c.req.param('code'), parsed.data.status, now())
       ? c.json({ ok: true })
       : c.json({ error: 'no such player' }, 404);
   });

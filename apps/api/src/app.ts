@@ -7,6 +7,7 @@ import {
 } from '@sentinel/auth';
 import { mountAdmin } from './admin.ts';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
 import type { Store } from './db.ts';
@@ -17,21 +18,18 @@ import { levelFor, xpBreakdown } from './xp.ts';
 const GUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** What the game server reports at the end of a match (never accepted from a browser). */
+/** Match log (review replay). Validated on its own: a bad log is dropped, the result kept. */
+const MatchLogSchema = z.object({
+  samples: z.array(z.tuple([z.number(), z.array(z.array(z.number()).max(4)).max(24)])).max(4000),
+  kills: z.array(z.array(z.number()).max(9)).max(3000),
+});
+
 const MatchResultSchema = z.object({
   matchId: z.string().regex(GUEST_ID),
   mode: z.string(),
   map: z.string(),
   winner: z.number().int().min(0).max(255),
   durationSeconds: z.number().nonnegative(),
-  /** Compact replay for review (kept LOG_DAYS). Bounded so a result can't be huge. */
-  log: z
-    .object({
-      samples: z
-        .array(z.tuple([z.number(), z.array(z.array(z.number()).max(4)).max(24)]))
-        .max(4000),
-      kills: z.array(z.array(z.number()).max(9)).max(3000),
-    })
-    .optional(),
   players: z
     .array(
       z
@@ -96,11 +94,13 @@ export interface AppOptions {
 /** The API app, separate from the Node listener so tests can call it directly. */
 export function createApp(store: Store, secret: string, opts: AppOptions = {}): Hono {
   const app = new Hono();
+  const corsAll = cors();
   const now = opts.now ?? Date.now;
   // Every profile gets its current public code (rows from before codes existed, or from an
   // older code format), so friends can always find them.
   store.backfillCodes((guestId) => publicCode(secret, guestId));
-  app.use('*', cors());
+  // Open CORS for the game's public API; never for the admin page (credentials + CSRF).
+  app.use('*', async (c, next) => (c.req.path.startsWith('/admin') ? next() : corsAll(c, next)));
   app.use('*', async (_c, next) => {
     counters.requests.inc();
     await next();
@@ -121,11 +121,8 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       return c.json({ error: 'too many requests' }, 429);
     }
     counters.guests.inc();
-    const guest = issueGuestToken(secret);
-    // A profile row from the start: moderators can act on a reported player (by code) even
-    // if they never finished a match.
-    store.createProfile(guest.guestId, publicCode(secret, guest.guestId), now());
-    return c.json(guest);
+    // No database row here (guests are free to create); the row appears on the first join.
+    return c.json(issueGuestToken(secret));
   });
 
   app.get('/healthz', (c) => c.json({ ok: true, service: 'api' }));
@@ -134,7 +131,8 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
    * Game server → API: a finished match. Signed with the server secret (a browser can't forge
    * it), each match counted once (replays rejected), XP computed here from the server's result.
    */
-  app.post('/matches', async (c) => {
+  // Results carry a match log (~150 KB); anything far bigger is refused before parsing.
+  app.post('/matches', bodyLimit({ maxSize: 2 * 1024 * 1024 }), async (c) => {
     const body = await c.req.text();
     const signed = verifyService(
       secret,
@@ -149,14 +147,17 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       return c.json({ error: 'bad signature' }, 401);
     }
     let parsed;
+    let log: z.infer<typeof MatchLogSchema> | null;
     try {
-      parsed = MatchResultSchema.parse(JSON.parse(body));
+      const json = JSON.parse(body) as { log?: unknown };
+      parsed = MatchResultSchema.parse(json);
+      const logResult = MatchLogSchema.safeParse(json.log);
+      log = logResult.success ? logResult.data : null;
     } catch {
       counters.rejected.inc();
       return c.json({ error: 'bad match result' }, 400);
     }
-    const { log, ...summary } = parsed;
-    if (!store.recordMatch(parsed.matchId, summary)) {
+    if (!store.recordMatch(parsed.matchId, parsed)) {
       counters.rejected.inc();
       return c.json({ error: 'match already recorded' }, 409);
     }
@@ -167,6 +168,9 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     for (const p of parsed.players) {
       if (p.bot || !p.guestId || seen.has(p.guestId)) continue; // each guest once per match
       seen.add(p.guestId);
+      // Flags count whatever the time played (a hacker who quits early is still flagged).
+      if (p.flags.length > 0)
+        store.addFlags(p.guestId, parsed.matchId, p.flags, p.aim ?? {}, now());
       // No XP for joining in the last seconds: at least 60 s, or a quarter of a short match.
       if (p.secondsPlayed < Math.min(60, parsed.durationSeconds / 4)) continue;
       const won = parsed.winner === p.team;
@@ -199,8 +203,6 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
         weaponKills: p.weaponKills,
       });
       awarded.push({ guestId: p.guestId, xp });
-      if (p.flags.length > 0)
-        store.addFlags(p.guestId, parsed.matchId, p.flags, p.aim ?? {}, now());
     }
     return c.json({ ok: true, awarded });
   });
@@ -210,13 +212,21 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
    * results (HMAC of the guest id), so it isn't rate-limited per IP: one game server asks for
    * every player it hosts.
    */
-  app.get('/access/:guestId', (c) => {
-    const guestId = c.req.param('guestId');
-    if (!GUEST_ID.test(guestId)) return c.json({ error: 'bad guest id' }, 400);
+  /**
+   * Game server → API at every join: what this player has unlocked and whether they may play.
+   * `guest` (may be empty: players without a profile) and `ip` (keyed hash of their IP) are
+   * signed by the game server. A ban on the profile or on the IP applies; a first-time guest
+   * gets their profile row here (so moderators can act on them by code).
+   */
+  app.get('/access', (c) => {
+    const guestId = c.req.query('guest') ?? '';
+    const ip = c.req.query('ip') ?? '';
+    if ((guestId && !GUEST_ID.test(guestId)) || !/^[0-9a-f]{16}$/.test(ip))
+      return c.json({ error: 'bad request' }, 400);
     const signed = verifyService(
       secret,
       'access',
-      guestId,
+      `${guestId}|${ip}`,
       c.req.header('x-sentinel-time'),
       c.req.header('x-sentinel-signature'),
       now(),
@@ -227,12 +237,13 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       if (!readLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
       return c.json({ error: 'bad signature' }, 401);
     }
-    const row = store.profile(guestId);
+    if (guestId) store.touchProfile(guestId, publicCode(secret, guestId), ip, now());
+    const row = guestId ? store.profile(guestId) : null;
     return c.json({
       level: levelFor(row?.xp ?? 0).level,
-      weaponKills: store.weaponKills(guestId),
+      weaponKills: guestId ? store.weaponKills(guestId) : {},
       unlockAll: opts.unlockAll === true,
-      status: store.statusOf(guestId),
+      status: store.worstStatus(guestId || null, ip),
     });
   });
 
@@ -241,11 +252,12 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
    * they are with their signed guest token; a few reports per player, then one per 10 min.
    */
   const reportLimit = new RateLimiter(5, 1 / 600);
+  const reportIpLimit = new RateLimiter(20, 1 / 120);
   const ReportSchema = z.object({
     token: z.string().max(200),
     code: z.string().regex(/^[0-9a-f]{16}$/),
     reason: z.enum(['cheating', 'abuse', 'name']),
-    matchId: z.string().max(64).nullable().default(null),
+    matchId: z.string().regex(GUEST_ID).nullable().default(null),
   });
   app.post('/reports', async (c) => {
     let body;
@@ -257,7 +269,10 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     const reporter = verifyGuestToken(body.token, secret);
     if (!reporter) return c.json({ error: 'bad token' }, 401);
     if (publicCode(secret, reporter) === body.code) return c.json({ error: 'that is you' }, 400);
-    if (!reportLimit.take(reporter)) return c.json({ error: 'too many reports' }, 429);
+    if (!reportLimit.take(reporter) || !reportIpLimit.take(ipOf(c)))
+      return c.json({ error: 'too many reports' }, 429);
+    // Only players who exist (joined a match at least once) can be reported.
+    if (!store.profileExists(body.code)) return c.json({ error: 'no such player' }, 404);
     store.addReport({
       reporter,
       targetCode: body.code,
@@ -269,7 +284,7 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     return c.json({ ok: true }, 202);
   });
 
-  mountAdmin(app, store, opts.adminPassword, (guestId) => publicCode(secret, guestId));
+  mountAdmin(app, store, opts.adminPassword, (guestId) => publicCode(secret, guestId), ipOf, now);
 
   /** Friends: a player's public card by code (name, level, last played). */
   app.get('/players/:code', (c) => {

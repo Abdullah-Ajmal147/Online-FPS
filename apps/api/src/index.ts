@@ -15,6 +15,10 @@ const store = new Store(process.env.SENTINEL_DB ?? 'data/sentinel.db');
 
 // Behind a reverse proxy (TRUST_PROXY=1) the real client IP is the first X-Forwarded-For entry.
 const trustProxy = process.env.TRUST_PROXY === '1';
+// Match logs are deleted after 14 days even when no new matches arrive (privacy).
+setInterval(() => store.pruneLogs(Date.now()), 3_600_000).unref();
+store.pruneLogs(Date.now());
+
 const app = createApp(store, secret, {
   // Only with SENTINEL_UNLOCK_ALL=1 (`pnpm dev` sets it so every weapon can be tried locally).
   unlockAll: resolveUnlockAll(process.env),
