@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * and for about a minute (a signature seen in a log can't be replayed later or reused for
  * something else):  `<purpose>:v1:<unixSeconds>:<payload>`.
  */
-export type ServicePurpose = 'match' | 'access';
+export type ServicePurpose = 'match' | 'access' | 'presence';
 
 export const MAX_CLOCK_SKEW_SECONDS = 60;
 

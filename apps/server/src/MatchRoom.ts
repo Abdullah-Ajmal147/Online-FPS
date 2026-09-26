@@ -86,7 +86,26 @@ interface Seat {
   ipHash: string;
   /** Chat rate-limit key: the guest profile, else the IP (a reconnect doesn't reset it). */
   chatKey: string;
+  /** The player lets friends see this match and join it (Settings; default on). */
+  allowJoin: boolean;
 }
+
+/** One room's humans, for friends' Join buttons (index.ts sends it to the API, signed). */
+export interface RoomPresence {
+  region: string;
+  roomId: string;
+  mode: string;
+  map: string;
+  private: boolean;
+  players: { guestId: string; inviteToken: string; allowJoin: boolean }[];
+}
+
+/** This server's region id (the client's region list uses the same ids). */
+const REGION = /^[a-z0-9-]{1,24}$/.test(process.env.SENTINEL_REGION ?? '')
+  ? process.env.SENTINEL_REGION!
+  : 'default';
+/** Presence heartbeat; the API forgets a room after ~2.5 missed beats. */
+const PRESENCE_EVERY_MS = 20_000;
 
 /**
  * Joins per IP (Phase 4 task 10): burst 20, then one per second. Stops join floods while
@@ -133,6 +152,13 @@ export class MatchRoom extends Room {
   /** What a player has unlocked, or null if unknown (index.ts wires the API; tests: unknown). */
   static fetchAccess: (guestId: string | null, ipHash: string) => Promise<Access | null> =
     async () => null;
+  /** Where presence reports go (index.ts: the API). Tests leave it off. */
+  static onPresence: ((report: RoomPresence) => void) | null = null;
+  private presenceTimer: ReturnType<typeof setTimeout> | undefined;
+  private presenceBeat: ReturnType<typeof setInterval> | undefined;
+  /** Private match (not in matchmaking; invite or Join button only). */
+  private isPrivateMatch = false;
+  private modeId = 'team-deathmatch';
 
   /** Matchmaking pool: 'shadow' rooms only hold shadow-banned players (index.ts filterBy). */
   private pool: 'normal' | 'shadow' = 'normal';
@@ -163,6 +189,7 @@ export class MatchRoom extends Room {
     const modeId =
       process.env.SENTINEL_MODE ?? (typeof options?.mode === 'string' ? options.mode : '');
     const modeDef = Object.hasOwn(modes, modeId) ? modes[modeId]! : modes['team-deathmatch']!;
+    this.modeId = modeDef.id;
     this.match = new Match(
       this.sim,
       createMode(modeDef),
@@ -191,6 +218,7 @@ export class MatchRoom extends Room {
     }
 
     liveRooms.add(this.gauges);
+    this.presenceBeat = setInterval(() => this.reportPresence(), PRESENCE_EVERY_MS);
     this.loop = new TickLoop(() => this.tick());
     this.setSimulationInterval(() => this.loop.pump(), PUMP_INTERVAL_MS);
 
@@ -322,6 +350,8 @@ export class MatchRoom extends Room {
       perks?: unknown;
       /** Party invite: the session id of the friend who shared the link (same team). */
       with?: unknown;
+      /** Friends may see and join this match (Settings). */
+      allowJoin?: unknown;
     },
   ): void {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
@@ -360,7 +390,9 @@ export class MatchRoom extends Room {
       inviteToken: randomBytes(9).toString('base64url'),
       ipHash: ipHash(API_SECRET, auth?.ip ?? 'unknown'),
       chatKey: guestId ?? `ip:${auth?.ip ?? client.sessionId}`,
+      allowJoin: options?.allowJoin !== false,
     });
+    this.presenceSoon();
     counters.joins.inc();
     log.info('player joined', {
       room: this.roomId,
@@ -424,6 +456,7 @@ export class MatchRoom extends Room {
     this.sim.changeMap(next);
     this.bots?.setMap(next);
     log.info('map rotated', { room: this.roomId, map: next.id });
+    this.presenceSoon();
     // Hello again: the client loads the new map (same player id and team).
     for (const client of this.clients) {
       const seat = this.seats.get(client.sessionId);
@@ -464,6 +497,7 @@ export class MatchRoom extends Room {
     this.seats.delete(client.sessionId);
     this.lag?.forget(client.sessionId);
     this.bots?.fill();
+    this.presenceSoon();
     log.info('player left', { room: this.roomId, session: client.sessionId });
   }
 
@@ -514,7 +548,36 @@ export class MatchRoom extends Room {
     bots: () => this.bots?.count ?? 0,
   };
 
+  /** Report presence shortly (joins and leaves often come in bursts). */
+  private presenceSoon(): void {
+    if (this.presenceTimer) return;
+    this.presenceTimer = setTimeout(() => {
+      this.presenceTimer = undefined;
+      this.reportPresence();
+    }, 1000);
+  }
+
+  private reportPresence(empty = false): void {
+    if (!MatchRoom.onPresence) return;
+    const players = empty
+      ? []
+      : [...this.seats.values()]
+          .filter((s): s is Seat & { guestId: string } => s.guestId !== null)
+          .map((s) => ({ guestId: s.guestId, inviteToken: s.inviteToken, allowJoin: s.allowJoin }));
+    MatchRoom.onPresence({
+      region: REGION,
+      roomId: this.roomId,
+      mode: this.modeId,
+      map: this.mapId,
+      private: this.isPrivateMatch,
+      players,
+    });
+  }
+
   override onDispose(): void {
+    clearInterval(this.presenceBeat);
+    clearTimeout(this.presenceTimer);
+    this.reportPresence(true); // everyone here is gone
     liveRooms.delete(this.gauges);
     log.info('room closed', { room: this.roomId, tickErrors: this.tickErrors });
   }

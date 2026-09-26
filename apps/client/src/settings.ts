@@ -59,6 +59,8 @@ export interface Settings {
   region: string;
   /** Replay your death from the killer's eyes. */
   killcam: boolean;
+  /** Friends who have your code may see your match and join it. */
+  allowJoin: boolean;
   /** Volumes, 0–1. */
   volumeMaster: number;
   volumeMusic: number;
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: 'team-deathmatch',
   region: 'auto',
   killcam: true,
+  allowJoin: true,
   volumeMaster: 0.8,
   volumeMusic: 0.6,
   volumeEffects: 0.9,
@@ -161,6 +164,7 @@ export function normalizeSettings(raw: unknown): Settings {
       typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
     headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
     killcam: typeof r.killcam === 'boolean' ? r.killcam : DEFAULT_SETTINGS.killcam,
+    allowJoin: typeof r.allowJoin === 'boolean' ? r.allowJoin : DEFAULT_SETTINGS.allowJoin,
     autoResolution:
       typeof r.autoResolution === 'boolean' ? r.autoResolution : DEFAULT_SETTINGS.autoResolution,
     volumeMaster: clamp(r.volumeMaster, 0, 1, DEFAULT_SETTINGS.volumeMaster),

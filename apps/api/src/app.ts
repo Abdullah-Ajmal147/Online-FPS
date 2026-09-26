@@ -6,6 +6,7 @@ import {
   verifyService,
 } from '@sentinel/auth';
 import { mountAdmin } from './admin.ts';
+import { Presence } from './presence.ts';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -343,6 +344,91 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
   });
 
   mountAdmin(app, store, opts.adminPassword, (guestId) => publicCode(secret, guestId), ipOf, now);
+
+  /**
+   * Game server → API: the humans in one room right now (every 20 s and on changes). Signed.
+   * Guest ids become public codes here; the game server never needs the API's code secret.
+   */
+  const presence = new Presence();
+  const PresenceSchema = z.object({
+    region: z.string().regex(/^[a-z0-9-]{1,24}$/),
+    roomId: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/),
+    mode: z.string().max(40),
+    map: z.string().max(40),
+    private: z.boolean(),
+    players: z
+      .array(
+        z.object({
+          guestId: z.string().regex(GUEST_ID),
+          inviteToken: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/),
+          allowJoin: z.boolean(),
+        }),
+      )
+      .max(12),
+  });
+  app.post('/presence', bodyLimit({ maxSize: 8 * 1024 }), async (c) => {
+    const body = await c.req.text();
+    const signed = verifyService(
+      secret,
+      'presence',
+      body,
+      c.req.header('x-sentinel-time'),
+      c.req.header('x-sentinel-signature'),
+      now(),
+    );
+    if (!signed) {
+      counters.rejected.inc();
+      if (!readLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
+      return c.json({ error: 'bad signature' }, 401);
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      return c.json({ error: 'bad presence' }, 400);
+    }
+    const parsed = PresenceSchema.safeParse(json);
+    if (!parsed.success) return c.json({ error: 'bad presence' }, 400);
+    const r = parsed.data;
+    presence.report(
+      {
+        ...r,
+        players: r.players.map((p) => ({
+          code: publicCode(secret, p.guestId),
+          inviteToken: p.inviteToken,
+          allowJoin: p.allowJoin,
+        })),
+      },
+      now(),
+    );
+    return c.body(null, 204);
+  });
+
+  /**
+   * Where a player is playing, for anyone who has their code (the owner's choice: a code is
+   * what you give friends; it's 64 random bits, so it can't be guessed). Needs a guest token
+   * (rate limits per player). Join details only if the player allows friends to join.
+   */
+  const presenceLimit = new RateLimiter(60, 1);
+  app.get('/players/:code/presence', (c) => {
+    const code = c.req.param('code');
+    if (!/^[0-9a-f]{16}$/.test(code)) return c.json({ error: 'bad code' }, 400);
+    const token = (c.req.header('authorization') ?? '').replace(/^Bearer /, '');
+    const viewer = verifyGuestToken(token, secret);
+    if (!viewer) return c.json({ error: 'bad token' }, 401);
+    if (!presenceLimit.take(viewer)) return c.json({ error: 'too many requests' }, 429);
+    const e = presence.get(code, now());
+    if (!e) return c.json({ status: 'offline' });
+    return c.json({
+      status: 'in-match',
+      region: e.region,
+      mode: e.mode,
+      map: e.map,
+      private: e.private,
+      humans: e.humans,
+      join: e.inviteToken ? { roomId: e.roomId, invite: e.inviteToken } : null,
+    });
+  });
 
   /** Friends: a player's public card by code (name, level, last played). */
   app.get('/players/:code', (c) => {

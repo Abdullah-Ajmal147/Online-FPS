@@ -714,6 +714,7 @@ export async function startGame(
         loadout: loadoutChoice(settings()),
         mode: settings().mode,
         region: settings().region,
+        allowJoin: settings().allowJoin,
       },
     );
   let sentLoadout = JSON.stringify(loadoutChoice(settings()));

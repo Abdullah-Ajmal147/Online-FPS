@@ -61,6 +61,7 @@ export class Connection {
       loadout: LoadoutChoice;
       mode: string;
       region: string;
+      allowJoin: boolean;
     },
   ): Promise<void> {
     const { name, token, loadout, mode } = join;
@@ -73,6 +74,7 @@ export class Connection {
         name,
         ...loadout,
         mode,
+        allowJoin: join.allowJoin,
         ...(token ? { token } : {}),
       };
       // Party invite link (?room=…&with=…): join the friend's match, on their team. If that

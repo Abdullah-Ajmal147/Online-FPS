@@ -1,7 +1,15 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { lore, maps, modes, news } from '@sentinel/content';
-import { accessOf, apiUrl, reportPlayer, sendFeedback } from '../profile.ts';
+import {
+  accessOf,
+  apiUrl,
+  friendPresence,
+  joinFriendUrl,
+  reportPlayer,
+  sendFeedback,
+  type FriendPresence,
+} from '../profile.ts';
 import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
 import {
   ACTIONS,
@@ -415,6 +423,24 @@ function SquadScreen() {
   const [friendCodes, setFriendCodes] = useState(friends());
   const [cards, setCards] = useState<Record<string, PlayerCard>>({});
   const [copied, setCopied] = useState<'no' | 'yes' | 'select'>('no');
+  const [presence, setPresence] = useState<Record<string, FriendPresence>>({});
+  // Friends' live status while this screen is open (every 10 s).
+  useEffect(() => {
+    let live = true;
+    const poll = () => {
+      for (const code of friendCodes) {
+        void friendPresence(code).then(
+          (p) => live && p && setPresence((all) => ({ ...all, [code]: p })),
+        );
+      }
+    };
+    poll();
+    const id = setInterval(poll, 10_000);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, [friendCodes]);
   const inviteInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -488,12 +514,14 @@ function SquadScreen() {
               <div class="list-row" key={code} data-testid={`friend-${code}`}>
                 <span>
                   {c ? c.name : <span class="mono">{code}</span>}
-                  {c && (
+                  {c && !presence[code] && (
                     <small>
                       level {c.level} · played {new Date(c.lastPlayed).toLocaleDateString()}
                     </small>
                   )}
+                  <FriendStatus p={presence[code]} />
                 </span>
+                <JoinFriend p={presence[code]} code={code} />
                 <button
                   class="link"
                   onClick={() => {
@@ -530,6 +558,34 @@ function SquadScreen() {
         </div>
       </div>
     </Screen>
+  );
+}
+
+function FriendStatus({ p }: { p: FriendPresence | undefined }) {
+  if (!p) return null;
+  if (p.status === 'offline') return <small>Not in a match</small>;
+  return (
+    <small class="friend-live">
+      ● In {p.private ? 'a private match' : 'a match'} · {maps[p.map]?.name ?? p.map} ·{' '}
+      {modes[p.mode]?.name ?? p.mode}
+    </small>
+  );
+}
+
+/** Join a friend's match (their team): reloads the page into it, joining once loaded. */
+function JoinFriend({ p, code }: { p: FriendPresence | undefined; code: string }) {
+  if (!p || p.status !== 'in-match' || !p.join) return null;
+  const known = regions().some((r) => r.id === p.region);
+  if (!known) return <small class="muted">other server</small>;
+  const join = p.join;
+  return (
+    <button
+      class="btn"
+      data-testid={`join-${code}`}
+      onClick={() => location.assign(joinFriendUrl({ region: p.region, join }))}
+    >
+      Join
+    </button>
   );
 }
 
@@ -850,6 +906,15 @@ function SettingsScreen({
               checked={settings.killcam}
               data-testid="killcam-toggle"
               onChange={(e) => set('killcam', (e.target as HTMLInputElement).checked)}
+            />
+          </label>
+          <label class="row">
+            <span>Let friends join my match (anyone with my player code)</span>
+            <input
+              type="checkbox"
+              checked={settings.allowJoin}
+              data-testid="allow-join"
+              onChange={(e) => set('allowJoin', (e.target as HTMLInputElement).checked)}
             />
           </label>
           <PrimerReset />

@@ -638,3 +638,100 @@ describe('moderation hardening (review)', () => {
     expect((await a.request(`/players/${code}`)).status).toBe(200);
   });
 });
+
+describe('presence (friends: Join button)', () => {
+  const presenceApp = () => {
+    let clock = Date.UTC(2026, 8, 26, 12);
+    const a = createApp(new Store(':memory:'), SECRET, { now: () => clock });
+    return { a, advance: (ms: number) => (clock += ms), now: () => clock };
+  };
+  const report = (a: ReturnType<typeof app>, body: object, nowMs: number, secret = SECRET) => {
+    const text = JSON.stringify(body);
+    return a.request('/presence', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceHeaders(secret, 'presence', text, nowMs),
+      },
+      body: text,
+    });
+  };
+  const token = async (a: ReturnType<typeof app>) =>
+    ((await (await a.request('/guests', { method: 'POST' })).json()) as { token: string }).token;
+  const codeOf = async (a: ReturnType<typeof app>, guest: string) =>
+    ((await (await a.request(`/profiles/${guest}`)).json()) as { code: string }).code;
+  const look = async (a: ReturnType<typeof app>, code: string, tok: string) =>
+    (
+      await a.request(`/players/${code}/presence`, { headers: { authorization: `Bearer ${tok}` } })
+    ).json() as Promise<Record<string, unknown>>;
+  const room = (players: { guestId: string; inviteToken: string; allowJoin: boolean }[]) => ({
+    region: 'eu-west',
+    roomId: 'Room_42',
+    mode: 'team-deathmatch',
+    map: 'relay-yard',
+    private: false,
+    players,
+  });
+
+  it('shows where a player is, with join details, to anyone with their code and a token', async () => {
+    const { a, now } = presenceApp();
+    const viewer = await token(a);
+    const code = await codeOf(a, GUEST);
+    expect(await look(a, code, viewer)).toEqual({ status: 'offline' });
+    const r = await report(
+      a,
+      room([{ guestId: GUEST, inviteToken: 'inv1', allowJoin: true }]),
+      now(),
+    );
+    expect(r.status).toBe(204);
+    expect(await look(a, code, viewer)).toMatchObject({
+      status: 'in-match',
+      region: 'eu-west',
+      map: 'relay-yard',
+      join: { roomId: 'Room_42', invite: 'inv1' },
+    });
+    // Without a valid guest token: nothing.
+    expect((await a.request(`/players/${code}/presence`)).status).toBe(401);
+    // Guest ids never appear.
+    expect(JSON.stringify(await look(a, code, viewer))).not.toContain(GUEST);
+  });
+
+  it('hides join details when the player turned joining off', async () => {
+    const { a, now } = presenceApp();
+    const viewer = await token(a);
+    await report(a, room([{ guestId: GUEST, inviteToken: 'inv1', allowJoin: false }]), now());
+    expect(await look(a, await codeOf(a, GUEST), viewer)).toMatchObject({
+      status: 'in-match',
+      join: null,
+    });
+  });
+
+  it('players who left or whose server stopped reporting go offline', async () => {
+    const { a, now, advance } = presenceApp();
+    const viewer = await token(a);
+    const both = [
+      { guestId: GUEST, inviteToken: 'a', allowJoin: true },
+      { guestId: OTHER, inviteToken: 'b', allowJoin: true },
+    ];
+    await report(a, room(both), now());
+    await report(a, room(both.slice(1)), now()); // GUEST left
+    expect(await look(a, await codeOf(a, GUEST), viewer)).toEqual({ status: 'offline' });
+    expect((await look(a, await codeOf(a, OTHER), viewer)).status).toBe('in-match');
+    advance(60_000); // no heartbeat
+    expect(await look(a, await codeOf(a, OTHER), viewer)).toEqual({ status: 'offline' });
+  });
+
+  it('only signed reports are accepted, and they are validated', async () => {
+    const { a, now } = presenceApp();
+    const good = room([{ guestId: GUEST, inviteToken: 'a', allowJoin: true }]);
+    expect((await report(a, good, now(), 'wrong-secret')).status).toBe(401);
+    expect((await report(a, { ...good, roomId: '../../x' }, now())).status).toBe(400);
+    const text = 'not json';
+    const bad = await a.request('/presence', {
+      method: 'POST',
+      headers: serviceHeaders(SECRET, 'presence', text, now()),
+      body: text,
+    });
+    expect(bad.status).toBe(400);
+  });
+});

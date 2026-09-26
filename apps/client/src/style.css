@@ -2144,3 +2144,7 @@ details.patch summary small {
   font: 12px var(--mono);
   color: var(--muted);
 }
+
+.friend-live {
+  color: #5cc27d !important;
+}

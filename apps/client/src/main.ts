@@ -35,6 +35,14 @@ trackGameplay(platform());
 let game: Game | undefined;
 /** DEPLOY pressed before the game finished loading. */
 let wantToJoin = false;
+// Opened by a friend's Join button (?room=…&with=…&join=1): join as soon as the game has
+// loaded; the first click then captures the mouse (browsers need a click for that).
+if (new URLSearchParams(location.search).get('join') === '1') {
+  wantToJoin = true;
+  const url = new URL(location.href);
+  url.searchParams.delete('join'); // a reload later shouldn't rejoin by itself
+  history.replaceState(null, '', url);
+}
 
 const ui = document.getElementById('ui')!;
 const rerender = () =>

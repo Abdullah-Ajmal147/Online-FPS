@@ -171,3 +171,43 @@ export async function sendFeedback(
     return { ok: false, message: 'Could not send it (offline?).' };
   }
 }
+
+export type FriendPresence =
+  | { status: 'offline' }
+  | {
+      status: 'in-match';
+      region: string;
+      mode: string;
+      map: string;
+      private: boolean;
+      humans: number;
+      /** Null when the friend doesn't allow joining. */
+      join: { roomId: string; invite: string } | null;
+    };
+
+/** Where a friend is playing right now (null if the API can't say). */
+export async function friendPresence(code: string): Promise<FriendPresence | null> {
+  const guest = await ensureGuest();
+  if (!guest) return null;
+  try {
+    const res = await fetch(`${apiUrl()}/players/${code}/presence`, {
+      headers: { authorization: `Bearer ${guest.token}` },
+    });
+    return res.ok ? ((await res.json()) as FriendPresence) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Page URL that joins a friend's match on their team (the Join button reloads into it). */
+export function joinFriendUrl(p: {
+  region: string;
+  join: { roomId: string; invite: string };
+}): string {
+  const url = new URL(location.href);
+  url.searchParams.set('room', p.join.roomId);
+  url.searchParams.set('with', p.join.invite);
+  url.searchParams.set('region', p.region);
+  url.searchParams.set('join', '1');
+  return url.toString();
+}

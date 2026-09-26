@@ -1,5 +1,6 @@
 import { serviceHeaders, type Logger } from '@sentinel/auth';
 import type { MatchSummary } from './match.ts';
+import type { RoomPresence } from './MatchRoom.ts';
 
 /**
  * Sends finished matches to the API (Phase 4 lite), signed with the shared server secret so a
@@ -38,5 +39,34 @@ export function createApiReporter(opts: {
       await new Promise((r) => setTimeout(r, 500 * attempt));
     }
     return false;
+  };
+}
+
+/**
+ * Presence (friends' Join button): fire-and-forget, signed. A lost report is fixed by the next
+ * heartbeat, so there are no retries.
+ */
+export function createPresenceReporter(opts: {
+  url: string;
+  secret: string;
+  fetchImpl?: typeof fetch;
+  log?: Logger;
+}) {
+  const doFetch = opts.fetchImpl ?? fetch;
+  return function reportPresence(report: RoomPresence): void {
+    const body = JSON.stringify(report);
+    void doFetch(`${opts.url}/presence`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceHeaders(opts.secret, 'presence', body),
+      },
+      body,
+      signal: AbortSignal.timeout(3000),
+    })
+      .then((res) => {
+        if (!res.ok) opts.log?.warn('API refused presence', { status: res.status });
+      })
+      .catch((err: unknown) => opts.log?.warn('presence not sent', { err: String(err) }));
   };
 }
