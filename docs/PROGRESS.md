@@ -339,6 +339,9 @@ Done:
 - 1. (part) Logo mark as favicon, link-preview card (`og.png`, source in `tools/brand/`),
      Open Graph / Twitter tags; `SITE_URL` at build time makes the image URL absolute. Final
      name, trademark and domain checks are the owner's.
+- 2. (part) First-match primer: six one-line steps (move, fire, aim, reload, grenades,
+     mode objective) shown at the player's own key bindings, each done by doing it; Backspace
+     skips; shown once (Settings → Game can bring it back). A random tip on the deploy screen.
 - 3. Domination (protocol v12): nodes A, B, C on Relay Yard and Saltline Depot (content data:
      radius 4 m, 5 s to capture, faster with more teammates, contested = frozen; 1 point per
      held node per second + 1 per kill, 200 to win). Picked on the Play screen; the server
@@ -348,6 +351,8 @@ Done:
      other, 1000 chars, sends build + renderer + mode, rate-limited per guest and IP, kept 180
      days, listed on the admin page), community link slot (hidden until the owner has a
      Discord). Deploy screen shows a gameplay tip.
+
+Open issues: name tags of players standing together overlap (seen in a primer screenshot).
 
 Learned: points must be built during warm-up too (`GameMode.sync`), not only in the live
 tick — otherwise the first MatchInfo has no nodes and the HUD stays empty.

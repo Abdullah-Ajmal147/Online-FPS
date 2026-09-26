@@ -2011,3 +2011,45 @@ details.patch summary small {
 .feedback p.warn {
   color: #e5a04b;
 }
+
+/* First-match primer */
+.primer {
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+  min-width: 320px;
+  max-width: min(560px, 90vw);
+  padding: 10px 18px 10px 16px;
+  border-left: 3px solid var(--amber);
+  background: rgb(8 11 10 / 78%);
+  color: var(--text);
+  pointer-events: none;
+  animation: primer-in 0.25s ease-out;
+}
+
+.primer-count {
+  font: 600 11px var(--display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.primer-text {
+  margin-top: 3px;
+  font: 600 18px var(--display);
+  letter-spacing: 0.04em;
+}
+
+.primer-skip {
+  margin-top: 4px;
+  font: 11px var(--mono);
+  color: var(--muted);
+}
+
+@keyframes primer-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}

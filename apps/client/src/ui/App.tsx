@@ -6,6 +6,8 @@ import { CombatHud } from './CombatHud.tsx';
 import { DebugOverlay } from './DebugOverlay.tsx';
 import { useStatus } from './Hud.tsx';
 import { MatchUi } from './MatchUi.tsx';
+import { primerDone } from '../primer.ts';
+import { Primer } from './Primer.tsx';
 import { Menu } from './Menu.tsx';
 
 interface Props {
@@ -26,6 +28,9 @@ export function App(props: Props) {
           <CombatHud />
           <MatchUi />
           <Chat />
+          {!primerDone() && status.spawned && status.playing && (
+            <Primer settings={props.settings} />
+          )}
         </>
       )}
       <DebugOverlay />

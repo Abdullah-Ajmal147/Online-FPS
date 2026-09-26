@@ -16,6 +16,7 @@ import {
 } from '../settings.ts';
 import { useStatus } from './Hud.tsx';
 import { LoadoutPicker } from './Loadout.tsx';
+import { primerDone, setPrimerDone } from '../primer.ts';
 
 interface Props {
   settings: Settings;
@@ -523,6 +524,26 @@ function IntelScreen() {
   );
 }
 
+function PrimerReset() {
+  const [done, setDone] = useState(primerDone);
+  return (
+    <div class="row">
+      <span>First-match tips</span>
+      <button
+        class="btn"
+        disabled={!done}
+        data-testid="primer-reset"
+        onClick={() => {
+          setPrimerDone(false);
+          setDone(false);
+        }}
+      >
+        {done ? 'Show again' : 'Next match'}
+      </button>
+    </div>
+  );
+}
+
 // --- Comms: patch notes, feedback, community ----------------------------------------------
 
 type FeedbackKind = 'bug' | 'idea' | 'other';
@@ -753,6 +774,7 @@ function SettingsScreen({
               onChange={(e) => set('headBob', (e.target as HTMLInputElement).checked)}
             />
           </label>
+          <PrimerReset />
         </div>
       )}
 
