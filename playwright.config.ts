@@ -8,6 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
  *   :2570 — no bots, open arena: grenade test (its smoke and frag would disturb other tests)
  *   :2571 — no bots, open arena: the two-player combat test (exactly two players, so they are
  *           always on opposite teams)
+ *   :2572 — bots, arena: party invite test (three friends, one link, one team)
  *   :8787 — progression API (in-memory DB); the :2568 server reports finished matches to it
  * Game servers are never reused (they need these exact settings), so stop `pnpm dev` first.
  */
@@ -17,7 +18,15 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: 'http://localhost:5173' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /timing\.spec/ },
+    {
+      name: 'timing',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /timing\.spec/,
+      dependencies: ['chromium'],
+    },
+  ],
   webServer: [
     {
       // Run binaries directly (no pnpm wrapper, no watch) so Playwright can stop them cleanly.
@@ -84,6 +93,20 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
+      // Party invite test: bots fill the match, so joining a friend's team swaps a bot out.
+      command: 'node_modules/.bin/tsx src/index.ts',
+      cwd: 'apps/server',
+      url: 'http://localhost:2572/healthz',
+      env: {
+        PORT: '2572',
+        SENTINEL_MAP: 'arena',
+        SENTINEL_BOT_DIFFICULTY: 'easy',
+        SENTINEL_WARMUP_SECONDS: '3600',
+      },
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
+      reuseExistingServer: false,
+    },
+    {
       // Progression API with a throwaway in-memory database.
       command: 'node_modules/.bin/tsx src/index.ts',
       cwd: 'apps/api',
@@ -98,7 +121,9 @@ export default defineConfig({
       cwd: 'apps/client',
       url: 'http://localhost:5173',
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
-      reuseExistingServer: !process.env.CI,
+      // Always a fresh dev server: reusing one left over from a previous run (or a pnpm dev)
+      // gave blank pages every other run.
+      reuseExistingServer: false,
     },
   ],
 });

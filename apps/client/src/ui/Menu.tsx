@@ -50,6 +50,7 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
         </p>
         <ProfileCard />
         <Challenges />
+        <Invite />
         <button class="play" data-testid="play" onClick={onPlay}>
           Click to play
         </button>
@@ -225,6 +226,29 @@ function Challenges() {
             })}
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Party invite: a link that puts friends into this match on your team. */
+function Invite() {
+  const link = useStatus().invite;
+  const [copied, setCopied] = useState(false);
+  if (!link) return null;
+  return (
+    <div class="invite" data-testid="invite">
+      <span>Play with friends: send them this link (they join your team).</span>
+      <div class="invite-row">
+        <input type="text" readOnly value={link} data-testid="invite-link" />
+        <button
+          class="key"
+          onClick={() => {
+            void navigator.clipboard?.writeText(link).then(() => setCopied(true));
+          }}
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
+      </div>
     </div>
   );
 }

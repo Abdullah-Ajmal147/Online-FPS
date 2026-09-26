@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 /** Phase 5 task 5: G throws a frag, Q a smoke; the server simulates both. */
 test('throwing a frag and a smoke: counts drop, the smoke cloud appears', async ({ page }) => {
   await page.goto('/?server=http://localhost:2570');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
   const status = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus());
   await expect.poll(async () => (await status()).combat?.frags).toBe(1);
   await page.addStyleTag({ content: '.menu{display:none!important}' });

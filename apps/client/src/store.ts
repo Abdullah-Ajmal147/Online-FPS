@@ -91,6 +91,8 @@ export interface ClientStatus {
   profile: Profile | null;
   /** lastMatch id when the current match went live: a newer one is this match's XP. */
   xpBaseline: string | null;
+  /** Party invite link for the current match (null until connected). */
+  invite: string | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -107,6 +109,7 @@ let status: ClientStatus = {
   match: null,
   profile: null,
   xpBaseline: null,
+  invite: null,
 };
 const listeners = new Set<Listener>();
 

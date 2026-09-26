@@ -239,10 +239,14 @@ export class MatchRoom extends Room {
       secondary?: unknown;
       attachments?: unknown;
       perks?: unknown;
+      /** Party invite: the session id of the friend who shared the link (same team). */
+      with?: unknown;
     },
   ): void {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
-    const team = this.bots ? this.bots.teamForHuman() : undefined;
+    // Joining through a friend's invite puts you on their team if it has room for a human.
+    const team =
+      this.partyTeam(options?.with) ?? (this.bots ? this.bots.teamForHuman() : undefined);
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
     const auth = client.auth as { guestId?: string | null; access?: Access } | undefined;
     const guestId = this.uniqueGuest(auth?.guestId ?? null);
@@ -289,6 +293,18 @@ export class MatchRoom extends Room {
       }),
     );
     this.sendMatchInfo();
+  }
+
+  /** The team of the player who shared an invite, if they're here and it has room for one more. */
+  private partyTeam(sessionId: unknown): number | undefined {
+    if (typeof sessionId !== 'string') return undefined;
+    const seat = this.seats.get(sessionId);
+    const host = seat && this.sim.players.get(seat.playerId);
+    if (!host) return undefined;
+    const perTeam = modes['team-deathmatch']!.playersPerTeam;
+    let humans = 0;
+    for (const p of this.sim.players.values()) if (!p.bot && p.team === host.team) humans++;
+    return humans < perTeam ? host.team : undefined;
   }
 
   /** Re-read every player's unlocks from the API (async; applies to later loadout changes). */

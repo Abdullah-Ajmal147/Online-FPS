@@ -919,3 +919,26 @@ body.aim-enemy .crosshair-lines i {
 .challenge.done .challenge-row span:first-child {
   color: #3fb950;
 }
+
+.invite {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #c9d1d9;
+}
+
+.invite-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.invite-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #0d1117;
+  color: #8b949e;
+  font-size: 12px;
+}

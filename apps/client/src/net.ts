@@ -59,14 +59,27 @@ export class Connection {
     const { name, token, loadout } = join;
     const client = new Client(serverUrl());
     try {
-      const room = await client.joinOrCreate('match', {
+      const options = {
         protocolVersion: PROTOCOL_VERSION,
         contentHash: CONTENT_HASH,
         name,
         ...loadout,
         ...(token ? { token } : {}),
-      });
+      };
+      // Party invite link (?room=…&with=…): join the friend's match, on their team. If that
+      // room is full or gone, fall back to any match.
+      const invite = inviteFromUrl();
+      let room: Room | undefined;
+      if (invite) {
+        try {
+          room = await client.joinById(invite.room, { ...options, with: invite.with });
+        } catch (err) {
+          console.warn('[net] invite room unavailable, joining any match:', err);
+        }
+      }
+      room ??= await client.joinOrCreate('match', options);
       this.room = room;
+      setStatus({ invite: inviteUrl(room.roomId, room.sessionId) });
 
       room.onMessage(MessageType.Hello, (payload: Uint8Array) => {
         const hello = decodeHello(payload);
@@ -147,4 +160,21 @@ export class Connection {
   sendLoadout(loadout: LoadoutWire): void {
     this.room?.sendBytes(MessageType.SetLoadout, encodeSetLoadout(loadout));
   }
+}
+
+/** Invite parameters from this page's URL, if it was opened from an invite link. */
+export function inviteFromUrl(): { room: string; with: string } | null {
+  const q = new URLSearchParams(location.search);
+  const room = q.get('room');
+  const withId = q.get('with');
+  const ok = (v: string | null): v is string => !!v && /^[A-Za-z0-9_-]{1,40}$/.test(v);
+  return ok(room) && ok(withId) ? { room, with: withId } : null;
+}
+
+/** A link that brings a friend into this match, on this player's team. */
+export function inviteUrl(roomId: string, sessionId: string): string {
+  const url = new URL(location.href);
+  url.searchParams.set('room', roomId);
+  url.searchParams.set('with', sessionId);
+  return url.toString();
 }
