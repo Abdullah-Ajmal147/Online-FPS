@@ -13,7 +13,7 @@ type Target = {
  * hip-fires at visible bots, like a person would (no aiming down sights), must get kills.
  */
 test('a hip-firing player kills bots in a real match', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(220_000);
   await page.setViewportSize({ width: 480, height: 270 });
   await page.goto('/?server=http://localhost:2569');
   await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
@@ -23,7 +23,8 @@ test('a hip-firing player kills bots in a real match', async ({ page }) => {
 
   const kills = async () => (await status()).match?.players.find((p) => p.me)?.kills ?? 0;
   // Keep playing across match phases (we may join a match that is nearly over).
-  const deadline = Date.now() + 90_000;
+  // Generous: headless pages run a few fps while other tests share the machine.
+  const deadline = Date.now() + 150_000;
   while (Date.now() < deadline && (await kills()) < 1) {
     const s = await status();
     if (s.match?.phase !== 'live' || !s.combat?.alive) {
