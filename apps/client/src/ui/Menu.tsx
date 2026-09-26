@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { lore, maps, modes, news } from '@sentinel/content';
 import { accessOf, apiUrl, reportPlayer, sendFeedback } from '../profile.ts';
 import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
@@ -414,7 +414,8 @@ function SquadScreen() {
   const [recent, setRecent] = useState(recentPlayers());
   const [friendCodes, setFriendCodes] = useState(friends());
   const [cards, setCards] = useState<Record<string, PlayerCard>>({});
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'no' | 'yes' | 'select'>('no');
+  const inviteInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setRecent(recentPlayers());
@@ -437,14 +438,31 @@ function SquadScreen() {
         <div class="panel-h">Invite link</div>
         {status.invite ? (
           <div class="field-row" data-testid="invite">
-            <input type="text" readOnly value={status.invite} data-testid="invite-link" />
+            <input
+              type="text"
+              readOnly
+              value={status.invite}
+              data-testid="invite-link"
+              ref={inviteInput}
+              onFocus={(e) => (e.target as HTMLInputElement).select()}
+            />
             <button
               class="btn"
-              onClick={() =>
-                void navigator.clipboard?.writeText(status.invite!).then(() => setCopied(true))
-              }
+              onClick={() => {
+                // The clipboard API needs https or localhost; on a LAN address (http://192.…)
+                // select the link instead so Ctrl+C copies it.
+                const selectLink = () => {
+                  inviteInput.current?.select();
+                  setCopied('select');
+                };
+                if (!navigator.clipboard) return selectLink();
+                navigator.clipboard
+                  .writeText(status.invite!)
+                  .then(() => setCopied('yes'))
+                  .catch(selectLink);
+              }}
             >
-              {copied ? 'Copied' : 'Copy'}
+              {copied === 'yes' ? 'Copied' : copied === 'select' ? 'Press Ctrl+C' : 'Copy'}
             </button>
           </div>
         ) : (

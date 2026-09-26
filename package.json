@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,api,client -c blue,magenta,green \"pnpm --filter @sentinel/server dev\" \"pnpm --filter @sentinel/api dev\" \"pnpm --filter @sentinel/client dev\"",
+    "dev:lan": "concurrently -k -n server,api,client -c blue,magenta,green \"pnpm --filter @sentinel/server dev\" \"pnpm --filter @sentinel/api dev\" \"pnpm --filter @sentinel/client dev --host\"",
     "dev:lag": "node scripts/dev-lag.mjs",
     "build": "pnpm -r build",
     "test": "vitest run",
