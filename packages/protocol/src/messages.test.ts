@@ -78,8 +78,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 11 (Phase 6: invite token in Hello)', () => {
-    expect(PROTOCOL_VERSION).toBe(11);
+  it('is 12 (Phase 8: modes and capture points in MatchInfo)', () => {
+    expect(PROTOCOL_VERSION).toBe(12);
   });
 });
 
@@ -269,6 +269,12 @@ describe('MatchInfo', () => {
       teamScores: [41, 38] as [number, number],
       winner: 255,
       mvp: 0,
+      mode: 'domination',
+      points: [
+        { id: 'A', owner: 0, control: 1 },
+        { id: 'B', owner: -1, control: -0.37 },
+        { id: 'C', owner: 1, control: -1 },
+      ],
       players: [
         { id: 1, team: 0, bot: false, kills: 12, deaths: 4, name: 'Ayesha', code: 'a1b2c3d4e5' },
         { id: 2, team: 1, bot: true, kills: 9, deaths: 7, name: 'Bot Heron', code: '' },
@@ -285,6 +291,8 @@ describe('MatchInfo', () => {
       teamScores: [0, 0] as [number, number],
       winner: 255,
       mvp: 0,
+      mode: 'team-deathmatch',
+      points: [],
       players: [],
     };
     expect(decodeMatchInfo(encodeMatchInfo(info)).secondsLeft).toBe(5);

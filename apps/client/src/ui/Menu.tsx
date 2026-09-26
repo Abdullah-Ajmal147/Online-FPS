@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { lore, maps } from '@sentinel/content';
+import { lore, maps, modes } from '@sentinel/content';
 import { accessOf, apiUrl, reportPlayer } from '../profile.ts';
 import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
 import {
@@ -25,6 +25,9 @@ interface Props {
   /** LEAVE MATCH (pause menu). */
   onLeave: () => void;
 }
+
+/** Playlists offered on the Play screen (content mode ids). */
+const PLAYLISTS = ['team-deathmatch', 'domination'] as const;
 
 type Screen = 'play' | 'loadout' | 'career' | 'squad' | 'intel' | 'settings';
 
@@ -87,7 +90,9 @@ export function Menu(props: Props) {
       </nav>
 
       <main class="menu-screen" key={screen}>
-        {screen === 'play' && <PlayScreen onGo={setScreen} />}
+        {screen === 'play' && (
+          <PlayScreen onGo={setScreen} settings={props.settings} onSettings={props.onSettings} />
+        )}
         {screen === 'loadout' && (
           <Screen title="Loadout" kicker="Applies the next time you spawn">
             <LoadoutPicker
@@ -164,21 +169,53 @@ function Screen(props: { title: string; kicker?: string; children: ComponentChil
 
 // --- Play ---------------------------------------------------------------------------------
 
-function PlayScreen({ onGo }: { onGo: (s: Screen) => void }) {
+function PlayScreen({
+  onGo,
+  settings,
+  onSettings,
+}: {
+  onGo: (s: Screen) => void;
+  settings: Settings;
+  onSettings: (next: Settings) => void;
+}) {
   const status = useStatus();
   const map = maps[status.mapId] ?? maps['relay-yard']!;
   const invited = new URLSearchParams(location.search).has('with');
   const m = status.match;
   const daily = status.profile?.challenges.filter((c) => c.period === 'daily') ?? [];
   const team = m ? lore.factions[m.myTeam] : undefined;
+  const mode = modes[status.inMatch && m ? m.mode : settings.mode] ?? modes['team-deathmatch']!;
   return (
     <section class="screen play">
       <div class="mode">
         <div class="mode-tag">
           {status.inMatch ? (m ? `Match · ${m.phase}` : 'Joining…') : 'Quick play'}
         </div>
-        <h1 class="mode-title">Team Deathmatch</h1>
-        <div class="mode-meta">6 v 6 · first to 75 · 10 min</div>
+        <h1 class="mode-title">{mode.name}</h1>
+        <div class="mode-meta">
+          6 v 6 · first to {mode.scoreLimit} · {Math.round(mode.timeLimitSeconds / 60)} min
+        </div>
+        {!status.inMatch && (
+          <div class="playlists" role="radiogroup" aria-label="Playlist">
+            {PLAYLISTS.map((id) => {
+              const def = modes[id]!;
+              const on = settings.mode === id;
+              return (
+                <button
+                  key={id}
+                  role="radio"
+                  aria-checked={on}
+                  class={`playlist${on ? ' on' : ''}`}
+                  data-testid={`mode-${id}`}
+                  onClick={() => onSettings({ ...settings, mode: id })}
+                >
+                  <b>{def.name}</b>
+                  <span>{def.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         {invited && !status.inMatch && (
           <div class="notice">A friend invited you: DEPLOY puts you on their team.</div>
         )}

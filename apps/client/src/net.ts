@@ -58,9 +58,9 @@ export class Connection {
 
   async connect(
     handlers: NetHandlers,
-    join: { name: string; token: string | null; loadout: LoadoutChoice },
+    join: { name: string; token: string | null; loadout: LoadoutChoice; mode: string },
   ): Promise<void> {
-    const { name, token, loadout } = join;
+    const { name, token, loadout, mode } = join;
     const client = new Client(serverUrl());
     try {
       const options = {
@@ -68,6 +68,7 @@ export class Connection {
         contentHash: CONTENT_HASH,
         name,
         ...loadout,
+        mode,
         ...(token ? { token } : {}),
       };
       // Party invite link (?room=…&with=…): join the friend's match, on their team. If that

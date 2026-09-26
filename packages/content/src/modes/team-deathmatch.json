@@ -4,5 +4,6 @@
   "teams": 2,
   "playersPerTeam": 6,
   "timeLimitSeconds": 600,
-  "scoreLimit": 75
+  "scoreLimit": 75,
+  "description": "Six against six. Every elimination scores; first to 75 wins."
 }

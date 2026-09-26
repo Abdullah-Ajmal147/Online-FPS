@@ -43,6 +43,7 @@ describe('expandMap', () => {
     lighting: 'day',
     location: '',
     description: '',
+    points: [],
     killY: -10,
     geometry,
     spawns: [],

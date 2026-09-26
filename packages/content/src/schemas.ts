@@ -7,6 +7,21 @@ export const ModeSchema = z.object({
   playersPerTeam: z.number().int().min(1),
   timeLimitSeconds: z.number().int().positive(),
   scoreLimit: z.number().int().positive(),
+  /** One line for the Play screen. */
+  description: z.string().default(''),
+  /** Capture-point rules (Domination); absent for modes without points. */
+  capture: z
+    .object({
+      /** Horizontal radius of a point, metres (and ± this much height). */
+      radius: z.number().positive().max(15),
+      /** Seconds for an uncontested team to capture a neutral point. */
+      seconds: z.number().positive().max(60),
+      /** Score per second for each point a team holds. */
+      scorePerSecond: z.number().positive().max(10),
+      /** Score per kill (usually small: points decide the match). */
+      scorePerKill: z.number().int().min(0).max(10),
+    })
+    .optional(),
 });
 
 export type Mode = z.infer<typeof ModeSchema>;
@@ -89,6 +104,11 @@ export const MapSchema = z
     /** Where it is, and a two-line briefing (menus, loading screen). */
     location: z.string().default(''),
     description: z.string().default(''),
+    /** Capture points (Domination): A, B, C … placed fairly for both teams. */
+    points: z
+      .array(z.object({ id: z.string().regex(/^[A-Z]$/), position: Vec3Schema }))
+      .max(5)
+      .default([]),
     /** Sky, fog and sun preset the client draws the map with. */
     lighting: z.enum(['day', 'dusk']).default('day'),
   })

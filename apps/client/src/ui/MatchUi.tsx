@@ -37,7 +37,11 @@ export function MatchUi() {
         <Banner title="Warm-up" sub={`Match starts in ${Math.ceil(m.secondsLeft)} s`} />
       )}
       {m.phase === 'countdown' && (
-        <Banner title={String(Math.max(1, Math.ceil(m.secondsLeft)))} sub="Team Deathmatch" big />
+        <Banner
+          title={String(Math.max(1, Math.ceil(m.secondsLeft)))}
+          sub={m.mode === 'domination' ? 'Domination' : 'Team Deathmatch'}
+          big
+        />
       )}
       {m.phase === 'ended' ? <Results m={m} /> : tab && <Scoreboard m={m} />}
     </>
@@ -54,6 +58,34 @@ function ScoreBar({ m }: { m: MatchHud }) {
       </span>
       <span class={`sb-score ${TEAM_CLASS[enemy]}`}>{m.scores[1]}</span>
       <div class="sb-limit">first to {m.scoreLimit}</div>
+      {m.points.length > 0 && <Points m={m} />}
+    </div>
+  );
+}
+
+/** Domination: A B C in the colour of the faction holding them, with the capture meter. */
+function Points({ m }: { m: MatchHud }) {
+  return (
+    <div class="points" data-testid="points">
+      {m.points.map((p) => (
+        <span
+          class={`point ${p.owner < 0 ? 'neutral' : `held-${p.owner}`}`}
+          key={p.id}
+          title={
+            p.owner < 0
+              ? `${p.id}: neutral`
+              : p.owner === m.myTeam
+                ? `${p.id}: ours`
+                : `${p.id}: theirs`
+          }
+        >
+          {p.id}
+          <span
+            class={`point-meter toward-${p.control >= 0 ? 0 : 1}`}
+            style={{ width: `${Math.round(Math.abs(p.control) * 100)}%` }}
+          />
+        </span>
+      ))}
     </div>
   );
 }

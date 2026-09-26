@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import {
   MAP_ROTATION,
+  modes,
   defaultLoadout,
   killSourceName,
   maps,
@@ -62,6 +63,7 @@ import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
 import { RemotePlayers } from './remotePlayers.ts';
 import { GrenadeView } from './grenadeView.ts';
+import { PointMarkers } from './pointMarkers.ts';
 import { Viewmodel } from './viewmodel.ts';
 
 export interface Game {
@@ -161,6 +163,7 @@ export async function startGame(
   let predictor!: Predictor; // all assigned by loadMap() right below
   const effects = new Effects(scene);
   const grenadeView = new GrenadeView(scene);
+  const pointMarkers = new PointMarkers(scene);
   const freshSim = (): SimState => {
     const spawn = map.spawns[0]!;
     return {
@@ -184,6 +187,7 @@ export async function startGame(
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
     grenadeView.clear();
+    pointMarkers.setMap(map, modes['domination']?.capture?.radius ?? 4);
     applyLighting(map.lighting);
     setStatus({ mapName: map.name, mapId: map.id });
     moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
@@ -304,6 +308,7 @@ export async function startGame(
     lastPhase = info.phase;
     const mine = myTeam();
     const mvp = info.players.find((p) => p.id === info.mvp);
+    pointMarkers.update(info.points);
     setStatus({
       match: {
         phase: PHASES[info.phase]!,
@@ -311,6 +316,8 @@ export async function startGame(
         scoreLimit: info.scoreLimit,
         scores: [info.teamScores[mine as 0 | 1], info.teamScores[(1 - mine) as 0 | 1]],
         myTeam: mine,
+        mode: info.mode,
+        points: info.points,
         result:
           info.phase !== MatchPhase.Ended
             ? null
@@ -600,6 +607,7 @@ export async function startGame(
         name: settings().name,
         token,
         loadout: loadoutChoice(settings()),
+        mode: settings().mode,
       },
     );
   let sentLoadout = JSON.stringify(loadoutChoice(settings()));

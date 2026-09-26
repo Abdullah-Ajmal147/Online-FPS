@@ -620,7 +620,20 @@ export interface MatchInfo {
   winner: number;
   /** Player id of the match MVP once ended (0 = none). */
   mvp: number;
+  /** Mode id (content modes), e.g. 'team-deathmatch', 'domination'. */
+  mode: string;
+  /** Capture points (objective modes; empty otherwise). */
+  points: CapturePointState[];
   players: ScoreboardRow[];
+}
+
+export interface CapturePointState {
+  /** 'A', 'B', 'C'… */
+  id: string;
+  /** 0 / 1 = held by that team, -1 = neutral. */
+  owner: number;
+  /** −1 … +1 capture meter (sent as −100…100). */
+  control: number;
 }
 
 export function encodeMatchInfo(m: MatchInfo): Uint8Array {
@@ -628,7 +641,14 @@ export function encodeMatchInfo(m: MatchInfo): Uint8Array {
   w.u8(m.phase)
     .u16(Math.min(0xffff, Math.max(0, Math.ceil(m.secondsLeft))))
     .u16(m.scoreLimit);
-  w.u16(m.teamScores[0]).u16(m.teamScores[1]).u8(m.winner).u8(m.mvp).u8(m.players.length);
+  w.u16(m.teamScores[0]).u16(m.teamScores[1]).u8(m.winner).u8(m.mvp);
+  w.string(m.mode).u8(m.points.length);
+  for (const p of m.points) {
+    w.string(p.id)
+      .u8(p.owner < 0 ? 255 : p.owner)
+      .i8(Math.round(Math.max(-1, Math.min(1, p.control)) * 100));
+  }
+  w.u8(m.players.length);
   for (const p of m.players) {
     w.u8(p.id)
       .u8(p.team)
@@ -650,6 +670,15 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
   const teamScores: [number, number] = [r.u16(), r.u16()];
   const winner = r.u8();
   const mvp = r.u8();
+  const mode = r.string();
+  const pointCount = r.u8();
+  if (pointCount > 8) throw new RangeError('too many capture points');
+  const points: CapturePointState[] = [];
+  for (let i = 0; i < pointCount; i++) {
+    const id = r.string();
+    const owner = r.u8();
+    points.push({ id, owner: owner === 255 ? -1 : owner, control: r.i8() / 100 });
+  }
   const count = r.u8();
   const players: ScoreboardRow[] = [];
   for (let i = 0; i < count; i++) {
@@ -670,6 +699,8 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
     teamScores,
     winner,
     mvp,
+    mode,
+    points,
     players,
   };
 }

@@ -1,6 +1,6 @@
 # Progress
 
-**Current phase:** 7 — Security + operations (Phases 3–6: everything that doesn't need the owner's accounts or hardware is done)
+**Current phase:** 8 — Public beta (Phases 3–7: everything that doesn't need the owner's accounts or hardware is done)
 
 ## Phase 0 — Setup
 
@@ -271,7 +271,7 @@ Exit tests:
 
 ## Phase 7 — Security + operations
 
-Status: **in progress**.
+Status: **done locally** (the real-server load test and restore drill need the owner's host).
 
 Done:
 
@@ -285,7 +285,13 @@ Done:
      decision).
 - 8. Backups (`apps/api/scripts/backup.mjs`), restore drill as a test, `docs/RUNBOOK.md`.
 
-Next: match logs (14 days), report button + admin page (ban / shadow-ban), shadow-ban pool.
+- 4–6. Match logs (14 days, capped per match), report button (one report per reporter per
+  match), admin page at `/api/admin` (password, lockout, same-origin writes, CSP): ban and
+  shadow-ban cover the profile and a keyed hash of the IP; shadow-banned players are matched
+  in their own opaque pool.
+
+Learned: create the profile row on first join, not first match result — otherwise a banned
+guest can simply make a new one before anything is stored.
 
 Exit tests:
 
@@ -323,5 +329,20 @@ Now:
 - Fixes: spawn faces the spawn direction; an early DEPLOY is remembered; guest creation
   race; no backdrop blur (expensive on weak GPUs). Checked in headless Chrome and in the
   owner's Chrome (menu, screens, DEPLOY → connected and spawned with bots).
+
+## Phase 8 — Public beta
+
+Status: **in progress**.
+
+Done:
+
+- 3. Domination (protocol v12): nodes A, B, C on Relay Yard and Saltline Depot (content data:
+     radius 4 m, 5 s to capture, faster with more teammates, contested = frozen; 1 point per
+     held node per second + 1 per kill, 200 to win). Picked on the Play screen; the server
+     filters rooms by mode. Nodes shown as coloured rings/beams and A/B/C badges in the score
+     bar. Bots go for nodes they don't hold.
+
+Learned: points must be built during warm-up too (`GameMode.sync`), not only in the live
+tick — otherwise the first MatchInfo has no nodes and the HUD stays empty.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

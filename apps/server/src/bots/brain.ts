@@ -271,6 +271,19 @@ export class BotBrain {
       }
       return [x, 0, z];
     };
+    // Objective modes: usually head for a point this team doesn't hold (nearest first,
+    // sometimes another), otherwise play like Team Deathmatch.
+    const targets = this.sim.objectives.filter((o) => o.owner !== this.self.team);
+    if (targets.length > 0 && this.random() < 0.7) {
+      targets.sort(
+        (a, b) =>
+          Math.hypot(a.position[0] - pos[0], a.position[2] - pos[2]) -
+          Math.hypot(b.position[0] - pos[0], b.position[2] - pos[2]),
+      );
+      const o = targets[this.random() < 0.75 ? 0 : Math.floor(this.random() * targets.length)]!;
+      this.hunting = false;
+      return nearCell(o.position[0], o.position[2], 2.5);
+    }
     const r = this.random();
     const enemies = [...this.sim.players.values()].filter(
       (p) => p.team !== this.self.team && p.alive,
@@ -284,7 +297,6 @@ export class BotBrain {
     if (r < 0.85) return nearCell(0, 0, 12);
     const [i, j] = cells[Math.floor(this.random() * cells.length)]!;
     const [x, z] = this.nav.center(i, j);
-    void pos;
     return [x, 0, z];
   }
 

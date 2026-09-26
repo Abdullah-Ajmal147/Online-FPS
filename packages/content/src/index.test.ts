@@ -51,6 +51,11 @@ declare global {
 }
 
 describe('content', () => {
+  it('has a Domination playlist with capture rules', () => {
+    expect(modes['domination']?.capture?.seconds).toBeGreaterThan(0);
+    expect(modes['team-deathmatch']?.capture).toBeUndefined();
+  });
+
   it('loads Team Deathmatch as 6v6', () => {
     const tdm = modes['team-deathmatch'];
     expect(tdm?.teams).toBe(2);
@@ -118,6 +123,17 @@ describe.each(['relay-yard', 'saltline-depot'])('%s', (id) => {
     for (const s of m.spawns) {
       const twin = m.spawns.find((o) => o.team !== s.team && near(o.position, flip(s.position)));
       expect(twin, JSON.stringify(s)).toBeDefined();
+    }
+  });
+
+  it('has fair capture points: A, B, C, each point mirrored by another', () => {
+    const m = maps[id]!;
+    expect(m.points.map((p) => p.id)).toEqual(['A', 'B', 'C']);
+    for (const p of m.points) {
+      const [x, y, z] = p.position;
+      expect(
+        m.points.some((o) => o.position[0] === -x && o.position[1] === y && o.position[2] === -z),
+      ).toBe(true);
     }
   });
 

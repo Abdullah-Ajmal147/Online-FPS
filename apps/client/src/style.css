@@ -1851,3 +1851,85 @@ body.aim-enemy .crosshair-lines i {
     font-size: 36px;
   }
 }
+
+/* Domination points under the score bar (faction colour of the holder) */
+.points {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.point {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font: 700 14px var(--display);
+  border: 1px solid var(--line-strong);
+  background: rgb(10 13 12 / 80%);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.point.held-0 {
+  background: rgb(74 163 255 / 70%);
+}
+
+.point.held-1 {
+  background: rgb(255 107 53 / 70%);
+}
+
+.point-meter {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+}
+
+.point-meter.toward-0 {
+  background: var(--aegis);
+}
+
+.point-meter.toward-1 {
+  background: var(--ember);
+}
+
+.playlists {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.playlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 300px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.playlist b {
+  font: 700 17px var(--display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.playlist span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.playlist.on {
+  border-left-color: var(--amber);
+  background: linear-gradient(90deg, rgb(240 180 41 / 14%), var(--panel) 70%);
+}

@@ -199,6 +199,8 @@ export class MatchSim {
    * aren't skewed by shots at targets that just died. Never set in real matches.
    */
   noDeath = false;
+  /** Objective mode points (Domination sets them each tick; bots head for them). */
+  objectives: readonly { position: Vec3; owner: number }[] = [];
   /** Anti-wallhack visibility filter for snapshots (tests may switch it off). */
   pvs = true;
   /** Default loadout context; each player has their own (SimPlayer.ctx). */

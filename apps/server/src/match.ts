@@ -93,8 +93,10 @@ export class Match {
 
   /** Call after every sim step. Returns true when the phase changed (send MatchInfo now). */
   update(): boolean {
+    this.mode.sync?.(this.sim);
     // Score kills from this tick's events (only while live).
     if (this.phase === MatchPhase.Live) {
+      this.mode.tick?.(this.sim);
       this.recordLog();
       for (const { event } of this.sim.events) {
         if (event.type !== 'kill') continue;
@@ -145,6 +147,12 @@ export class Match {
       teamScores: this.mode.teamScores(),
       winner: this.winner,
       mvp: this.mvp,
+      mode: this.mode.def.id,
+      points: (this.mode.points?.() ?? []).map((p) => ({
+        id: p.id,
+        owner: p.owner,
+        control: p.control,
+      })),
       players,
     };
   }

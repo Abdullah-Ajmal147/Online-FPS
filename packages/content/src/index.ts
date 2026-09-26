@@ -17,6 +17,7 @@ import {
   WeaponSchema,
 } from './schemas.ts';
 import teamDeathmatchJson from './modes/team-deathmatch.json' with { type: 'json' };
+import dominationJson from './modes/domination.json' with { type: 'json' };
 import arenaJson from './maps/arena.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import relayYardJson from './maps/relay-yard.json' with { type: 'json' };
@@ -39,6 +40,8 @@ export * from './chatFilter.ts';
 /** All content is validated at load time; a bad file fails fast on both client and server. */
 export const modes: Record<string, Mode> = {
   'team-deathmatch': ModeSchema.parse(teamDeathmatchJson),
+  /** Second playlist (Phase 8): three capture points. */
+  domination: ModeSchema.parse(dominationJson),
 };
 
 export const maps: Record<string, GameMap> = {

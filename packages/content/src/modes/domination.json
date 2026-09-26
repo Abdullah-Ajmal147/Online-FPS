@@ -1,0 +1,15 @@
+{
+  "id": "domination",
+  "name": "Domination",
+  "teams": 2,
+  "playersPerTeam": 6,
+  "timeLimitSeconds": 600,
+  "scoreLimit": 200,
+  "description": "Hold relay nodes A, B and C. Every node you hold scores each second.",
+  "capture": {
+    "radius": 4,
+    "seconds": 5,
+    "scorePerSecond": 1,
+    "scorePerKill": 1
+  }
+}

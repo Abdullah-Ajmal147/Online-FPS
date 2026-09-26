@@ -5,7 +5,7 @@ import { TICK_RATE, initPhysics, type Rapier } from '@sentinel/shared';
 import { DIFFICULTIES } from './bots/brain.ts';
 import { BotController } from './bots/controller.ts';
 import { Match, type MatchSummary } from './match.ts';
-import { TeamDeathmatch } from './mode.ts';
+import { Domination, TeamDeathmatch } from './mode.ts';
 import { MatchSim } from './sim.ts';
 
 let rapier: Rapier;
@@ -190,5 +190,96 @@ describe('a full bots-only match on Relay Yard', () => {
     });
     expect(moved.length).toBeGreaterThan(6);
     expect(totalMicros / ticks / 1000).toBeLessThan(4); // Phase 3 budget: < 4 ms per tick
+  }, 120_000);
+});
+
+describe('Domination (Phase 8)', () => {
+  const dom = modes['domination']!;
+  function setup() {
+    const map = maps['relay-yard']!;
+    const sim = new MatchSim(rapier, map, movement, defaultLoadout, 5);
+    const a = sim.addPlayer({ team: 0 });
+    const b = sim.addPlayer({ team: 1 });
+    const mode = new Domination(dom);
+    const put = (p: typeof a, id: string | null) => {
+      const pos = id ? map.points.find((x) => x.id === id)!.position : ([30, 0, 30] as const);
+      p.sim = { ...p.sim, move: { ...p.sim.move, position: [pos[0], pos[1], pos[2]] } };
+    };
+    const run = (seconds: number) => {
+      for (let i = 0; i < seconds * TICK_RATE; i++) mode.tick(sim);
+    };
+    return { sim, a, b, mode, put, run };
+  }
+  const point = (m: Domination, id: string) => m.points().find((p) => p.id === id)!;
+
+  it('a lone team captures a point in 5 s, then scores 1 per second for it', () => {
+    const { a, b, mode, put, run } = setup();
+    put(a, 'A');
+    put(b, null);
+    run(4.5);
+    expect(point(mode, 'A').owner).toBe(-1);
+    run(0.6);
+    expect(point(mode, 'A').owner).toBe(0);
+    const before = mode.teamScores()[0];
+    run(10);
+    expect(mode.teamScores()[0] - before).toBeGreaterThanOrEqual(9);
+    expect(mode.teamScores()[1]).toBe(0);
+  });
+
+  it('a contested point does not move; an enemy must first neutralise, then capture', () => {
+    const { a, b, mode, put, run } = setup();
+    put(a, 'B');
+    put(b, null);
+    run(6);
+    expect(point(mode, 'B').owner).toBe(0);
+    put(b, 'B'); // both on it: stuck
+    run(5);
+    expect(point(mode, 'B').owner).toBe(0);
+    expect(point(mode, 'B').control).toBe(1);
+    put(a, null); // Ember alone: 5 s to neutral, 5 s more to own it
+    run(5.1);
+    expect(point(mode, 'B').owner).toBe(-1);
+    run(5.1);
+    expect(point(mode, 'B').owner).toBe(1);
+  });
+
+  it('kills score a little; the score limit ends it', () => {
+    const { mode } = setup();
+    mode.onKill(0, 1);
+    mode.onKill(1, 1); // team kill / suicide: nothing
+    expect(mode.teamScores()).toEqual([1, 0]);
+    expect(mode.winnerByScore()).toBeNull();
+    for (let i = 0; i < 199; i++) mode.onKill(0, 1);
+    expect(mode.winnerByScore()).toBe(0);
+  });
+
+  it('bots play it: points change hands and the match is decided by holding them', () => {
+    const map = maps['saltline-depot']!;
+    const sim = new MatchSim(rapier, map, movement, defaultLoadout, 21);
+    const bots = new BotController(sim, map, DIFFICULTIES.normal);
+    bots.fill();
+    const mode = new Domination(dom);
+    const match = new Match(
+      sim,
+      mode,
+      { warmupSeconds: 1, countdownSeconds: 1, liveSeconds: 120, resultsSeconds: 1 },
+      map.id,
+    );
+    let summary: MatchSummary | null = null;
+    match.onMatchEnd = (s) => (summary = s);
+    const everOwned = new Set<string>();
+    for (let i = 0; i < 130 * TICK_RATE && !summary; i++) {
+      bots.think();
+      sim.step();
+      match.update();
+      for (const p of mode.points()) if (p.owner >= 0) everOwned.add(`${p.id}${p.owner}`);
+    }
+    expect(summary).not.toBeNull();
+    const s = summary!;
+    const kills = s.players.reduce((n, p) => n + p.kills, 0);
+    // Points mattered: more score than kills alone could give, and several captures happened.
+    expect(s.teamScores[0] + s.teamScores[1]).toBeGreaterThan(kills);
+    expect(everOwned.size).toBeGreaterThanOrEqual(3);
+    expect(match.info().points.map((p) => p.id)).toEqual(['A', 'B', 'C']);
   }, 120_000);
 });

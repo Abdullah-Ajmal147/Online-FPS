@@ -48,7 +48,7 @@ import { DIFFICULTIES } from './bots/brain.ts';
 import { BotController, prewarmNav } from './bots/controller.ts';
 import { FakeLag, presetFromEnv } from './fakeLag.ts';
 import { Match, type MatchSummary } from './match.ts';
-import { TeamDeathmatch } from './mode.ts';
+import { createMode } from './mode.ts';
 import { mapRotationFromEnv } from './mapRotation.ts';
 import { partyTeamFor } from './party.ts';
 import { sanitizeName } from './names.ts';
@@ -137,7 +137,7 @@ export class MatchRoom extends Room {
   /** Matchmaking pool: 'shadow' rooms only hold shadow-banned players (index.ts filterBy). */
   private pool: 'normal' | 'shadow' = 'normal';
 
-  override async onCreate(options?: { pool?: unknown }): Promise<void> {
+  override async onCreate(options?: { pool?: unknown; mode?: unknown }): Promise<void> {
     // Only two pools exist: none (normal) or the opaque shadow id. Anything else is refused
     // here, before a physics world and bots are built (no private-room or room-spam tricks).
     if (options?.pool !== undefined && options.pool !== SHADOW_POOL) {
@@ -159,14 +159,17 @@ export class MatchRoom extends Room {
       log.warn('TEST MODE: players cannot die (SENTINEL_TEST_NO_DEATH)');
     }
 
-    const tdm = modes['team-deathmatch']!;
+    // Playlist: the join's `mode` (Play screen), unless the server pins one (SENTINEL_MODE).
+    const modeId =
+      process.env.SENTINEL_MODE ?? (typeof options?.mode === 'string' ? options.mode : '');
+    const modeDef = Object.hasOwn(modes, modeId) ? modes[modeId]! : modes['team-deathmatch']!;
     this.match = new Match(
       this.sim,
-      new TeamDeathmatch(tdm),
+      createMode(modeDef),
       {
         warmupSeconds: envNumber('SENTINEL_WARMUP_SECONDS', 8),
         countdownSeconds: 4,
-        liveSeconds: envNumber('SENTINEL_MATCH_SECONDS', tdm.timeLimitSeconds),
+        liveSeconds: envNumber('SENTINEL_MATCH_SECONDS', modeDef.timeLimitSeconds),
         resultsSeconds: envNumber('SENTINEL_RESULTS_SECONDS', 12),
       },
       this.mapId,

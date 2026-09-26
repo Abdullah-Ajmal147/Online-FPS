@@ -1,4 +1,4 @@
-import { buildLoadout, type LoadoutChoice } from '@sentinel/content';
+import { buildLoadout, modes, type LoadoutChoice } from '@sentinel/content';
 
 /** Player settings. Stored per browser (a convenience, not game state). */
 
@@ -51,6 +51,8 @@ export interface Settings {
   graphics: GraphicsPreset;
   /** Fraction of the screen resolution rendered (0.5–1): lower is faster, blurrier. */
   renderScale: number;
+  /** Playlist chosen on the Play screen (a content mode id). */
+  mode: string;
   /** Loadout weapon ids (applied at the next spawn). */
   primary: string;
   secondary: string;
@@ -65,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fov: 90,
   toggleSprint: false,
   headBob: false,
+  mode: 'team-deathmatch',
   graphics: 'medium',
   renderScale: 1,
   primary: 'kestrel-ar',
@@ -113,6 +116,8 @@ export function normalizeSettings(raw: unknown): Settings {
   const { sensitivity, fov } = LIMITS;
   const { choice } = buildLoadout(r);
   return {
+    mode:
+      typeof r.mode === 'string' && Object.hasOwn(modes, r.mode) ? r.mode : DEFAULT_SETTINGS.mode,
     graphics: GRAPHICS_PRESETS.includes(r.graphics as GraphicsPreset)
       ? (r.graphics as GraphicsPreset)
       : DEFAULT_SETTINGS.graphics,

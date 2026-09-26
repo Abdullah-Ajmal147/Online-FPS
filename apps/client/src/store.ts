@@ -83,6 +83,9 @@ export interface MatchHud {
   /** [my team, enemy team] */
   scores: [number, number];
   myTeam: number;
+  /** Mode id (e.g. 'domination') and its capture points (empty in Team Deathmatch). */
+  mode: string;
+  points: { id: string; owner: number; control: number }[];
   /** 'win' | 'loss' | 'draw' once ended. */
   result: 'win' | 'loss' | 'draw' | null;
   mvp: string | null;
