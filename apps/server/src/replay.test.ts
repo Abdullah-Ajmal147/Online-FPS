@@ -4,8 +4,17 @@
  * predictor and the authoritative server simulation, with network delay between them.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { defaultLoadout, maps, movement } from '@sentinel/content';
 import {
+  buildLoadout,
+  defaultLoadout,
+  loadoutFromWire,
+  loadoutToWire,
+  maps,
+  movement,
+  type LoadoutChoice,
+} from '@sentinel/content';
+import {
+  Button,
   Predictor,
   buildWorld,
   createMovementContext,
@@ -42,10 +51,20 @@ function run(opts: {
   seed: number;
   /** Extra players standing on these points in the server's world (the client world has none). */
   obstacles?: [number, number, number][];
+  /** A loadout with attachments/perks; the client rebuilds it from the wire, like the game. */
+  loadout?: Partial<LoadoutChoice>;
+  /** Hold the trigger every other stretch of 20 ticks (weapon state must match too). */
+  fire?: boolean;
 }) {
+  const inputs = opts.fire
+    ? INPUTS.map((i, t) =>
+        Math.floor(t / 20) % 2 ? { ...i, buttons: i.buttons | Button.Fire } : i,
+      )
+    : INPUTS;
+  const built = opts.loadout ? buildLoadout(opts.loadout) : null;
   const random = createRng(opts.seed);
   const server = new MatchSim(rapier, maps.greybox!, movement, defaultLoadout);
-  const player = server.addPlayer();
+  const player = server.addPlayer(built ? { loadout: built } : {});
   const others = (opts.obstacles ?? []).map((pos) => {
     const other = server.addPlayer();
     other.sim = { ...other.sim, move: { ...other.sim.move, position: pos } };
@@ -59,7 +78,10 @@ function run(opts: {
   );
   const predictor = new Predictor(
     player.sim,
-    createSimContext(moveCtx, defaultLoadout),
+    createSimContext(
+      moveCtx,
+      built ? loadoutFromWire(loadoutToWire(built)).weapons : defaultLoadout,
+    ),
     createPlayerBody(moveCtx),
   );
 
@@ -68,12 +90,12 @@ function run(opts: {
   let serverAt1000: SimState | null = null;
   const toServer: Packet<SequencedInput[]>[] = [];
   const toClient: Packet<ReturnType<typeof decodeSnapshot>>[] = [];
-  const totalTicks = INPUTS.length + 60; // let the pipeline drain
+  const totalTicks = inputs.length + 60; // let the pipeline drain
   for (let t = 0; t < totalTicks; t++) {
     // Client: predict and send the last 3 inputs (redundancy), possibly lost.
-    if (t < INPUTS.length) {
-      predictor.tick({ ...INPUTS[t]!, weaponSlot: 0, viewTick: server.tick });
-      if (t === INPUTS.length - 1) {
+    if (t < inputs.length) {
+      predictor.tick({ ...inputs[t]!, weaponSlot: 0, viewTick: server.tick });
+      if (t === inputs.length - 1) {
         clientAt1000 = predictor.state;
         correctionsDuringInputs = predictor.stats.corrections;
       }
@@ -95,7 +117,7 @@ function run(opts: {
         viewTick: server.tick,
       });
     server.step();
-    if (!serverAt1000 && player.queue.lastProcessedSeq === INPUTS.length) serverAt1000 = player.sim;
+    if (!serverAt1000 && player.queue.lastProcessedSeq === inputs.length) serverAt1000 = player.sim;
     if (server.tick % 2 === 0 && random() >= opts.snapshotLoss) {
       // Through the real wire format, so encoding bugs show up here too.
       toClient.push({
@@ -156,6 +178,22 @@ describe('replay: 1,000 recorded inputs through client predictor and server simu
     ).toBe(true);
     expect(r.correctionsDuringInputs).toBe(0);
     expect(r.client.move.position).toEqual(r.server.move.position);
+  });
+
+  it('matches exactly with attachments and perks (client builds the loadout from the wire)', () => {
+    const r = run({
+      inputLoss: 0,
+      snapshotLoss: 0,
+      seed: 3,
+      fire: true,
+      loadout: {
+        primary: 'vireo-smg',
+        attachments: ['light-stock', 'extended-mag', 'compensator'],
+        perks: ['light-step', 'quick-hands', 'steady-hands'],
+      },
+    });
+    expect(r.correctionsDuringInputs).toBe(0);
+    expect(r.client).toEqual(r.server);
   });
 
   it('stays within 1 cm with 10% input loss and 10% snapshot loss', () => {

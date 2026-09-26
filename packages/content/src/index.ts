@@ -116,6 +116,8 @@ export const perkCatalog: readonly Perk[] = (perksJson as unknown[])
   .sort(byId);
 
 export const MAX_ATTACHMENTS = 3;
+const SLOT_ORDER: readonly Attachment['slot'][] = ['optic', 'barrel', 'magazine', 'grip', 'stock'];
+const clampKick = (v: number) => Math.max(-10, Math.min(10, v));
 export const MAX_PERKS = 3;
 
 /** What a player picked, by id. */
@@ -163,7 +165,11 @@ export function applyModifiers(base: Weapon, mods: readonly StatModifiers[]): We
     },
     recoil: {
       ...base.recoil,
-      pattern: base.recoil.pattern.map(([up, right]) => [up * m('recoil'), right * m('recoil')]),
+      // Clamped to the schema's ±10° so no modifier combination can make invalid data.
+      pattern: base.recoil.pattern.map(([up, right]) => [
+        clampKick(up * m('recoil')),
+        clampKick(right * m('recoil')),
+      ]),
     },
     moveSpeedMultiplier: Math.min(1.5, base.moveSpeedMultiplier * speed),
     adsMoveSpeedMultiplier: Math.min(1.5, base.adsMoveSpeedMultiplier * speed),
@@ -182,8 +188,9 @@ export function buildLoadout(raw: {
   perks?: unknown;
 }): Loadout {
   const [primary, secondary] = resolveLoadout(raw.primary, raw.secondary);
+  // At most a few entries are read from untrusted arrays (join options can be large).
   const ids = (v: unknown) =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    Array.isArray(v) ? v.slice(0, 16).filter((x): x is string => typeof x === 'string') : [];
   const attachments: Attachment[] = [];
   for (const id of ids(raw.attachments)) {
     const a = attachmentCatalog.find((x) => x.id === id);
@@ -198,6 +205,10 @@ export function buildLoadout(raw: {
     if (!p || perks.includes(p) || perks.length >= MAX_PERKS) continue;
     perks.push(p);
   }
+  // Canonical order (slot order, catalog order): the float products in applyModifiers then
+  // never depend on the order the player clicked, so every builder gets identical numbers.
+  attachments.sort((a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot));
+  perks.sort((a, b) => perkCatalog.indexOf(a) - perkCatalog.indexOf(b));
   const perkMods = perks.map((p) => p.modifiers);
   return {
     choice: {

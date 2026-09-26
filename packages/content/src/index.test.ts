@@ -13,6 +13,8 @@ import {
   MAP_ROTATION,
   equipment,
   killSourceName,
+  MAX_ATTACHMENTS,
+  MAX_PERKS,
   applyModifiers,
   attachmentCatalog,
   buildLoadout,
@@ -306,7 +308,8 @@ describe('attachments and perks', () => {
     });
     // compensator doesn't fit shotguns; tactical scope is a second optic; the 4th is over max.
     expect(l.choice.attachments).toEqual(['reflex-sight', 'fast-mag', 'vertical-grip']);
-    expect(l.choice.perks).toEqual(['light-step', 'flak-vest', 'quick-hands']);
+    // Kept in canonical (catalog) order, whatever order they were picked in.
+    expect(l.choice.perks).toEqual(['flak-vest', 'light-step', 'quick-hands']);
   });
 
   it('with nothing picked, the weapons are the plain data', () => {
@@ -328,5 +331,60 @@ describe('attachments and perks', () => {
   it('deep pockets adds a spare magazine', () => {
     const l = buildLoadout({ perks: ['deep-pockets'] });
     expect(l.weapons[0].reserve).toBe(defaultLoadout[0].reserve + defaultLoadout[0].magazine);
+  });
+});
+
+describe('loadout building is safe for every combination', () => {
+  const powerset = <T>(xs: readonly T[], max: number): T[][] =>
+    xs.reduce<T[][]>(
+      (sets, x) => [...sets, ...sets.filter((s) => s.length < max).map((s) => [...s, x])],
+      [[]],
+    );
+
+  it('every weapon × attachment set × perk set gives valid data within wire limits', () => {
+    const perkSets = powerset(
+      perkCatalog.map((p) => p.id),
+      MAX_PERKS,
+    );
+    let checked = 0;
+    for (const w of weaponCatalog.filter((x) => x.slot === 0)) {
+      const fits = attachmentCatalog.filter((a) => a.classes.includes(w.class)).map((a) => a.id);
+      for (const attachments of powerset(fits, MAX_ATTACHMENTS)) {
+        for (const perks of perkSets) {
+          const l = buildLoadout({ primary: w.id, attachments, perks });
+          for (const built of l.weapons) {
+            // Tick fields on the wire are u8: every time must stay ≤ 4.25 s.
+            expect(built.reloadTime).toBeLessThanOrEqual(4.25);
+            expect(built.adsTime).toBeLessThanOrEqual(4.25);
+            expect(built.equipTime).toBeLessThanOrEqual(4.25);
+            expect(built.magazine).toBeLessThanOrEqual(255);
+          }
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
+
+  it('the order of picks never changes the weapons (canonical order)', () => {
+    const a = buildLoadout({
+      primary: 'kestrel-ar',
+      attachments: ['light-stock', 'compensator', 'reflex-sight'],
+      perks: ['steady-hands', 'light-step', 'quick-hands'],
+    });
+    const b = buildLoadout({
+      primary: 'kestrel-ar',
+      attachments: ['reflex-sight', 'light-stock', 'compensator'],
+      perks: ['quick-hands', 'steady-hands', 'light-step'],
+    });
+    expect(b.weapons).toEqual(a.weapons);
+    expect(b.choice).toEqual(a.choice);
+  });
+
+  it('reads only a few entries from huge untrusted arrays', () => {
+    const huge = Array.from({ length: 100_000 }, () => 'reflex-sight');
+    expect(buildLoadout({ attachments: huge, perks: huge }).choice.attachments).toEqual([
+      'reflex-sight',
+    ]);
   });
 });

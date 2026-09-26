@@ -8,6 +8,7 @@ import {
   weaponIndex,
   type GameMap,
   type Loadout,
+  type LoadoutWire,
   type Movement,
   type Weapon,
 } from '@sentinel/content';
@@ -103,6 +104,9 @@ export interface SimPlayer {
   /** This player's loadout: compiled weapons (ctx) and the validated choice (for the wire). */
   ctx: SimContext;
   loadout: Loadout;
+  /** Cached per spawn for snapshots: the loadout on the wire and each slot's weapon index. */
+  loadoutWire: LoadoutWire;
+  weaponIdx: [number, number];
   /** Chosen in the menu mid-match: applied at the next spawn, never mid-life. */
   pendingLoadout: Loadout | null;
   /** Tick this player joined (time played in a match counts from here). */
@@ -278,6 +282,8 @@ export class MatchSim {
       botInput: null,
       ctx,
       loadout,
+      loadoutWire: loadoutToWire(loadout),
+      weaponIdx: [weaponIndex(loadout.choice.primary), weaponIndex(loadout.choice.secondary)],
       pendingLoadout: null,
       protectedUntil: this.tick + SPAWN_PROTECTION_TICKS,
       joinedAtTick: this.tick,
@@ -372,7 +378,7 @@ export class MatchSim {
         position: m.position,
         yaw: m.yaw,
         pitch: m.pitch,
-        weapon: weaponIndex(p.ctx.loadout[p.sim.weapon.slot].def.id),
+        weapon: p.weaponIdx[p.sim.weapon.slot]!,
         shotCount: p.shotCount,
       });
     }
@@ -395,7 +401,7 @@ export class MatchSim {
               },
               weapon: me.sim.weapon,
             },
-            loadout: loadoutToWire(me.loadout),
+            loadout: me.loadoutWire,
             health: me.health,
             lifeId: me.lifeId,
             respawnTicks: me.respawnTicks,
@@ -576,6 +582,11 @@ export class MatchSim {
     if (p.pendingLoadout) {
       p.ctx = this.contextFor(p.pendingLoadout);
       p.loadout = p.pendingLoadout;
+      p.loadoutWire = loadoutToWire(p.loadout);
+      p.weaponIdx = [
+        weaponIndex(p.loadout.choice.primary),
+        weaponIndex(p.loadout.choice.secondary),
+      ];
       p.pendingLoadout = null;
     }
     p.sim = this.freshSim(p.team, p.ctx);

@@ -543,12 +543,19 @@ export async function startGame(
     },
   );
   let sentLoadout = JSON.stringify(loadoutChoice(settings()));
-  /** Menu changed the loadout mid-match: tell the server (applies at our next spawn). */
+  let lastLoadoutSendMs = -Infinity;
+  /**
+   * Menu changed the loadout mid-match: tell the server (applies at our next spawn). The server
+   * ignores changes closer than 250 ms apart, so we send at most every 300 ms; a change made
+   * in between is sent when the window opens (checked every frame), never lost.
+   */
   function syncLoadout(): void {
     const choice = loadoutChoice(settings());
     const key = JSON.stringify(choice);
-    if (key === sentLoadout || !conn.connected) return;
+    const now = performance.now();
+    if (key === sentLoadout || !conn.connected || now - lastLoadoutSendMs < 300) return;
     sentLoadout = key;
+    lastLoadoutSendMs = now;
     conn.sendLoadout(loadoutToWire(buildLoadout(choice)));
   }
 
