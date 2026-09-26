@@ -42,7 +42,8 @@ export interface NoteEvent {
 
 /**
  * How busy the music is: the menu plays everything, the countdown only bass and a heartbeat,
- * a match only soft pads and bass underneath the game (never silent, never in the way).
+ * a match a softer, sparser version of the theme under the game (never silent, never in the
+ * way).
  */
 export type Arrangement = 'menu' | 'countdown' | 'match';
 
@@ -81,10 +82,33 @@ export function stepEvents(bar: number, step: number, arrangement: Arrangement):
   }
 
   if (arrangement === 'match') {
-    if (step !== 0) return out;
-    for (const n of chord.notes)
-      out.push({ voice: 'pad', midi: n, offset: 0, length: BEAT_S * 4, velocity: 0.35 });
-    out.push({ voice: 'bass', midi: bassMidi, offset: 0, length: BEAT_S * 3, velocity: 0.4 });
+    // The theme, pared down: pads, a bass that moves on beats 1 and 3, and on the second pass
+    // a sparse, soft melody (every other step at most) so it still sounds like music under
+    // the gunfire rather than a hum.
+    if (step === 0)
+      for (const n of chord.notes)
+        out.push({ voice: 'pad', midi: n, offset: 0, length: BEAT_S * 4, velocity: 0.35 });
+    if (step === 0 || step === 4)
+      out.push({
+        voice: 'bass',
+        midi: bassMidi,
+        offset: 0,
+        length: BEAT_S * 1.6,
+        velocity: step === 0 ? 0.4 : 0.3,
+      });
+    if (bar % 16 >= 8 && step % 2 === 0) {
+      const r = rng(bar * 131 + step * 7 + 1);
+      if (r() < 0.5) {
+        const tones = chord.notes.map((n) => n + 12);
+        out.push({
+          voice: 'pluck',
+          midi: tones[Math.floor(r() * tones.length)]!,
+          offset: 0,
+          length: STEP_S * 1.5,
+          velocity: 0.2 + r() * 0.1,
+        });
+      }
+    }
     return out;
   }
 

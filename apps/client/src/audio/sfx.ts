@@ -28,6 +28,8 @@ const SHOT_SOUNDS: Record<
 };
 
 const SHOT_LEVEL = 1.8;
+/** World ambience level: clearly there between fights, far under gunfire. */
+const AMBIENCE_LEVEL = 0.6;
 /** At most this many effect voices at once. */
 const MAX_VOICES = 40;
 
@@ -61,11 +63,17 @@ export class GameAudio {
   /** Sounds playing now (approximate: counted for their expected length). */
   private voices = 0;
   private analyser: AnalyserNode | null = null;
+  /** World ambience (wind and air) under a match, on the effects bus. */
+  private ambience: GainNode | null = null;
 
-  /** Browsers only allow audio after a user gesture: call from any click or key press. */
+  /**
+   * Browsers only allow audio after a user gesture: call from every click or key press. Also
+   * brings sound back when the browser paused it mid-game (headphones or Bluetooth switched,
+   * an OS audio hiccup, Safari's "interrupted" state).
+   */
   unlock(): void {
     if (this.ctx) {
-      void this.ctx.resume();
+      if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined);
       return;
     }
     try {
@@ -85,10 +93,18 @@ export class GameAudio {
       limiter.ratio.value = 20;
       limiter.attack.value = 0.001;
       limiter.release.value = 0.1;
-      comp.connect(makeup).connect(limiter).connect(ctx.destination);
+      // The limiter reacts in ~1 ms, too late for the sharpest shot transients (they poked a
+      // few % over full scale = a click). Last stage: a soft clipper, untouched below 0.8,
+      // rounding anything above so the output never passes 0.98.
+      const halve = ctx.createGain();
+      halve.gain.value = 0.5; // the shaper's input range is ±1: fit ±2 into it
+      const clip = ctx.createWaveShaper();
+      clip.curve = softClipCurve();
+      clip.oversample = '2x';
+      comp.connect(makeup).connect(limiter).connect(halve).connect(clip).connect(ctx.destination);
       this.analyser = ctx.createAnalyser();
       this.analyser.fftSize = 2048;
-      limiter.connect(this.analyser);
+      clip.connect(this.analyser);
       this.master = ctx.createGain();
       this.master.connect(comp);
       this.sfx = ctx.createGain();
@@ -107,9 +123,19 @@ export class GameAudio {
       wet.gain.value = 0.9;
       this.reverb.connect(wet).connect(this.sfx);
 
+      this.ambience = worldAmbience(ctx, this.noise, this.sfx);
       this.music = new Music(ctx, this.musicBus, this.noise);
       this.applyVolumes();
-      this.music.setState(this.wantedMusic);
+      this.setMusic(this.wantedMusic);
+      // Paused behind our back? Try again at once (works when the page still has the user's
+      // activation); otherwise the next click or key press does it (unlock above).
+      ctx.addEventListener('statechange', () => {
+        if (ctx.state !== 'running' && ctx.state !== 'closed' && !document.hidden)
+          void ctx.resume().catch(() => undefined);
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && ctx.state !== 'running') void ctx.resume().catch(() => undefined);
+      });
     } catch {
       this.ctx = null; // no audio available; the game still works
     }
@@ -150,6 +176,10 @@ export class GameAudio {
   setMusic(state: MusicState): void {
     this.wantedMusic = state;
     this.music?.setState(state);
+    // The map's own sound: only while in a match (countdown included), never in the menu.
+    const t = this.ctx?.currentTime ?? 0;
+    const inWorld = state === 'match' || state === 'countdown';
+    this.ambience?.gain.setTargetAtTime(inWorld ? AMBIENCE_LEVEL : 0, t, inWorld ? 1 : 0.4);
   }
 
   get musicState(): MusicState {
@@ -461,6 +491,63 @@ export class GameAudio {
     osc.start(t);
     osc.stop(t + len + 0.02);
   }
+}
+
+/** Transfer curve for the output stage: input ±1 stands for a signal of ±2 (halved before). */
+export function softClipCurve(points = 2049): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(points);
+  for (let i = 0; i < points; i++) {
+    const v = ((i / (points - 1)) * 2 - 1) * 2;
+    const a = Math.abs(v);
+    curve[i] = Math.sign(v) * (a <= 0.8 ? a : 0.8 + 0.18 * Math.tanh((a - 0.8) / 0.18));
+  }
+  return curve;
+}
+
+/**
+ * Wind over an open yard: low-passed noise whose loudness and brightness drift in slow,
+ * unrelated cycles (gusts that never repeat exactly), plus a thin high "air" layer. A handful
+ * of nodes running for the whole session; `gain` of the returned node is 0 (silent) until a
+ * match starts.
+ */
+function worldAmbience(ctx: AudioContext, noise: AudioBuffer, out: AudioNode): GainNode {
+  const master = ctx.createGain();
+  master.gain.value = 0;
+  master.connect(out);
+
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
+  src.loop = true;
+  src.playbackRate.value = 0.37; // slowed noise sounds softer and less "hissy"
+  const low = ctx.createBiquadFilter();
+  low.type = 'lowpass';
+  low.frequency.value = 420;
+  low.Q.value = 0.9;
+  const gust = ctx.createGain();
+  gust.gain.value = 0.26;
+  src.connect(low).connect(gust).connect(master);
+
+  const air = ctx.createBiquadFilter();
+  air.type = 'bandpass';
+  air.frequency.value = 2400;
+  air.Q.value = 0.5;
+  const airGain = ctx.createGain();
+  airGain.gain.value = 0.02;
+  src.connect(air).connect(airGain).connect(master);
+
+  // Two slow LFOs with unrelated periods: gust strength (~11 s) and brightness (~17 s).
+  const lfo = (hz: number, depth: number, target: AudioParam) => {
+    const o = ctx.createOscillator();
+    o.frequency.value = hz;
+    const d = ctx.createGain();
+    d.gain.value = depth;
+    o.connect(d).connect(target);
+    o.start();
+  };
+  lfo(0.09, 0.14, gust.gain);
+  lfo(0.059, 180, low.frequency);
+  src.start();
+  return master;
 }
 
 /**

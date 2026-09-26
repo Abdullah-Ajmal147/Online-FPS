@@ -95,7 +95,7 @@ export class Music {
     const t = this.ctx.currentTime;
     // Sits well under the effects: about -22 dBFS RMS at default volume in the menu, a quiet
     // bed during play (footsteps and gunfire must stay on top).
-    const level = next === 'menu' ? 0.32 : next === 'countdown' ? 0.3 : next === 'match' ? 0.13 : 0;
+    const level = next === 'menu' ? 0.32 : next === 'countdown' ? 0.3 : next === 'match' ? 0.17 : 0;
     this.bus.gain.cancelScheduledValues(t);
     this.bus.gain.setTargetAtTime(level, t, next === 'match' ? 0.6 : 0.8);
     this.staticGain.gain.setTargetAtTime(

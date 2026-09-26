@@ -54,6 +54,23 @@ test('audio: menu music plays after the first click, fades for play, never clips
   await deploy(page, '/?server=http://localhost:2567');
   await page.evaluate(async () => (await import('/src/audio/index.ts')).gameAudio.unlock());
   await expect.poll(async () => (await audio(page)).music).toBe('match');
+  // Owner bug: "after a few seconds in a match the sound is gone". With nobody firing, the
+  // match must never go (near) silent. Music is still at 0 from above, so this is the world
+  // ambience alone (wind, air), which follows the effects volume.
+  await page.waitForTimeout(4000); // past the menu → match fade
+  const idle = await loudest(page, 3000);
+  expect(idle.rms).toBeGreaterThan(0.02);
+  expect(idle.rms).toBeLessThan(0.08); // …and stays well under gunfire
+
+  // If the browser pauses audio later (headphones unplugged, Bluetooth switch, OS audio
+  // hiccup), sound comes back by itself or at the latest on the next key press — not only
+  // on the very first one.
+  await page.evaluate(async () => {
+    const { gameAudio } = await import('/src/audio/index.ts');
+    await (gameAudio as unknown as { ctx: AudioContext }).ctx.suspend();
+  });
+  await page.keyboard.press('KeyZ');
+  await expect.poll(async () => (await audio(page)).unlocked).toBe(true);
   await page.evaluate(() =>
     (
       window as unknown as { __sentinelInput: { setMouse(f: boolean, a: boolean): void } }

@@ -29,11 +29,21 @@ describe('music score', () => {
     expect(plucks.slice(8).reduce((a, b) => a + b, 0)).toBeGreaterThan(30);
   });
 
-  it('in a match only soft pads and bass play, once per bar', () => {
-    const events = bars(8, 'match').flat();
-    expect(new Set(events.map((e) => e.voice))).toEqual(new Set(['pad', 'bass']));
+  it('in a match: a softer, sparser theme (no heartbeat, melody only on the second pass)', () => {
+    const all = bars(16, 'match');
+    const events = all.flat();
+    expect(new Set(events.map((e) => e.voice))).toEqual(new Set(['pad', 'bass', 'pluck']));
     expect(events.every((e) => e.velocity <= 0.4)).toBe(true);
-    expect(events.filter((e) => e.voice === 'bass')).toHaveLength(8);
+    expect(events.filter((e) => e.voice === 'bass')).toHaveLength(32); // beats 1 and 3
+    const plucks = all.map((b) => b.filter((e) => e.voice === 'pluck').length);
+    expect(plucks.slice(0, 8).every((n) => n === 0)).toBe(true);
+    // Sparser than the menu melody.
+    const menuPlucks = bars(16)
+      .flat()
+      .filter((e) => e.voice === 'pluck').length;
+    const matchPlucks = plucks.reduce((a, b) => a + b, 0);
+    expect(matchPlucks).toBeGreaterThan(4);
+    expect(matchPlucks).toBeLessThan(menuPlucks / 2);
   });
 
   it('the countdown is only bass and a heartbeat', () => {

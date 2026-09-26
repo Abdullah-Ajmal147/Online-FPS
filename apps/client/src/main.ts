@@ -15,7 +15,8 @@ void probeRegions(regions());
 startSessionTelemetry();
 
 // Audio: browsers allow sound only after a gesture, so the first click or key anywhere starts
-// it (menu music included). Volumes follow the settings; music follows the match state.
+// it (menu music included). Every later one checks it's still running: browsers can pause it
+// mid-game (audio device switched, OS hiccup), and it must come back without a reload. Volumes follow the settings; music follows the match state.
 const applyVolumes = () =>
   gameAudio.setVolumes({
     master: settings.volumeMaster,
@@ -24,7 +25,7 @@ const applyVolumes = () =>
   });
 applyVolumes();
 for (const type of ['pointerdown', 'keydown'] as const)
-  addEventListener(type, () => gameAudio.unlock(), { once: true, capture: true });
+  addEventListener(type, () => gameAudio.unlock(), { capture: true });
 subscribe((s) => gameAudio.setMusic(musicFor(s)));
 gameAudio.setMusic(musicFor(getStatus()));
 // A soft tick for menu buttons.
