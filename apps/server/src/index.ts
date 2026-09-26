@@ -2,9 +2,13 @@ import { existsSync } from 'node:fs';
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { resolveApiSecret, resolveUnlockAll } from '@sentinel/auth';
+import { MAP_ROTATION, maps, movement } from '@sentinel/content';
 import { PROTOCOL_VERSION } from '@sentinel/protocol';
+import { initPhysics } from '@sentinel/shared';
 import express from 'express';
 import { MatchRoom } from './MatchRoom.ts';
+import { prewarmNav } from './bots/controller.ts';
+import { mapRotationFromEnv } from './mapRotation.ts';
 import { createAccessFetcher } from './access.ts';
 import { createApiReporter, createPresenceReporter } from './apiReporter.ts';
 import { log, metrics } from './ops.ts';
@@ -84,6 +88,18 @@ MatchRoom.fetchAccess = createAccessFetcher({
 
 // Colyseus already handles SIGTERM/SIGINT: it stops matchmaking, disposes rooms and exits.
 server.onShutdown(() => log.info('shutting down: closing rooms'));
+
+// Bots walk on a nav grid built per map (a few seconds of CPU each on a small server). Build
+// every map's grid now, before /healthz answers, so no player waits for it: before, the first
+// room after a restart took ~30 s to open, and two cold servers on one small machine could
+// push joins past 40 s.
+if (process.env.SENTINEL_BOTS !== '0') {
+  const started = performance.now();
+  const rapier = await initPhysics();
+  for (const id of new Set([...mapRotationFromEnv(process.env), ...MAP_ROTATION]))
+    prewarmNav(rapier, movement, maps[id]!);
+  log.info('bot navigation ready', { ms: Math.round(performance.now() - started) });
+}
 
 await server.listen(port);
 log.info('listening', { port, protocol: PROTOCOL_VERSION });
