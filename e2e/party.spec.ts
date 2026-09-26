@@ -25,11 +25,13 @@ test('three friends join by one invite link and play on the same team', async ({
   for (const f of friends) await expect.poll(() => myTeam(f), { timeout: 15_000 }).toBe(team);
   // Everyone is in the same match: the host sees two more humans on its team.
   await expect
-    .poll(() =>
-      host.evaluate(async () => {
-        const m = (await import('/src/store.ts')).getStatus().match;
-        return m?.players.filter((p) => !p.bot && p.team === m.myTeam).length ?? 0;
-      }),
+    .poll(
+      () =>
+        host.evaluate(async () => {
+          const m = (await import('/src/store.ts')).getStatus().match;
+          return m?.players.filter((p) => !p.bot && p.team === m.myTeam).length ?? 0;
+        }),
+      { timeout: 15_000 },
     )
     .toBe(3);
   for (const p of [host, ...friends]) await p.context().close();

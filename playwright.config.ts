@@ -10,6 +10,7 @@ import { defineConfig, devices } from '@playwright/test';
  *           always on opposite teams)
  *   :2572 — bots, arena: party invite test (three friends, one link, one team)
  *   :2573 — no bots, open arena: killcam test (two players, one kills the other)
+ *   :2574 — bots, arena: private match test
  *   :8787 — progression API (in-memory DB); the :2568 server reports finished matches to it
  * Game servers are never reused (they need these exact settings), so stop `pnpm dev` first.
  */
@@ -20,7 +21,7 @@ export default defineConfig({
   // oversubscribes a 14-core machine (load 25+) and tests start missing their timings.
   workers: process.env.CI ? 2 : 4,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: 'http://localhost:5173' },
   projects: [
     // Small pages: headless Chrome draws the 3D scene in software, and at 1280×720 a dozen
@@ -111,6 +112,21 @@ export default defineConfig({
         PORT: '2573',
         SENTINEL_BOTS: '0',
         SENTINEL_MAP: 'arena',
+        SENTINEL_WARMUP_SECONDS: '3600',
+      },
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
+      reuseExistingServer: false,
+    },
+    {
+      // Private match test: bots on (a private room fills with 11 bots), its own process so
+      // it doesn't slow the party tests down.
+      command: 'node_modules/.bin/tsx src/index.ts',
+      cwd: 'apps/server',
+      url: 'http://localhost:2574/healthz',
+      env: {
+        PORT: '2574',
+        SENTINEL_MAP: 'arena',
+        SENTINEL_BOT_DIFFICULTY: 'easy',
         SENTINEL_WARMUP_SECONDS: '3600',
       },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },

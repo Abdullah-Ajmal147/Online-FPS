@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { deploy, pause, status } from './helpers.ts';
 
-const SERVER = '/?server=http://localhost:2572'; // bots on, long warm-up
+const SERVER = '/?server=http://localhost:2574'; // own server: bots on, long warm-up
 
 /** Private matches: only invited friends get in; teams can be switched there. */
 test('private match: invite-only, strangers kept out, friends can switch team', async ({
@@ -20,7 +20,9 @@ test('private match: invite-only, strangers kept out, friends can switch team', 
   await expect.poll(async () => (await status(host)).match?.private).toBe(true);
   expect((await status(host)).mapId).toBe('saltline-depot');
   await expect(host.getByTestId('private-tag')).toBeVisible();
-  await expect.poll(async () => (await status(host)).match?.players.length).toBe(12); // bots fill
+  await expect
+    .poll(async () => (await status(host)).match?.players.length, { timeout: 15_000 })
+    .toBe(12); // bots fill
   const invite = (await status(host)).invite!;
   const hostName = (await status(host)).match!.players.find((p) => p.me)!.id;
   const inRoomOf = async (p: Page) =>
