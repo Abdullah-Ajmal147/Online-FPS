@@ -8,7 +8,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "gen": "node scripts/gen-catalog.mjs"
   },
   "dependencies": {
     "zod": "^4.6.5"

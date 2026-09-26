@@ -1,0 +1,40 @@
+{
+  "id": "vireo-smg",
+  "name": "Vireo SMG",
+  "class": "smg",
+  "slot": 0,
+  "fireMode": "auto",
+  "rpm": 850,
+  "damage": { "head": 32, "torso": 20, "limbs": 16 },
+  "falloff": { "start": 12, "end": 30, "minMultiplier": 0.6 },
+  "maxRange": 100,
+  "magazine": 32,
+  "reserve": 128,
+  "reloadTime": 1.9,
+  "equipTime": 0.35,
+  "adsTime": 0.18,
+  "spread": {
+    "hip": 0.45,
+    "ads": 0,
+    "moving": 0.25,
+    "airborne": 2,
+    "perShot": 0.08,
+    "max": 1.4,
+    "recoveryPerSecond": 12
+  },
+  "recoil": {
+    "pattern": [
+      [0.16, 0.05],
+      [0.16, -0.07],
+      [0.15, 0.08],
+      [0.14, -0.06],
+      [0.13, 0.09],
+      [0.13, -0.09]
+    ],
+    "adsMultiplier": 0.75,
+    "recoveryPerSecond": 14,
+    "sprayRecovery": 0.2
+  },
+  "moveSpeedMultiplier": 1.03,
+  "adsMoveSpeedMultiplier": 0.75
+}

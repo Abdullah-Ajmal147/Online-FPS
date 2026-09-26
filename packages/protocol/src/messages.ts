@@ -29,6 +29,8 @@ export const MessageType = {
   Events: 7,
   /** Server → client: match phase, clock, scores, scoreboard. Never dropped. */
   MatchInfo: 8,
+  /** Client → server: loadout for the next spawn (weapon catalog indices). Never dropped. */
+  SetLoadout: 9,
 } as const;
 
 export type { SequencedInput, OwnState };
@@ -132,6 +134,11 @@ export function decodeInputCmd(bytes: Uint8Array): InputCmd {
 
 export interface OwnSnapshot {
   sim: OwnState;
+  /**
+   * The loadout the server simulates us with, as weapon catalog indices [primary, secondary].
+   * The client predicts with exactly this; it changes only when we (re)spawn.
+   */
+  loadout: [number, number];
   health: number;
   /** Increments each time we (re)spawn; a change means "reset prediction to this state". */
   lifeId: number;
@@ -193,6 +200,7 @@ function writeOwn(w: BinaryWriter, own: OwnSnapshot): void {
   w.u8((m.grounded ? OWN_GROUNDED : 0) | (m.crouching ? OWN_CROUCHING : 0));
   w.u16(m.prevButtons);
   writeWeapon(w, own.sim.weapon);
+  w.u8(own.loadout[0]).u8(own.loadout[1]);
   w.u8(own.health)
     .u8(own.lifeId & 0xff)
     .u8(own.respawnTicks);
@@ -206,7 +214,9 @@ function readOwn(r: BinaryReader): OwnSnapshot {
   const flags = r.u8();
   const prevButtons = r.u16();
   const weapon = readWeapon(r);
+  const loadout: [number, number] = [r.u8(), r.u8()];
   return {
+    loadout,
     sim: {
       move: {
         position,
@@ -229,8 +239,8 @@ const clampI16 = (v: number) => Math.max(-0x8000, Math.min(0x7fff, v));
 
 /**
  * Layout: serverTick u32, lastProcessedSeq u32, inputQueueDepth u8, serverTickMicros u16,
- * hasOwn u8, [own: move 29 + weapon 18 + health/lifeId/respawn 3 = 50 bytes], entityCount u8,
- * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, slot, shots).
+ * hasOwn u8, [own: move 29 + weapon 18 + loadout 2 + health/lifeId/respawn 3 = 52 bytes], entityCount u8,
+ * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, weapon, shots).
  * Full snapshots, no delta compression (ADR 0004); 12 players stay under 10 KB/s.
  */
 export function encodeSnapshot(msg: Snapshot): Uint8Array {
@@ -250,7 +260,7 @@ export function encodeSnapshot(msg: Snapshot): Uint8Array {
     for (const v of e.position) w.i16(clampI16(quantizePosition(v)));
     w.u16(e.yaw)
       .i16(e.pitch)
-      .u8(e.weaponSlot)
+      .u8(e.weapon)
       .u8(e.shotCount & 0xff);
   }
   return w.finish();
@@ -283,11 +293,29 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
       position,
       yaw: r.u16(),
       pitch: r.i16(),
-      weaponSlot: r.u8(),
+      weapon: r.u8(),
       shotCount: r.u8(),
     });
   }
   return { serverTick, lastProcessedSeq, inputQueueDepth, serverTickMicros, own, entities };
+}
+
+// ---------------------------------------------------------------------------
+// SetLoadout
+// ---------------------------------------------------------------------------
+
+export interface SetLoadout {
+  primary: number;
+  secondary: number;
+}
+
+export function encodeSetLoadout(msg: SetLoadout): Uint8Array {
+  return new BinaryWriter(2).u8(msg.primary).u8(msg.secondary).finish();
+}
+
+export function decodeSetLoadout(bytes: Uint8Array): SetLoadout {
+  const r = new BinaryReader(bytes);
+  return { primary: r.u8(), secondary: r.u8() };
 }
 
 // ---------------------------------------------------------------------------
@@ -299,11 +327,15 @@ export type HitZoneCode = (typeof HIT_ZONE_CODES)[number];
 
 export type GameEvent =
   /** Broadcast: kill feed. */
-  | { type: 'kill'; killer: number; victim: number; weaponSlot: number; headshot: boolean }
+  /** `weapon`: weapon catalog index, or NO_WEAPON (a fall). */
+  | { type: 'kill'; killer: number; victim: number; weapon: number; headshot: boolean }
   /** To the shooter: the server confirmed a hit. */
   | { type: 'hit'; victim: number; damage: number; zone: HitZoneCode; killed: boolean }
   /** To the victim: who hit you, from where, and your health now. */
   | { type: 'damaged'; attacker: number; from: Vec3; health: number };
+
+/** Wire value for "no weapon" in kill events and entities. */
+export const NO_WEAPON = 255;
 
 const EV_KILL = 1;
 const EV_HIT = 2;
@@ -318,7 +350,7 @@ export function encodeEvents(events: GameEvent[]): Uint8Array {
         w.u8(EV_KILL)
           .u8(e.killer)
           .u8(e.victim)
-          .u8(e.weaponSlot)
+          .u8(e.weapon)
           .u8(e.headshot ? 1 : 0);
         break;
       case 'hit':
@@ -349,7 +381,7 @@ export function decodeEvents(bytes: Uint8Array): GameEvent[] {
         type: 'kill',
         killer: r.u8(),
         victim: r.u8(),
-        weaponSlot: r.u8(),
+        weapon: r.u8(),
         headshot: r.u8() === 1,
       });
     } else if (type === EV_HIT) {

@@ -1,0 +1,34 @@
+{
+  "id": "thresher-12",
+  "name": "Thresher 12",
+  "class": "shotgun",
+  "slot": 0,
+  "fireMode": "semi",
+  "rpm": 75,
+  "damage": { "head": 16, "torso": 14, "limbs": 11 },
+  "falloff": { "start": 7, "end": 18, "minMultiplier": 0.25 },
+  "maxRange": 45,
+  "pellets": 8,
+  "pelletSpread": 3.2,
+  "magazine": 6,
+  "reserve": 30,
+  "reloadTime": 2.6,
+  "equipTime": 0.45,
+  "adsTime": 0.22,
+  "spread": {
+    "hip": 0.8,
+    "ads": 0.3,
+    "moving": 0.3,
+    "airborne": 1.5,
+    "perShot": 0,
+    "max": 0,
+    "recoveryPerSecond": 10
+  },
+  "recoil": {
+    "pattern": [[1.6, 0.1]],
+    "adsMultiplier": 0.8,
+    "recoveryPerSecond": 10
+  },
+  "moveSpeedMultiplier": 0.97,
+  "adsMoveSpeedMultiplier": 0.7
+}

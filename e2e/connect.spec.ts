@@ -82,3 +82,18 @@ test('two players in two tabs see each other move', async ({ browser }) => {
   );
   expect(moved).toBe(true);
 });
+
+test('the loadout picked in the menu is the one the server spawns you with', async ({ page }) => {
+  // The weapon HUD is hidden behind the menu, so read the HUD state from the store.
+  const weapon = () =>
+    page.evaluate(async () => (await import('/src/store.ts')).getStatus().combat?.weaponName);
+  await page.goto('/');
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
+  await expect.poll(weapon).toBe('Kestrel AR');
+  await page.getByTestId('weapon-thresher-12').click();
+  await expect(page.getByTestId('weapon-thresher-12')).toHaveAttribute('aria-pressed', 'true');
+  // Saved in settings and sent with the next join: after a reload we spawn with it.
+  await page.reload();
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
+  await expect.poll(weapon).toBe('Thresher 12');
+});

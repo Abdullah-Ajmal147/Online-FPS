@@ -1,3 +1,5 @@
+import { resolveLoadout } from '@sentinel/content';
+
 /** Player settings. Stored per browser (a convenience, not game state). */
 
 export const ACTIONS = [
@@ -38,6 +40,9 @@ export interface Settings {
   headBob: boolean;
   /** KeyboardEvent.code per action. */
   bindings: Record<Action, string>;
+  /** Loadout weapon ids (applied at the next spawn). */
+  primary: string;
+  secondary: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -46,6 +51,8 @@ export const DEFAULT_SETTINGS: Settings = {
   fov: 90,
   toggleSprint: false,
   headBob: false,
+  primary: 'kestrel-ar',
+  secondary: 'wren-sp',
   // Crouch is C, not Ctrl: Ctrl+W closes the browser tab.
   bindings: {
     forward: 'KeyW',
@@ -83,7 +90,10 @@ export function normalizeSettings(raw: unknown): Settings {
     }
   }
   const { sensitivity, fov } = LIMITS;
+  const [primary, secondary] = resolveLoadout(r.primary, r.secondary);
   return {
+    primary: primary.id,
+    secondary: secondary.id,
     sensitivity: clamp(
       r.sensitivity,
       sensitivity.min,

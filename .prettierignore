@@ -3,3 +3,4 @@ dist/
 coverage/
 playwright-report/
 test-results/
+packages/content/src/weapons/catalog.gen.ts

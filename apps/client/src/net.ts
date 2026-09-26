@@ -10,6 +10,7 @@ import {
   decodeSnapshot,
   encodeInputCmd,
   encodePing,
+  encodeSetLoadout,
   type GameEvent,
   type Hello,
   type MatchInfo,
@@ -50,12 +51,18 @@ export class Connection {
   private room: Room | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
 
-  async connect(handlers: NetHandlers, name: string, token: string | null): Promise<void> {
+  async connect(
+    handlers: NetHandlers,
+    join: { name: string; token: string | null; primary: string; secondary: string },
+  ): Promise<void> {
+    const { name, token, primary, secondary } = join;
     const client = new Client(serverUrl());
     try {
       const room = await client.joinOrCreate('match', {
         protocolVersion: PROTOCOL_VERSION,
         name,
+        primary,
+        secondary,
         ...(token ? { token } : {}),
       });
       this.room = room;
@@ -133,5 +140,10 @@ export class Connection {
 
   sendInput(cmd: InputCmd): void {
     this.room?.sendBytes(MessageType.InputCmd, encodeInputCmd(cmd));
+  }
+
+  /** Loadout for our next spawn (weapon catalog indices); the server validates it. */
+  sendLoadout(primary: number, secondary: number): void {
+    this.room?.sendBytes(MessageType.SetLoadout, encodeSetLoadout({ primary, secondary }));
   }
 }

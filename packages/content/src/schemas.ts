@@ -171,6 +171,12 @@ export const WeaponSchema = z
       minMultiplier: z.number().min(0).max(1),
     }),
     maxRange: z.number().positive().max(500),
+    /**
+     * Rays per shot (shotguns). Damage values are per pellet; each pellet gets its own random
+     * spread inside `spread` + `pelletSpread`. The server adds up pellet damage per victim.
+     */
+    pellets: z.number().int().min(1).max(12).default(1),
+    pelletSpread: Degrees.default(0),
     magazine: z.number().int().positive().max(255),
     reserve: z.number().int().nonnegative().max(65535),
     reloadTime: z.number().positive().max(4.25),

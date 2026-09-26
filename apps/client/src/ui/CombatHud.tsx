@@ -104,7 +104,9 @@ function Vitals({ c }: { c: CombatHudState }) {
       <div class="ammo" data-testid="ammo">
         <span class="ammo-mag">{c.reloading ? '—' : c.ammo}</span>
         <span class="ammo-reserve">/ {c.reserve}</span>
-        <div class="weapon-name">{c.reloading ? 'reloading…' : c.weaponName}</div>
+        <div class="weapon-name" data-testid="hud-weapon">
+          {c.reloading ? 'reloading…' : c.weaponName}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useStatus } from './Hud.tsx';
+import { LoadoutPicker } from './Loadout.tsx';
 import {
   ACTIONS,
   ACTION_LABELS,
@@ -48,6 +49,13 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
           Click to play
         </button>
         <p class="menu-hint">Esc releases the mouse and brings this menu back.</p>
+
+        <h2>Loadout</h2>
+        <LoadoutPicker
+          primary={settings.primary}
+          secondary={settings.secondary}
+          onChange={(primary, secondary) => onSettings({ ...settings, primary, secondary })}
+        />
 
         <label class="row">
           <span>Your name</span>

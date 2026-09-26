@@ -11,7 +11,8 @@ export interface EntityState {
   position: Vec3;
   yaw: number;
   pitch: number;
-  weaponSlot: number;
+  /** Held weapon: index in @sentinel/content weaponCatalog (255 = none). */
+  weapon: number;
   shotCount: number;
 }
 

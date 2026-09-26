@@ -179,7 +179,7 @@ const ent = (x: number, yaw = 0): EntityState => ({
   position: [x, 0, 0],
   yaw,
   pitch: 0,
-  weaponSlot: 0,
+  weapon: 0,
   shotCount: 0,
 });
 

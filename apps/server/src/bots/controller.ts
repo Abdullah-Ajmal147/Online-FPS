@@ -1,5 +1,5 @@
 import { MAX_PLAYERS_PER_MATCH, type Vec3 } from '@sentinel/shared';
-import type { GameMap } from '@sentinel/content';
+import { resolveLoadout, type GameMap } from '@sentinel/content';
 import type { MatchSim, SimPlayer } from '../sim.ts';
 import { BotBrain, type Difficulty } from './brain.ts';
 import { NavGrid } from './nav.ts';
@@ -28,6 +28,8 @@ const CALLSIGNS = [
  * Keeps every match full (Phase 3): bots fill empty slots up to 12, keep teams even, and
  * make room when a human joins. Each tick it asks every bot's brain for an input.
  */
+const BOT_PRIMARIES = ['kestrel-ar', 'vireo-smg', 'kestrel-ar', 'halberd-mr'] as const;
+
 export class BotController {
   readonly nav: NavGrid;
   private brains = new Map<number, BotBrain>();
@@ -95,7 +97,20 @@ export class BotController {
 
   private addBot(): SimPlayer {
     const name = `Bot ${CALLSIGNS[this.nameCursor++ % CALLSIGNS.length]}`;
-    const p = this.sim.addPlayer({ name, bot: true });
+    // Bots carry a mix of primaries so the kill feed and fights vary (no shotgun: bot tactics
+    // don't close distance on purpose, so it would only make them weaker).
+    // Cycle per team (the n-th bot on each team gets the same weapon), so both teams carry the
+    // same mix; a global cycle would line up with team alternation and arm one team better.
+    const [a, b] = this.sim.teamCounts();
+    const team = a <= b ? 0 : 1;
+    const onTeam = [...this.sim.players.values()].filter((p) => p.bot && p.team === team).length;
+    const primary = BOT_PRIMARIES[onTeam % BOT_PRIMARIES.length];
+    const p = this.sim.addPlayer({
+      name,
+      bot: true,
+      team,
+      loadout: resolveLoadout(primary, 'wren-sp'),
+    });
     this.brains.set(
       p.id,
       new BotBrain(p, this.sim, this.nav, this.difficulty, this.seed++, this.planBudget),

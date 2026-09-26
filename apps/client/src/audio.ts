@@ -1,3 +1,18 @@
+import type { Weapon } from '@sentinel/content';
+
+type WeaponClass = Weapon['class'];
+
+/** Synth parameters per weapon class: crack filter Hz, length s, loudness, thump Hz. */
+const SHOT_SOUNDS: Record<
+  WeaponClass,
+  { crack: number; length: number; gain: number; thump: number; thumpGain: number }
+> = {
+  rifle: { crack: 1400, length: 0.11, gain: 0.9, thump: 120, thumpGain: 0.6 },
+  smg: { crack: 1900, length: 0.07, gain: 0.7, thump: 150, thumpGain: 0.45 },
+  shotgun: { crack: 800, length: 0.22, gain: 1, thump: 80, thumpGain: 0.9 },
+  marksman: { crack: 1100, length: 0.18, gain: 1, thump: 95, thumpGain: 0.8 },
+  sidearm: { crack: 2200, length: 0.08, gain: 0.7, thump: 160, thumpGain: 0.6 },
+};
 /**
  * Game sounds, synthesized with Web Audio (no audio files, so nothing to license).
  * Remote gunshots are positioned in 3D with an HRTF panner.
@@ -43,8 +58,9 @@ export class GameAudio {
     l.upZ.setValueAtTime(0, t);
   }
 
-  /** A gunshot: filtered noise crack + low thump. Rifle and sidearm sound different. */
-  shot(slot: number, at?: readonly [number, number, number]): void {
+  /** A gunshot: filtered noise crack + low thump, shaped per weapon class. */
+  shot(kind: WeaponClass, at?: readonly [number, number, number]): void {
+    const p = SHOT_SOUNDS[kind];
     const ctx = this.ctx;
     if (!ctx || !this.noise || !this.master) return;
     const t = ctx.currentTime;
@@ -65,11 +81,11 @@ export class GameAudio {
     src.buffer = this.noise;
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.value = slot === 0 ? 1400 : 2200;
+    filter.frequency.value = p.crack;
     filter.Q.value = 0.7;
     const gain = ctx.createGain();
-    const len = slot === 0 ? 0.11 : 0.08;
-    gain.gain.setValueAtTime(slot === 0 ? 0.9 : 0.7, t);
+    const len = p.length;
+    gain.gain.setValueAtTime(p.gain, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + len);
     src.connect(filter).connect(gain).connect(out);
     src.start(t);
@@ -77,14 +93,14 @@ export class GameAudio {
 
     const thump = ctx.createOscillator();
     thump.type = 'sine';
-    thump.frequency.setValueAtTime(slot === 0 ? 120 : 160, t);
+    thump.frequency.setValueAtTime(p.thump, t);
     thump.frequency.exponentialRampToValueAtTime(40, t + 0.09);
     const tg = ctx.createGain();
-    tg.gain.setValueAtTime(0.6, t);
-    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    tg.gain.setValueAtTime(p.thumpGain, t);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + 0.1 + p.length * 0.3);
     thump.connect(tg).connect(out);
     thump.start(t);
-    thump.stop(t + 0.12);
+    thump.stop(t + 0.14 + p.length * 0.3);
   }
 
   /** Short tick for a confirmed hit; higher for headshots, a two-tone chime for kills. */

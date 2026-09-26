@@ -1,0 +1,35 @@
+{
+  "id": "halberd-mr",
+  "name": "Halberd MR",
+  "class": "marksman",
+  "slot": 0,
+  "fireMode": "semi",
+  "rpm": 240,
+  "damage": { "head": 90, "torso": 45, "limbs": 38 },
+  "falloff": { "start": 60, "end": 100, "minMultiplier": 0.9 },
+  "maxRange": 200,
+  "magazine": 12,
+  "reserve": 48,
+  "reloadTime": 2.5,
+  "equipTime": 0.55,
+  "adsTime": 0.3,
+  "spread": {
+    "hip": 1.8,
+    "ads": 0,
+    "moving": 0.8,
+    "airborne": 3,
+    "perShot": 0.4,
+    "max": 1.2,
+    "recoveryPerSecond": 6
+  },
+  "recoil": {
+    "pattern": [
+      [1.1, 0.08],
+      [1.1, -0.1]
+    ],
+    "adsMultiplier": 0.6,
+    "recoveryPerSecond": 9
+  },
+  "moveSpeedMultiplier": 0.92,
+  "adsMoveSpeedMultiplier": 0.55
+}

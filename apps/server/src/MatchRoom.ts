@@ -1,11 +1,19 @@
 import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
 import { RateLimiter, resolveApiSecret, verifyGuestToken } from '@sentinel/auth';
-import { defaultLoadout, maps, modes, movement } from '@sentinel/content';
+import {
+  defaultLoadout,
+  maps,
+  modes,
+  movement,
+  resolveLoadout,
+  weaponCatalog,
+} from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
   decodeInputCmd,
+  decodeSetLoadout,
   decodeSnapshotAck,
   encodeEvents,
   encodeHello,
@@ -148,6 +156,23 @@ export class MatchRoom extends Room {
       this.inbound(client, () => this.outbound(client, MessageType.Pong, bytes));
     });
 
+    // Loadout for the next spawn. Untrusted: resolveLoadout drops unknown or wrong-slot
+    // weapons (they fall back to the default), and it only ever applies at a respawn.
+    this.onMessageBytes(MessageType.SetLoadout, (client: Client, bytes: Uint8Array) => {
+      const seat = this.seats.get(client.sessionId);
+      if (!seat) return;
+      try {
+        const msg = decodeSetLoadout(bytes);
+        const loadout = resolveLoadout(
+          weaponCatalog[msg.primary]?.id,
+          weaponCatalog[msg.secondary]?.id,
+        );
+        this.sim.setLoadout(seat.playerId, loadout);
+      } catch {
+        if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+      }
+    });
+
     // Standalone ack (normally the ack rides on InputCmd).
     this.onMessageBytes(MessageType.SnapshotAck, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
@@ -182,7 +207,10 @@ export class MatchRoom extends Room {
     return { guestId: verifyGuestToken(token, API_SECRET) };
   }
 
-  override onJoin(client: Client, options?: { name?: unknown }): void {
+  override onJoin(
+    client: Client,
+    options?: { name?: unknown; primary?: unknown; secondary?: unknown },
+  ): void {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
     const team = this.bots ? this.bots.teamForHuman() : undefined;
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
@@ -192,6 +220,7 @@ export class MatchRoom extends Room {
         (client.auth as { guestId?: string | null } | undefined)?.guestId ?? null,
       ),
       ...(team === undefined ? {} : { team }),
+      loadout: resolveLoadout(options?.primary, options?.secondary),
     });
     this.seats.set(client.sessionId, {
       playerId: player.id,

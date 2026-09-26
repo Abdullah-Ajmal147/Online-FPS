@@ -18,6 +18,9 @@ export interface WeaponSpec {
   reloadTicks: number;
   equipTicks: number;
   adsTicks: number;
+  /** Rays per shot (1, or more for shotguns) and their extra cone radius, angle units. */
+  pellets: number;
+  pelletSpread: number;
   spread: {
     hip: number;
     ads: number;
@@ -43,6 +46,8 @@ export function compileWeapon(def: Weapon): WeaponSpec {
     reloadTicks: toTicks(def.reloadTime),
     equipTicks: toTicks(def.equipTime),
     adsTicks: toTicks(def.adsTime),
+    pellets: def.pellets,
+    pelletSpread: toUnits(def.pelletSpread),
     spread: {
       hip: toUnits(s.hip),
       ads: toUnits(s.ads),

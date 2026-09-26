@@ -151,7 +151,15 @@ export class BotBrain {
 
       if (this.reactionLeft > 0) this.reactionLeft--;
       const offBy = Math.hypot(wrapAngle(wantYaw - this.yaw), wantPitch - this.pitch) / DEG;
-      if (this.reactionLeft === 0 && offBy < this.diff.fireToleranceDeg && mag.ammo > 0)
+      // Semi-automatic weapons fire once per press: release the trigger every other tick.
+      const semi = me.ctx.loadout[w.slot].def.fireMode === 'semi';
+      const held = (me.sim.move.prevButtons & Button.Fire) !== 0;
+      if (
+        this.reactionLeft === 0 &&
+        offBy < this.diff.fireToleranceDeg &&
+        mag.ammo > 0 &&
+        !(semi && held)
+      )
         buttons |= Button.Fire;
       if (dist > 12) buttons |= Button.Aim;
       // Strafe while fighting.
@@ -166,7 +174,7 @@ export class BotBrain {
       this.targetId = 0;
       buttons |= this.roam(me);
       // Out of a fight with a half-empty magazine: top up.
-      const magazine = this.sim.context.loadout[w.slot].def.magazine;
+      const magazine = me.ctx.loadout[w.slot].def.magazine;
       if (mag.ammo < magazine / 2 && mag.reserve > 0) buttons |= Button.Reload;
     }
     if (mag.ammo === 0) buttons |= Button.Reload;

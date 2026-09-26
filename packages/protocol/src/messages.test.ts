@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_PLAYERS_PER_MATCH, SNAPSHOT_RATE, type Vec3 } from '@sentinel/shared';
 import {
+  NO_WEAPON,
+  decodeSetLoadout,
+  encodeSetLoadout,
   decodeEvents,
   decodeHello,
   decodeMatchInfo,
@@ -49,6 +52,7 @@ const own: OwnSnapshot = {
       bloom: 400,
     },
   },
+  loadout: [3, 4],
   health: 64,
   lifeId: 3,
   respawnTicks: 0,
@@ -63,13 +67,13 @@ const entity = (id: number, position: Vec3): EntityState => ({
   position,
   yaw: (id * 5000) & 0xffff,
   pitch: -1200 + id,
-  weaponSlot: id % 2,
+  weapon: id % 5,
   shotCount: (id * 37) & 0xff,
 });
 
 describe('protocol version', () => {
-  it('is 5 (Phase 3: match info)', () => {
-    expect(PROTOCOL_VERSION).toBe(5);
+  it('is 6 (Phase 5: loadouts)', () => {
+    expect(PROTOCOL_VERSION).toBe(6);
   });
 });
 
@@ -157,7 +161,7 @@ describe('Snapshot', () => {
       team: 1,
       alive: false,
       crouching: true,
-      weaponSlot: 1,
+      weapon: 3,
       shotCount: 111,
     });
     [0.123, 1.777, -9.99].forEach((v, i) =>
@@ -182,7 +186,8 @@ describe('Snapshot', () => {
 describe('Events', () => {
   it('round-trips kills, hits and damage', () => {
     const events: GameEvent[] = [
-      { type: 'kill', killer: 2, victim: 5, weaponSlot: 0, headshot: true },
+      { type: 'kill', killer: 2, victim: 5, weapon: 0, headshot: true },
+      { type: 'kill', killer: 5, victim: 5, weapon: NO_WEAPON, headshot: false },
       { type: 'hit', victim: 5, damage: 34, zone: 'head', killed: true },
       { type: 'damaged', attacker: 2, from: [10.5, 1.5, -3], health: 66 },
     ];
@@ -191,6 +196,15 @@ describe('Events', () => {
 
   it('rejects unknown event types', () => {
     expect(() => decodeEvents(new Uint8Array([1, 99]))).toThrow(RangeError);
+  });
+});
+
+describe('SetLoadout', () => {
+  it('round-trips weapon indices', () => {
+    expect(decodeSetLoadout(encodeSetLoadout({ primary: 3, secondary: 4 }))).toEqual({
+      primary: 3,
+      secondary: 4,
+    });
   });
 });
 

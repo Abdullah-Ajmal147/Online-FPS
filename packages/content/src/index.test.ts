@@ -8,8 +8,19 @@ import {
   maps,
   modes,
   movement,
+  resolveLoadout,
+  weaponCatalog,
+  weaponIndex,
   weapons,
 } from './index.ts';
+import { weaponFileNames } from './weapons/catalog.gen.ts';
+
+// Vite (and so Vitest) expands import.meta.glob at build time: the list of files on disk.
+declare global {
+  interface ImportMeta {
+    glob(pattern: string): Record<string, unknown>;
+  }
+}
 
 describe('content', () => {
   it('loads Team Deathmatch as 6v6', () => {
@@ -146,5 +157,57 @@ describe('weapons', () => {
         .success,
     ).toBe(false);
     expect(WeaponSchema.safeParse({ ...rifle, magazine: 300 }).success).toBe(false);
+  });
+
+  it('registers every weapon JSON file (run `pnpm --filter @sentinel/content gen` if not)', () => {
+    const onDisk = Object.keys(import.meta.glob('./weapons/*.json'))
+      .map((f) => f.replace('./weapons/', ''))
+      .sort();
+    expect(weaponFileNames).toEqual(onDisk);
+  });
+
+  it('has one weapon per class: rifle, SMG, shotgun, marksman, sidearm', () => {
+    expect(new Set(weaponCatalog.map((w) => w.class))).toEqual(
+      new Set(['rifle', 'smg', 'shotgun', 'marksman', 'sidearm']),
+    );
+    expect(weaponCatalog.length).toBeLessThan(255); // u8 wire index, 255 = "no weapon"
+  });
+
+  it('gives each weapon a stable wire index sorted by id', () => {
+    const ids = weaponCatalog.map((w) => w.id);
+    expect(ids).toEqual([...ids].sort());
+    expect(weaponIndex('kestrel-ar')).toBe(ids.indexOf('kestrel-ar'));
+    expect(weaponIndex('nope')).toBe(-1);
+  });
+
+  it('keeps every weapon id matching its file name', () => {
+    expect(weaponCatalog.map((w) => `${w.id}.json`)).toEqual(weaponFileNames);
+  });
+
+  it('never lets a loadout put a weapon in the wrong slot', () => {
+    expect(resolveLoadout('vireo-smg', 'wren-sp').map((w) => w.id)).toEqual([
+      'vireo-smg',
+      'wren-sp',
+    ]);
+    expect(resolveLoadout('wren-sp', 'kestrel-ar').map((w) => w.id)).toEqual([
+      'kestrel-ar',
+      'wren-sp',
+    ]);
+    expect(resolveLoadout(42, { x: 1 }).map((w) => w.id)).toEqual(['kestrel-ar', 'wren-sp']);
+  });
+
+  it('makes the shotgun a close-range one-shot only when most pellets land', () => {
+    const sg = weapons['thresher-12']!;
+    expect(sg.pellets).toBeGreaterThan(1);
+    expect(sg.pellets * sg.damage.torso).toBeGreaterThanOrEqual(100);
+    expect(Math.ceil(sg.pellets / 2) * sg.damage.torso).toBeLessThan(100);
+  });
+
+  it('keeps every automatic primary at 4–7 body shots to kill', () => {
+    for (const w of weaponCatalog.filter((w) => w.fireMode === 'auto')) {
+      const shots = Math.ceil(100 / w.damage.torso);
+      expect(shots, w.id).toBeGreaterThanOrEqual(4);
+      expect(shots, w.id).toBeLessThanOrEqual(7);
+    }
   });
 });

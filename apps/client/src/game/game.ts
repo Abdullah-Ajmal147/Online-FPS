@@ -1,5 +1,13 @@
 import * as THREE from 'three/webgpu';
-import { defaultLoadout, maps, movement, type GameMap } from '@sentinel/content';
+import {
+  defaultLoadout,
+  maps,
+  movement,
+  weaponCatalog,
+  weaponIndex,
+  type GameMap,
+  type Weapon,
+} from '@sentinel/content';
 import {
   DRAW,
   MatchPhase,
@@ -111,6 +119,9 @@ export async function startGame(
   let mapMeshes: THREE.Group | null = null;
   let moveCtx!: MovementContext;
   let simCtx!: SimContext;
+  /** Our loadout as the server confirmed it (catalog indices); predicted with exactly this. */
+  let loadout: readonly [Weapon, Weapon] = defaultLoadout;
+  let loadoutIdx: readonly number[] = [];
   let predictor!: Predictor; // all assigned by loadMap() right below
   const effects = new Effects(scene);
   const freshSim = (): SimState => {
@@ -130,7 +141,7 @@ export async function startGame(
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
     moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
-    simCtx = createSimContext(moveCtx, defaultLoadout);
+    simCtx = createSimContext(moveCtx, loadout);
     predictor = new Predictor(freshSim(), simCtx, createPlayerBody(moveCtx));
   }
   loadMap('greybox'); // offline practice until the server tells us its map
@@ -285,9 +296,22 @@ export async function startGame(
         spawnedFromServer = true;
         lifeId = own.lifeId;
         const look = predictor.state.move;
+        const [pi, si] = own.loadout;
+        let ctx: SimContext | undefined;
+        if (pi !== loadoutIdx[0] || si !== loadoutIdx[1]) {
+          const pw = weaponCatalog[pi];
+          const sw = weaponCatalog[si];
+          if (pw && sw) {
+            loadout = [pw, sw];
+            loadoutIdx = [pi, si];
+            ctx = simCtx = createSimContext(moveCtx, loadout);
+            viewmodel.setLoadout(pw, sw);
+          }
+        }
         predictor.reset(
           { move: { ...own.sim.move, yaw: look.yaw, pitch: look.pitch }, weapon: own.sim.weapon },
           joining ? undefined : snap.lastProcessedSeq,
+          ctx,
         );
         prevState = predictor.state;
       } else if (alive) {
@@ -327,7 +351,7 @@ export async function startGame(
       // A remote player fired since the last snapshot: muzzle flash, tracer, 3D sound.
       const lastShots = remoteShots.get(e.id);
       if (lastShots !== undefined && lastShots !== e.shotCount && e.alive)
-        remoteFired(e.id, e.weaponSlot);
+        remoteFired(e.id, e.weapon);
       remoteShots.set(e.id, e.shotCount);
     }
     for (const id of remoteBuffers.keys()) {
@@ -368,7 +392,7 @@ export async function startGame(
           killerTeam: ev.killer === myId ? myTeam() : (teamOf.get(ev.killer) ?? 0),
           victim: nameOf(ev.victim),
           victimTeam: ev.victim === myId ? myTeam() : (teamOf.get(ev.victim) ?? 0),
-          weapon: ev.killer === ev.victim ? 'fell' : (defaultLoadout[ev.weaponSlot]?.name ?? ''),
+          weapon: ev.killer === ev.victim ? 'fell' : (weaponCatalog[ev.weapon]?.name ?? ''),
           headshot: ev.headshot,
         };
         hud.killFeed = [...hud.killFeed.slice(-4), entry];
@@ -440,9 +464,22 @@ export async function startGame(
       onMatchInfo,
       onDisconnect,
     },
-    settings().name,
-    guest?.token ?? null,
+    {
+      name: settings().name,
+      token: guest?.token ?? null,
+      primary: settings().primary,
+      secondary: settings().secondary,
+    },
   );
+  let sentLoadout = `${settings().primary}|${settings().secondary}`;
+  /** Menu changed the loadout mid-match: tell the server (applies at our next spawn). */
+  function syncLoadout(): void {
+    const { primary, secondary } = settings();
+    const key = `${primary}|${secondary}`;
+    if (key === sentLoadout || !conn.connected) return;
+    sentLoadout = key;
+    conn.sendLoadout(weaponIndex(primary), weaponIndex(secondary));
+  }
 
   // --- Shots ---
   const tmpA = new THREE.Vector3();
@@ -451,39 +488,46 @@ export async function startGame(
 
   /** Our predicted shot: effects now, and a faint "predicted" hit marker if we saw a hit. */
   function ownShot(shot: ShotRequest): void {
+    const spec = simCtx.loadout[shot.slot];
     viewmodel.onShot();
-    audio.shot(shot.slot);
+    audio.shot(spec.def.class);
     const eye = eyePosition(predictor.state.move, moveCtx);
-    // Visual spread guess (the server rolls the real one).
-    const r = shot.spread * Math.sqrt(Math.random());
-    const th = Math.random() * Math.PI * 2;
-    const d = directionFromAngles(
-      (shot.yaw + Math.round(r * Math.cos(th))) & 0xffff,
-      shot.pitch + Math.round(r * Math.sin(th)),
-    );
-    tmpDir.set(d[0], d[1], d[2]);
-    tmpA.set(eye[0], eye[1], eye[2]);
-    const range = defaultLoadout[shot.slot]!.maxRange;
-    const wall = effects.castMap(tmpA, tmpDir, range);
-    const wallDist = wall?.distance ?? range;
+    const range = spec.def.maxRange;
+    viewmodel.muzzleWorld(shot.slot, tmpB);
     let playerHit = false;
-    for (const pose of remotePoses.values()) {
-      if (!pose.alive || pose.team === myTeam()) continue;
-      if (rayPlayer(eye, d, pose.position, pose.crouching, movement, wallDist)) playerHit = true;
+    // Visual spread guess, one ray per pellet (the server rolls the real ones).
+    const cone = shot.spread + spec.pelletSpread;
+    for (let i = 0; i < spec.pellets; i++) {
+      const r = cone * Math.sqrt(Math.random());
+      const th = Math.random() * Math.PI * 2;
+      const d = directionFromAngles(
+        (shot.yaw + Math.round(r * Math.cos(th))) & 0xffff,
+        shot.pitch + Math.round(r * Math.sin(th)),
+      );
+      tmpDir.set(d[0], d[1], d[2]);
+      tmpA.set(eye[0], eye[1], eye[2]);
+      const wall = effects.castMap(tmpA, tmpDir, range);
+      const wallDist = wall?.distance ?? range;
+      let pelletHit = false;
+      for (const pose of remotePoses.values()) {
+        if (!pose.alive || pose.team === myTeam()) continue;
+        if (rayPlayer(eye, d, pose.position, pose.crouching, movement, wallDist)) pelletHit = true;
+      }
+      playerHit ||= pelletHit;
+      if (wall && !pelletHit) effects.impact(wall);
+      effects.tracer(tmpB, tmpA.clone().addScaledVector(tmpDir, Math.min(wallDist, 80)));
     }
     if (playerHit && performance.now() - hud.hitAt > 120) {
       hud.hitAt = performance.now();
       hud.hitKind = 'predicted';
       hudDirty = true;
     }
-    if (wall && !playerHit) effects.impact(wall);
-    viewmodel.muzzleWorld(shot.slot, tmpB);
-    effects.tracer(tmpB, tmpA.clone().addScaledVector(tmpDir, Math.min(wallDist, 80)));
   }
 
-  function remoteFired(id: number, slot: number): void {
+  function remoteFired(id: number, weapon: number): void {
     const pose = remotePoses.get(id);
     if (!pose) return;
+    const def = weaponCatalog[weapon];
     const h = capsuleHeight(movement, pose.crouching);
     tmpA.set(
       pose.position[0],
@@ -498,7 +542,7 @@ export async function startGame(
       tmpA.clone().addScaledVector(tmpDir, 0.5),
       tmpA.clone().addScaledVector(tmpDir, wall?.distance ?? 80),
     );
-    audio.shot(slot, [tmpA.x, tmpA.y, tmpA.z]);
+    audio.shot(def?.class ?? 'rifle', [tmpA.x, tmpA.y, tmpA.z]);
   }
 
   const aimDir = new THREE.Vector3();
@@ -589,10 +633,12 @@ export async function startGame(
       input.look.yaw + w.recoilYaw * RAD_PER_UNIT,
       0,
     );
+    syncLoadout();
     const spec = simCtx.loadout[w.slot];
     const ads = adsFraction(w, spec);
-    // Aiming zooms in a little.
-    const vfov = verticalFovDegrees(settings().fov * (1 - 0.18 * ads), camera.aspect);
+    // Aiming zooms in a little (a marksman scope a lot more).
+    const zoom = spec.def.class === 'marksman' ? 0.45 : 0.18;
+    const vfov = verticalFovDegrees(settings().fov * (1 - zoom * ads), camera.aspect);
     if (Math.abs(camera.fov - vfov) > 0.01) {
       camera.fov = vfov;
       camera.updateProjectionMatrix();

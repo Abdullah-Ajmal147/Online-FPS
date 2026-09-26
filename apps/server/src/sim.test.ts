@@ -1,5 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { defaultLoadout, maps, movement, type GameMap } from '@sentinel/content';
+import {
+  defaultLoadout,
+  maps,
+  movement,
+  resolveLoadout,
+  weaponIndex,
+  weapons,
+  type GameMap,
+} from '@sentinel/content';
 import {
   Button,
   MAX_PLAYERS_PER_MATCH,
@@ -277,6 +285,68 @@ describe('MatchSim: shooting', () => {
     });
     sim.step();
     expect(sim.lastShots[0]?.hit).toBeNull(); // the old position is outside the window
+  });
+});
+
+describe('MatchSim: loadouts', () => {
+  it('simulates each player with their own weapons and reports them on the wire', () => {
+    const sim = newSim(arena);
+    const smg = sim.addPlayer({ loadout: resolveLoadout('vireo-smg', 'wren-sp') });
+    const other = sim.addPlayer();
+    expect(smg.ctx.loadout[0].def.id).toBe('vireo-smg');
+    expect(smg.sim.weapon.ammo[0].ammo).toBe(weapons['vireo-smg']!.magazine);
+    expect(sim.snapshotFor(smg.id).own?.loadout).toEqual([
+      weaponIndex('vireo-smg'),
+      weaponIndex('wren-sp'),
+    ]);
+    const seen = sim.snapshotFor(other.id).entities.find((e) => e.id === smg.id);
+    expect(seen?.weapon).toBe(weaponIndex('vireo-smg'));
+  });
+
+  it('a new loadout applies only at the next spawn, never mid-life', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    sim.setLoadout(p.id, resolveLoadout('halberd-mr', 'wren-sp'));
+    sim.step();
+    expect(p.ctx.loadout[0].def.id).toBe('kestrel-ar');
+    sim.respawnAll();
+    expect(p.ctx.loadout[0].def.id).toBe('halberd-mr');
+    expect(p.loadout[0]).toBe(weaponIndex('halberd-mr'));
+    expect(p.sim.weapon.ammo[0].ammo).toBe(weapons['halberd-mr']!.magazine);
+  });
+
+  it('shotgun: pellet damage adds up into one hit, one-shot kill up close', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer({ loadout: resolveLoadout('thresher-12', 'wren-sp') });
+    const target = sim.addPlayer();
+    place(shooter, [0, 0, 3]);
+    place(target, [0, 0, 0]);
+    const pitch = aimPitch(1.67, 1.1, 3);
+    aimIn(sim, shooter, pitch);
+    const events = [];
+    const shots = [];
+    for (let i = 0; i < 3 && target.alive; i++) {
+      shots.push(...feed(sim, shooter, 1, AIM_FIRE, { pitch }));
+      events.push(...sim.events.filter((e) => e.event.type === 'hit'));
+    }
+    expect(shots).toHaveLength(weapons['thresher-12']!.pellets);
+    expect(events).toHaveLength(1);
+    expect(target.alive).toBe(false);
+    const kill = sim.events.find((e) => e.event.type === 'kill')?.event;
+    expect(kill).toMatchObject({ weapon: weaponIndex('thresher-12') });
+  });
+
+  it('shotgun: at long range the pellets spread and fall off, far from a kill', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer({ loadout: resolveLoadout('thresher-12', 'wren-sp') });
+    const target = sim.addPlayer();
+    place(shooter, [0, 0, 25]);
+    place(target, [0, 0, 0]);
+    const pitch = aimPitch(1.67, 1.1, 25);
+    aimIn(sim, shooter, pitch);
+    feed(sim, shooter, 2, AIM_FIRE, { pitch });
+    expect(target.alive).toBe(true);
+    expect(target.health).toBeGreaterThan(60);
   });
 });
 

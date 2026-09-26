@@ -13,8 +13,7 @@ import arenaJson from './maps/arena.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import relayYardJson from './maps/relay-yard.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
-import kestrelJson from './weapons/kestrel-ar.json' with { type: 'json' };
-import wrenJson from './weapons/wren-sp.json' with { type: 'json' };
+import { weaponFiles } from './weapons/catalog.gen.ts';
 
 export * from './schemas.ts';
 
@@ -33,13 +32,38 @@ export const maps: Record<string, GameMap> = {
 
 export const movement: Movement = MovementSchema.parse(movementJson);
 
-export const weapons: Record<string, Weapon> = {
-  'kestrel-ar': WeaponSchema.parse(kestrelJson),
-  'wren-sp': WeaponSchema.parse(wrenJson),
-};
+/**
+ * Every weapon, sorted by id. A weapon's index here is how it travels on the wire (u8), so
+ * client and server must run the same content build (PROTOCOL_VERSION guards the handshake).
+ * Adding a weapon is data only: a JSON file in src/weapons/ + `pnpm --filter @sentinel/content gen`.
+ */
+export const weaponCatalog: readonly Weapon[] = weaponFiles
+  .map((json) => WeaponSchema.parse(json))
+  .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-/** Phase 2 default loadout: [primary, secondary]. Loadouts become player choice in Phase 4. */
+export const weapons: Record<string, Weapon> = Object.fromEntries(
+  weaponCatalog.map((w) => [w.id, w]),
+);
+
+/** Wire index of a weapon id, or -1. */
+export function weaponIndex(id: string): number {
+  return weaponCatalog.findIndex((w) => w.id === id);
+}
+
+/** Default loadout: [primary, secondary]. Players pick their own in the menu (Phase 5). */
 export const defaultLoadout: readonly [Weapon, Weapon] = [
   weapons['kestrel-ar']!,
   weapons['wren-sp']!,
 ];
+
+/**
+ * A loadout from untrusted ids (join options, SetLoadout): unknown ids or a weapon in the
+ * wrong slot fall back to the default for that slot.
+ */
+export function resolveLoadout(primary: unknown, secondary: unknown): readonly [Weapon, Weapon] {
+  const pick = (id: unknown, slot: 0 | 1): Weapon => {
+    const w = typeof id === 'string' ? weapons[id] : undefined;
+    return w && w.slot === slot ? w : defaultLoadout[slot];
+  };
+  return [pick(primary, 0), pick(secondary, 1)];
+}

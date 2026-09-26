@@ -67,7 +67,7 @@ export class Predictor {
 
   constructor(
     initial: SimState,
-    private readonly ctx: SimContext,
+    private ctx: SimContext,
     private readonly body: PlayerBody,
   ) {
     this.state = initial;
@@ -77,10 +77,13 @@ export class Predictor {
    * Start over from a state the server gave us.
    * - Joining (`replayAfterSeq` omitted): drop all history. Inputs predicted offline must never
    *   be replayed; the server takes our first seq as its baseline.
+   * - `ctx`: the loadout the server simulates us with from this spawn on (if it changed).
    * - Respawning: the server already applied `lastProcessedSeq`; inputs after it are still in
    *   flight and WILL be applied on top of this state, so replay them here too.
    */
-  reset(state: SimState, replayAfterSeq?: number): void {
+  reset(state: SimState, replayAfterSeq?: number, ctx?: SimContext): void {
+    // A new loadout only ever arrives with a (re)spawn, so it swaps in together with the reset.
+    if (ctx) this.ctx = ctx;
     this.renderOffset.fill(0);
     if (replayAfterSeq === undefined) {
       this.state = state;

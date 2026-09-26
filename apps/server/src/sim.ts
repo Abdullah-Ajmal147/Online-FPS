@@ -1,5 +1,5 @@
-import type { GameMap, Movement, Weapon } from '@sentinel/content';
-import type { EntityState, GameEvent, Snapshot } from '@sentinel/protocol';
+import { weaponIndex, type GameMap, type Movement, type Weapon } from '@sentinel/content';
+import { NO_WEAPON, type EntityState, type GameEvent, type Snapshot } from '@sentinel/protocol';
 import {
   MAX_PLAYERS_PER_MATCH,
   MAX_REWIND_MS,
@@ -9,7 +9,7 @@ import {
   createPlayerBody,
   createPlayerState,
   createRng,
-  createSimContext,
+  compileWeapon,
   createWeaponState,
   damageAt,
   directionFromAngles,
@@ -24,12 +24,15 @@ import {
   type Rapier,
   type ShotRequest,
   type SimContext,
+  type WeaponSpec,
   type SimState,
   type Vec3,
 } from '@sentinel/shared';
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
 export const MAX_HEALTH = 100;
+/** When pellets of one blast hit different zones, the event reports the best one. */
+const ZONE_RANK: Record<HitZone, number> = { limbs: 0, torso: 1, head: 2 };
 /** Respawn 3 s after death (Phase 2 task 6). */
 export const RESPAWN_TICKS = 3 * TICK_RATE;
 /** Health starts coming back 4 s after the last damage and refills in ~1.7 s (GAME_DESIGN). */
@@ -84,6 +87,11 @@ export interface SimPlayer {
   /** Server bot: its input comes from `botInput` (set by the bot controller each tick). */
   bot: boolean;
   botInput: TickInput | null;
+  /** This player's loadout (compiled weapons) and its catalog indices for the wire. */
+  ctx: SimContext;
+  loadout: [number, number];
+  /** Chosen in the menu mid-match: applied at the next spawn, never mid-life. */
+  pendingLoadout: readonly [Weapon, Weapon] | null;
   /** Tick this player joined (time played in a match counts from here). */
   joinedAtTick: number;
   /** Damage is ignored before this tick (spawn protection). */
@@ -132,7 +140,9 @@ export class MatchSim {
    * aren't skewed by shots at targets that just died. Never set in real matches.
    */
   noDeath = false;
+  /** Default loadout context; each player has their own (SimPlayer.ctx). */
   private readonly ctx: SimContext;
+  private readonly specs = new Map<string, WeaponSpec>();
   private readonly random: () => number;
   private spawnCursor = [0, 0];
 
@@ -144,8 +154,29 @@ export class MatchSim {
     seed = 1,
   ) {
     const movementCtx = createMovementContext(rapier, buildWorld(rapier, expandMap(map)), tuning);
-    this.ctx = createSimContext(movementCtx, loadout);
+    this.ctx = { movement: movementCtx, loadout: [this.spec(loadout[0]), this.spec(loadout[1])] };
     this.random = createRng(seed);
+  }
+
+  /** Compiled weapons are shared between players (compiled once per weapon). */
+  private spec(w: Weapon): WeaponSpec {
+    let s = this.specs.get(w.id);
+    if (!s) this.specs.set(w.id, (s = compileWeapon(w)));
+    return s;
+  }
+
+  private contextFor(loadout: readonly [Weapon, Weapon]): SimContext {
+    return { movement: this.ctx.movement, loadout: [this.spec(loadout[0]), this.spec(loadout[1])] };
+  }
+
+  /**
+   * Choose a loadout (already validated with resolveLoadout). It takes effect at the player's
+   * next spawn, so a weapon can't be swapped mid-fight and the client's prediction only ever
+   * changes loadout together with a respawn reset.
+   */
+  setLoadout(id: number, loadout: readonly [Weapon, Weapon]): void {
+    const p = this.players.get(id);
+    if (p) p.pendingLoadout = loadout;
   }
 
   get isFull(): boolean {
@@ -160,13 +191,20 @@ export class MatchSim {
   }
 
   addPlayer(
-    opts: { name?: string; bot?: boolean; team?: number; guestId?: string | null } = {},
+    opts: {
+      name?: string;
+      bot?: boolean;
+      team?: number;
+      guestId?: string | null;
+      loadout?: readonly [Weapon, Weapon];
+    } = {},
   ): SimPlayer {
     if (this.isFull) throw new Error('match is full');
     let id = 1;
     while (this.players.has(id)) id++;
     const [a, b] = this.teamCounts();
     const team = opts.team ?? (a <= b ? 0 : 1);
+    const ctx = opts.loadout ? this.contextFor(opts.loadout) : this.ctx;
     const player: SimPlayer = {
       id,
       team,
@@ -174,10 +212,13 @@ export class MatchSim {
       guestId: opts.guestId ?? null,
       bot: opts.bot ?? false,
       botInput: null,
+      ctx,
+      loadout: [weaponIndex(ctx.loadout[0].def.id), weaponIndex(ctx.loadout[1].def.id)],
+      pendingLoadout: null,
       protectedUntil: this.tick + SPAWN_PROTECTION_TICKS,
       joinedAtTick: this.tick,
       body: createPlayerBody(this.ctx.movement),
-      sim: this.freshSim(team),
+      sim: this.freshSim(team, ctx),
       queue: new InputQueue(),
       health: MAX_HEALTH,
       alive: true,
@@ -221,14 +262,14 @@ export class MatchSim {
       if (!input) continue;
       p.viewTick = governViewTick(p.viewGovernor, input.viewTick);
       if (!p.alive || this.frozen) continue;
-      const r = stepSim(p.sim, input, this.ctx, p.body);
+      const r = stepSim(p.sim, input, p.ctx, p.body);
       p.sim = r.state;
       if (r.shot) {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
         shots.push({ shooter: p, shot: r.shot, viewTick: p.viewTick });
       }
-      if (p.sim.move.position[1] < this.map.killY) this.kill(p, null, 0, false);
+      if (p.sim.move.position[1] < this.map.killY) this.kill(p, null, NO_WEAPON, false);
     }
 
     this.tick++;
@@ -255,7 +296,7 @@ export class MatchSim {
         position: m.position,
         yaw: m.yaw,
         pitch: m.pitch,
-        weaponSlot: p.sim.weapon.slot,
+        weapon: p.loadout[p.sim.weapon.slot],
         shotCount: p.shotCount,
       });
     }
@@ -278,6 +319,7 @@ export class MatchSim {
               },
               weapon: me.sim.weapon,
             },
+            loadout: me.loadout,
             health: me.health,
             lifeId: me.lifeId,
             respawnTicks: me.respawnTicks,
@@ -296,45 +338,64 @@ export class MatchSim {
    * map block the shot.
    */
   private resolveShot(shooter: SimPlayer, shot: ShotRequest, viewTick: number): void {
-    const weapon = this.ctx.loadout[shot.slot].def;
+    const spec = shooter.ctx.loadout[shot.slot];
+    const weapon = spec.def;
     const origin = eyePosition(shooter.sim.move, this.ctx.movement);
-    // Random spread inside the cone (server-only randomness; the client shows its own guess).
-    const r = shot.spread * Math.sqrt(this.random());
-    const theta = this.random() * Math.PI * 2;
-    const dir = directionFromAngles(
-      (shot.yaw + Math.round(r * Math.cos(theta))) & 0xffff,
-      Math.max(-16383, Math.min(16383, shot.pitch + Math.round(r * Math.sin(theta)))),
-    );
-
-    const wallHit = this.ctx.movement.world.castRay(
-      new this.rapier.Ray(
-        { x: origin[0], y: origin[1], z: origin[2] },
-        { x: dir[0], y: dir[1], z: dir[2] },
-      ),
-      weapon.maxRange,
-      true,
-      this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
-    );
-    const wallDistance = wallHit ? wallHit.timeOfImpact : null;
-    const maxDist = wallDistance ?? weapon.maxRange;
-
     const rewindTick = Math.max(this.tick - MAX_REWIND_TICKS, Math.min(this.tick, viewTick));
-    let best: { victim: SimPlayer; zone: HitZone; distance: number } | null = null;
+    // Rewound poses are computed once per shot, not once per pellet.
+    const targets: { victim: SimPlayer; position: Vec3; crouching: boolean }[] = [];
     for (const target of this.players.values()) {
       if (target === shooter || target.team === shooter.team || !target.alive) continue;
       const pose = this.poseAt(target, rewindTick);
-      if (!pose || !pose.alive) continue;
-      const hit = rayPlayer(origin, dir, pose.position, pose.crouching, this.tuning, maxDist);
-      if (hit && (!best || hit.distance < best.distance)) best = { victim: target, ...hit };
+      if (pose?.alive) targets.push({ victim: target, ...pose });
     }
 
-    const result: ShotResult = { shooter: shooter.id, origin, dir, hit: null, wallDistance };
-    if (best) {
-      const damage = damageAt(weapon.damage[best.zone], best.distance, weapon.falloff);
-      result.hit = { victim: best.victim.id, zone: best.zone, damage, distance: best.distance };
-      this.damage(best.victim, shooter, damage, best.zone, shot.slot);
+    // A shotgun fires several pellets; their damage adds up per victim, so one blast is one
+    // hit (one event, one kill) no matter how many pellets land.
+    const cone = shot.spread + spec.pelletSpread;
+    const byVictim = new Map<SimPlayer, { damage: number; zone: HitZone; distance: number }>();
+    for (let i = 0; i < spec.pellets; i++) {
+      // Random spread inside the cone (server-only randomness; the client shows its own guess).
+      const r = cone * Math.sqrt(this.random());
+      const theta = this.random() * Math.PI * 2;
+      const dir = directionFromAngles(
+        (shot.yaw + Math.round(r * Math.cos(theta))) & 0xffff,
+        Math.max(-16383, Math.min(16383, shot.pitch + Math.round(r * Math.sin(theta)))),
+      );
+      const wallHit = this.ctx.movement.world.castRay(
+        new this.rapier.Ray(
+          { x: origin[0], y: origin[1], z: origin[2] },
+          { x: dir[0], y: dir[1], z: dir[2] },
+        ),
+        weapon.maxRange,
+        true,
+        this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+      );
+      const wallDistance = wallHit ? wallHit.timeOfImpact : null;
+      const maxDist = wallDistance ?? weapon.maxRange;
+
+      let best: { victim: SimPlayer; zone: HitZone; distance: number } | null = null;
+      for (const t of targets) {
+        const hit = rayPlayer(origin, dir, t.position, t.crouching, this.tuning, maxDist);
+        if (hit && (!best || hit.distance < best.distance)) best = { victim: t.victim, ...hit };
+      }
+
+      const result: ShotResult = { shooter: shooter.id, origin, dir, hit: null, wallDistance };
+      if (best) {
+        const damage = damageAt(weapon.damage[best.zone], best.distance, weapon.falloff);
+        result.hit = { victim: best.victim.id, zone: best.zone, damage, distance: best.distance };
+        const sum = byVictim.get(best.victim);
+        if (!sum) byVictim.set(best.victim, { damage, zone: best.zone, distance: best.distance });
+        else {
+          sum.damage += damage;
+          if (ZONE_RANK[best.zone] > ZONE_RANK[sum.zone]) sum.zone = best.zone;
+        }
+      }
+      this.lastShots.push(result);
     }
-    this.lastShots.push(result);
+    for (const [victim, hit] of byVictim) {
+      this.damage(victim, shooter, hit.damage, hit.zone, shooter.loadout[shot.slot]);
+    }
   }
 
   private damage(
@@ -342,7 +403,7 @@ export class MatchSim {
     attacker: SimPlayer,
     damage: number,
     zone: HitZone,
-    slot: number,
+    weapon: number,
   ): void {
     if (!victim.alive || this.tick < victim.protectedUntil) return;
     victim.health = Math.max(this.noDeath ? 1 : 0, victim.health - damage);
@@ -361,10 +422,15 @@ export class MatchSim {
         health: victim.health,
       },
     });
-    if (killed) this.kill(victim, attacker, slot, zone === 'head');
+    if (killed) this.kill(victim, attacker, weapon, zone === 'head');
   }
 
-  private kill(victim: SimPlayer, killer: SimPlayer | null, slot: number, headshot: boolean): void {
+  private kill(
+    victim: SimPlayer,
+    killer: SimPlayer | null,
+    weapon: number,
+    headshot: boolean,
+  ): void {
     if (!victim.alive) return;
     victim.alive = false;
     victim.health = 0;
@@ -381,7 +447,7 @@ export class MatchSim {
         type: 'kill',
         killer: killer?.id ?? victim.id,
         victim: victim.id,
-        weaponSlot: slot,
+        weapon,
         headshot,
       },
     });
@@ -395,7 +461,7 @@ export class MatchSim {
   private rewardAmmo(p: SimPlayer): void {
     const w = p.sim.weapon;
     const ammo = w.ammo.map((a, i) => {
-      const def = this.ctx.loadout[i as 0 | 1].def;
+      const def = p.ctx.loadout[i as 0 | 1].def;
       return { ammo: a.ammo, reserve: Math.min(def.reserve, a.reserve + def.magazine) };
     }) as SimState['weapon']['ammo'];
     p.sim = { ...p.sim, weapon: { ...w, ammo } };
@@ -412,7 +478,12 @@ export class MatchSim {
   }
 
   private respawn(p: SimPlayer): void {
-    p.sim = this.freshSim(p.team);
+    if (p.pendingLoadout) {
+      p.ctx = this.contextFor(p.pendingLoadout);
+      p.loadout = [weaponIndex(p.pendingLoadout[0].id), weaponIndex(p.pendingLoadout[1].id)];
+      p.pendingLoadout = null;
+    }
+    p.sim = this.freshSim(p.team, p.ctx);
     p.alive = true;
     p.health = MAX_HEALTH;
     p.respawnTicks = 0;
@@ -502,8 +573,8 @@ export class MatchSim {
 
   // --- Spawning ----------------------------------------------------------------------------
 
-  private freshSim(team: number): SimState {
-    return { move: this.spawnState(team), weapon: createWeaponState(this.ctx.loadout) };
+  private freshSim(team: number, ctx: SimContext): SimState {
+    return { move: this.spawnState(team), weapon: createWeaponState(ctx.loadout) };
   }
 
   /**
