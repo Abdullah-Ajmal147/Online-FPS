@@ -4,11 +4,12 @@ import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { getStatus, setStatus } from './store.ts';
 import { startSessionTelemetry } from './telemetry.ts';
+import { probeRegions, regions } from './regions.ts';
 import { App } from './ui/App.tsx';
 
 let settings: Settings = loadSettings();
-// Region names come with the multi-region servers (Phase 8 task 4); one region until then.
-startSessionTelemetry(() => 'default');
+void probeRegions(regions());
+startSessionTelemetry();
 let game: Game | undefined;
 /** DEPLOY pressed before the game finished loading. */
 let wantToJoin = false;
@@ -50,6 +51,7 @@ canvas.addEventListener('click', () => {
 startGame(canvas, () => settings)
   .then((g) => {
     game = g;
+    void probeRegions(regions()); // again, now that loading no longer blocks the page
     if (wantToJoin) void g.join(); // the mouse is captured on the next click (RESUME)
     setStatus({ backend: g.backend });
   })

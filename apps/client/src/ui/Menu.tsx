@@ -17,6 +17,7 @@ import {
 import { useStatus } from './Hud.tsx';
 import { LoadoutPicker } from './Loadout.tsx';
 import { primerDone, setPrimerDone } from '../primer.ts';
+import { pickRegion, regions } from '../regions.ts';
 
 interface Props {
   settings: Settings;
@@ -219,6 +220,9 @@ function PlayScreen({
             })}
           </div>
         )}
+        {!status.inMatch && !invited && (
+          <RegionPicker settings={settings} onSettings={onSettings} />
+        )}
         {invited && !status.inMatch && (
           <div class="notice">A friend invited you: DEPLOY puts you on their team.</div>
         )}
@@ -262,6 +266,52 @@ function PlayScreen({
         Esc pause
       </p>
     </section>
+  );
+}
+
+/** Server region: Auto (lowest ping) or a fixed one; one region shows just its ping. */
+function RegionPicker({
+  settings,
+  onSettings,
+}: {
+  settings: Settings;
+  onSettings: (next: Settings) => void;
+}) {
+  const pings = useStatus().regionPings;
+  const list = regions();
+  const measured = Object.keys(pings).length > 0;
+  const ms = (id: string) => {
+    if (!measured) return '…';
+    const p = pings[id];
+    return p == null ? 'offline' : `${p} ms`;
+  };
+  const choice = list.some((r) => r.id === settings.region) ? settings.region : 'auto';
+  const best = pickRegion(list, pings, 'auto');
+  if (list.length === 1) {
+    return (
+      <div class="regions single" data-testid="regions">
+        Server <b>{ms(list[0]!.id)}</b>
+      </div>
+    );
+  }
+  const option = (id: string, label: string, ping: string) => (
+    <button
+      key={id}
+      role="radio"
+      aria-checked={choice === id}
+      class={`region${choice === id ? ' on' : ''}`}
+      data-testid={`region-${id}`}
+      onClick={() => onSettings({ ...settings, region: id })}
+    >
+      {label} <small>{ping}</small>
+    </button>
+  );
+  return (
+    <div class="regions" role="radiogroup" aria-label="Server region" data-testid="regions">
+      <span class="regions-h">Region</span>
+      {option('auto', `Auto · ${best.name}`, ms(best.id))}
+      {list.map((r) => option(r.id, r.name, ms(r.id)))}
+    </div>
   );
 }
 

@@ -608,6 +608,7 @@ export async function startGame(
         token,
         loadout: loadoutChoice(settings()),
         mode: settings().mode,
+        region: settings().region,
       },
     );
   let sentLoadout = JSON.stringify(loadoutChoice(settings()));

@@ -130,6 +130,10 @@ export interface ClientStatus {
   invite: string | null;
   /** Recent chat lines, oldest first (muted players already left out). */
   chat: ChatEntry[];
+  /** Measured round trip per region id (null: unreachable); empty until measured. */
+  regionPings: Record<string, number | null>;
+  /** Region of the current match connection (null when not connected). */
+  region: string | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -151,6 +155,8 @@ let status: ClientStatus = {
   xpBaseline: null,
   invite: null,
   chat: [],
+  regionPings: {},
+  region: null,
 };
 const listeners = new Set<Listener>();
 

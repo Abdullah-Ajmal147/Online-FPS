@@ -2053,3 +2053,50 @@ details.patch summary small {
     transform: translate(-50%, 6px);
   }
 }
+
+/* Region picker (Play screen) */
+.regions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+
+.regions.single b {
+  margin-left: 6px;
+  color: var(--text);
+  font-weight: 400;
+}
+
+.regions-h {
+  margin-right: 4px;
+  font: 600 11px var(--display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.region {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font: 600 12px var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.region small {
+  margin-left: 4px;
+  color: var(--muted);
+  font: 11px var(--mono);
+  text-transform: none;
+}
+
+.region.on {
+  border-color: var(--amber);
+  color: var(--amber);
+}

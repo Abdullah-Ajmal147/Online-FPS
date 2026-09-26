@@ -347,6 +347,11 @@ Done:
      held node per second + 1 per kill, 200 to win). Picked on the Play screen; the server
      filters rooms by mode. Nodes shown as coloured rings/beams and A/B/C badges in the score
      bar. Bots go for nodes they don't hold.
+- 4. (client part) Regions: a build-time list (`VITE_REGIONS`: id, name, server URL). The
+     client pings each region's `/healthz` and joins the lowest ping, or the region picked on
+     the Play screen; invite links carry the region so friends land on the same server.
+     Checked with two local servers (pick NA → invite → friend joins the same NA room). The
+     servers themselves (Edgegap / hosting) are the owner's decision.
 - 7. Comms screen: patch notes (`news.json`, newest first), a feedback form (bug / idea /
      other, 1000 chars, sends build + renderer + mode, rate-limited per guest and IP, kept 180
      days, listed on the admin page), community link slot (hidden until the owner has a

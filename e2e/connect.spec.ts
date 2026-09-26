@@ -10,9 +10,13 @@ test('the main menu comes first; nothing is joined until DEPLOY', async ({ page 
   await expect(page.getByTestId('net-status')).toHaveText('not in a match');
   await page.waitForTimeout(1500);
   expect((await status(page)).inMatch).toBe(false);
+  // One server region in this build: its measured ping is shown.
+  await expect(page.getByTestId('regions')).toContainText(/Server \d+ ms/);
 
   await page.getByTestId('play').click(); // DEPLOY
   await expect.poll(async () => (await status(page)).net.text).toMatch(/connected, protocol v\d+/);
+  expect((await status(page)).region).toBe('default');
+  expect((await status(page)).invite).toContain('region=default');
   await expect.poll(async () => (await status(page)).combat?.alive, { timeout: 15_000 }).toBe(true);
   // Pause (Esc in a real browser): the menu is back as a pause menu with RESUME and LEAVE.
   await pause(page);

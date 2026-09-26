@@ -53,6 +53,8 @@ export interface Settings {
   renderScale: number;
   /** Playlist chosen on the Play screen (a content mode id). */
   mode: string;
+  /** Game server region id, or 'auto' (lowest ping). */
+  region: string;
   /** Loadout weapon ids (applied at the next spawn). */
   primary: string;
   secondary: string;
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toggleSprint: false,
   headBob: false,
   mode: 'team-deathmatch',
+  region: 'auto',
   graphics: 'medium',
   renderScale: 1,
   primary: 'kestrel-ar',
@@ -118,6 +121,11 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     mode:
       typeof r.mode === 'string' && Object.hasOwn(modes, r.mode) ? r.mode : DEFAULT_SETTINGS.mode,
+    // Validated against the region list when joining (unknown ids mean 'auto').
+    region:
+      typeof r.region === 'string' && /^[a-z0-9-]{1,24}$/.test(r.region)
+        ? r.region
+        : DEFAULT_SETTINGS.region,
     graphics: GRAPHICS_PRESETS.includes(r.graphics as GraphicsPreset)
       ? (r.graphics as GraphicsPreset)
       : DEFAULT_SETTINGS.graphics,

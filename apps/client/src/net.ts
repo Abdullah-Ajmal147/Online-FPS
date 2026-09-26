@@ -21,22 +21,19 @@ import {
   type InputCmd,
   type Snapshot,
 } from '@sentinel/protocol';
-import { setStatus } from './store.ts';
+import { getStatus, setStatus } from './store.ts';
+import { pickRegion, regions } from './regions.ts';
 import { urlFromQuery } from './urls.ts';
 
 /**
- * Game server to join: `?server=` in the page URL (tests, and later region picking), then the
- * build-time VITE_SERVER_URL, then the same host on port 2567.
+ * Game server to join: `?server=` in the page URL (development and tests; allowed hosts only
+ * in production), else the region picked by `pickRegion` (invite, choice, ping).
  */
-function serverUrl(): string {
+function serverFor(regionChoice: string): { url: string; region: string | null } {
   const fromQuery = urlFromQuery('server');
-  if (fromQuery) return fromQuery;
-  const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
-  if (fromEnv) return fromEnv;
-  // Production: the page and the game server share one origin (behind Caddy, or the game
-  // server serving the client itself). Development: the Vite page is on :5173, server on :2567.
-  if (!import.meta.env.DEV) return location.origin;
-  return `${location.protocol}//${location.hostname}:2567`;
+  if (fromQuery) return { url: fromQuery, region: null };
+  const region = pickRegion(regions(), getStatus().regionPings, regionChoice, inviteRegion());
+  return { url: region.url, region: region.id };
 }
 
 export interface NetHandlers {
@@ -58,10 +55,17 @@ export class Connection {
 
   async connect(
     handlers: NetHandlers,
-    join: { name: string; token: string | null; loadout: LoadoutChoice; mode: string },
+    join: {
+      name: string;
+      token: string | null;
+      loadout: LoadoutChoice;
+      mode: string;
+      region: string;
+    },
   ): Promise<void> {
     const { name, token, loadout, mode } = join;
-    const client = new Client(serverUrl());
+    const server = serverFor(join.region);
+    const client = new Client(server.url);
     try {
       const options = {
         protocolVersion: PROTOCOL_VERSION,
@@ -94,7 +98,10 @@ export class Connection {
         }
         setStatus({
           net: { state: 'connected', text: `connected, protocol v${hello.protocolVersion}` },
-          invite: hello.inviteToken ? inviteUrl(room.roomId, hello.inviteToken) : null,
+          invite: hello.inviteToken
+            ? inviteUrl(room.roomId, hello.inviteToken, server.region)
+            : null,
+          region: server.region,
         });
         handlers.onHello(hello);
       });
@@ -192,11 +199,21 @@ export function inviteFromUrl(): { room: string; with: string } | null {
 }
 
 /** A link that brings a friend into this match, on this player's team (server-issued token). */
-export function inviteUrl(roomId: string, token: string): string {
+export function inviteUrl(roomId: string, token: string, region: string | null = null): string {
   const url = new URL(location.href);
   url.searchParams.set('room', roomId);
   url.searchParams.set('with', token);
+  // Rooms live on one server: the friend must join the same region.
+  if (region) url.searchParams.set('region', region);
+  else url.searchParams.delete('region');
   return url.toString();
+}
+
+/** Region from an invite link (only with a room to join; checked against the list later). */
+function inviteRegion(): string | null {
+  if (!inviteFromUrl()) return null;
+  const r = new URLSearchParams(location.search).get('region');
+  return r && /^[a-z0-9-]{1,24}$/.test(r) ? r : null;
 }
 
 /**
