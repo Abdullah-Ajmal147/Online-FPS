@@ -33,6 +33,12 @@ export class Store {
         deaths INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS weapon_kills (
+        guest_id TEXT NOT NULL,
+        weapon_id TEXT NOT NULL,
+        kills INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guest_id, weapon_id)
+      );
       CREATE TABLE IF NOT EXISTS matches (
         match_id TEXT PRIMARY KEY,
         received_at INTEGER NOT NULL,
@@ -56,8 +62,21 @@ export class Store {
   addResult(
     guestId: string,
     name: string,
-    r: { xp: number; win: boolean; kills: number; deaths: number },
+    r: {
+      xp: number;
+      win: boolean;
+      kills: number;
+      deaths: number;
+      weaponKills?: Readonly<Record<string, number>>;
+    },
   ): void {
+    const addKills = this.db.prepare(
+      `INSERT INTO weapon_kills (guest_id, weapon_id, kills) VALUES (?, ?, ?)
+       ON CONFLICT(guest_id, weapon_id) DO UPDATE SET kills = kills + excluded.kills`,
+    );
+    for (const [weaponId, kills] of Object.entries(r.weaponKills ?? {})) {
+      if (kills > 0) addKills.run(guestId, weaponId, kills);
+    }
     this.db
       .prepare(
         `INSERT INTO profiles (guest_id, name, xp, matches, wins, kills, deaths, updated_at)
@@ -72,6 +91,14 @@ export class Store {
            updated_at = excluded.updated_at`,
       )
       .run(guestId, name, r.xp, r.win ? 1 : 0, r.kills, r.deaths, Date.now());
+  }
+
+  /** Kills per weapon id, all time. */
+  weaponKills(guestId: string): Record<string, number> {
+    const rows = this.db
+      .prepare('SELECT weapon_id, kills FROM weapon_kills WHERE guest_id = ?')
+      .all(guestId) as { weapon_id: string; kills: number }[];
+    return Object.fromEntries(rows.map((r) => [r.weapon_id, r.kills]));
   }
 
   profile(guestId: string): ProfileRow | null {

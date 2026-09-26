@@ -26,6 +26,8 @@ function result(matchId: string, winner = 0) {
         bot: false,
         kills: 7,
         deaths: 3,
+        headshots: 2,
+        weaponKills: { 'kestrel-ar': 5, 'vireo-smg': 2 },
         secondsPlayed: 600,
       },
       {
@@ -67,9 +69,9 @@ describe('xp rules', () => {
   });
 
   it('awards participation + kills + result', () => {
-    expect(xpForMatch({ kills: 7, team: 0 }, 0)).toBe(150 + 700 + 250);
-    expect(xpForMatch({ kills: 2, team: 1 }, 0)).toBe(150 + 200);
-    expect(xpForMatch({ kills: 0, team: 1 }, 2)).toBe(150 + 100);
+    expect(xpForMatch({ kills: 7, team: 0, headshots: 0 }, 0)).toBe(150 + 700 + 250);
+    expect(xpForMatch({ kills: 2, team: 1, headshots: 0 }, 0)).toBe(150 + 200);
+    expect(xpForMatch({ kills: 0, team: 1, headshots: 0 }, 2)).toBe(150 + 100);
   });
 });
 
@@ -106,7 +108,7 @@ describe('api', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { awarded: { guestId: string; xp: number }[] };
     expect(body.awarded).toEqual([
-      { guestId: GUEST, xp: 1100 },
+      { guestId: GUEST, xp: 1150 }, // 150 + 7 kills + 2 headshots × 25 + win
       { guestId: OTHER, xp: 350 },
     ]);
     const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as Record<
@@ -115,7 +117,7 @@ describe('api', () => {
     >;
     expect(profile).toMatchObject({
       name: 'Ayesha',
-      xp: 1100,
+      xp: 1150,
       level: 2,
       matches: 1,
       wins: 1,
@@ -165,5 +167,44 @@ describe('api', () => {
       xp: number;
     };
     expect(fresh).toMatchObject({ level: 1, xp: 0 });
+  });
+});
+
+describe('unlocks', () => {
+  const access = (a: ReturnType<typeof app>, guestId: string, secret = SECRET) =>
+    a.request(`/access/${guestId}`, { headers: { 'x-sentinel-signature': sign(guestId, secret) } });
+
+  it('headshots add XP and weapon kills are stored per weapon', async () => {
+    const a = app();
+    await post(a, result('11111111-2222-4333-8444-555555555555'));
+    const res = await access(a, GUEST);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { level: number; weaponKills: Record<string, number> };
+    expect(body.weaponKills).toEqual({ 'kestrel-ar': 5, 'vireo-smg': 2 });
+    expect(body.level).toBe(levelFor(xpForMatch({ team: 0, kills: 7, headshots: 2 }, 0)).level);
+    // Totals add up over matches.
+    await post(a, result('11111111-2222-4333-8444-666666666666'));
+    const again = (await (await access(a, GUEST)).json()) as {
+      weaponKills: Record<string, number>;
+    };
+    expect(again.weaponKills['kestrel-ar']).toBe(10);
+  });
+
+  it('only the game server (signed) can read access; the public profile shows weapon kills', async () => {
+    const a = app();
+    expect((await a.request(`/access/${GUEST}`)).status).toBe(401);
+    expect((await access(a, GUEST, 'wrong')).status).toBe(401);
+    const profile = (await (await a.request(`/profiles/${GUEST}`)).json()) as {
+      weaponKills: object;
+      unlockAll: boolean;
+    };
+    expect(profile.weaponKills).toEqual({});
+    expect(profile.unlockAll).toBe(false);
+  });
+
+  it('unlockAll (local play) is reported to the server and the menu', async () => {
+    const a = createApp(new Store(':memory:'), SECRET, { unlockAll: true });
+    const body = (await (await access(a, GUEST)).json()) as { unlockAll: boolean };
+    expect(body.unlockAll).toBe(true);
   });
 });

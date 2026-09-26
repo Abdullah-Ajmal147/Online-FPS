@@ -12,6 +12,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "@sentinel/auth": "workspace:*",
+    "@sentinel/content": "workspace:*",
     "hono": "^4.13.9",
     "zod": "^4.6.5"
   },

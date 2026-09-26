@@ -88,7 +88,8 @@ export default defineConfig({
       command: 'node_modules/.bin/tsx src/index.ts',
       cwd: 'apps/api',
       url: 'http://localhost:8787/healthz',
-      env: { SENTINEL_DB: ':memory:' },
+      // Real unlocks (a new player can't use locked gear): the e2e tests check enforcement.
+      env: { SENTINEL_DB: ':memory:', SENTINEL_UNLOCK_ALL: '0' },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
       reuseExistingServer: false,
     },

@@ -25,9 +25,11 @@ import attachmentsJson from './attachments.json' with { type: 'json' };
 import perksJson from './perks.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
+import { hasAttachment, hasPerk, hasWeapon, progression, type Access } from './progression.ts';
 import { weaponFiles } from './weapons/catalog.gen.ts';
 
 export * from './schemas.ts';
+export * from './progression.ts';
 
 /** All content is validated at load time; a bad file fails fast on both client and server. */
 export const modes: Record<string, Mode> = {
@@ -181,13 +183,22 @@ export function applyModifiers(base: Weapon, mods: readonly StatModifiers[]): We
  * misfitting weapons fall back to the default, attachments must fit the primary (one per
  * slot, at most 3), perks must exist (no repeats, at most 3). Invalid picks are dropped.
  */
-export function buildLoadout(raw: {
-  primary?: unknown;
-  secondary?: unknown;
-  attachments?: unknown;
-  perks?: unknown;
-}): Loadout {
-  const [primary, secondary] = resolveLoadout(raw.primary, raw.secondary);
+export function buildLoadout(
+  raw: {
+    primary?: unknown;
+    secondary?: unknown;
+    attachments?: unknown;
+    perks?: unknown;
+  },
+  /** The player's unlocks; locked picks are dropped (weapons fall back to the default). */
+  access?: Access,
+): Loadout {
+  const allowed = (id: unknown, has: (a: Access, id: string) => boolean) =>
+    !access || (typeof id === 'string' && has(access, id)) ? id : undefined;
+  const [primary, secondary] = resolveLoadout(
+    allowed(raw.primary, hasWeapon),
+    allowed(raw.secondary, hasWeapon),
+  );
   // At most a few entries are read from untrusted arrays (join options can be large).
   const ids = (v: unknown) =>
     Array.isArray(v) ? v.slice(0, 16).filter((x): x is string => typeof x === 'string') : [];
@@ -195,6 +206,7 @@ export function buildLoadout(raw: {
   for (const id of ids(raw.attachments)) {
     const a = attachmentCatalog.find((x) => x.id === id);
     if (!a || !a.classes.includes(primary.class)) continue;
+    if (access && !hasAttachment(access, primary.id, a.id)) continue;
     if (attachments.some((x) => x.slot === a.slot) || attachments.length >= MAX_ATTACHMENTS)
       continue;
     attachments.push(a);
@@ -203,6 +215,7 @@ export function buildLoadout(raw: {
   for (const id of ids(raw.perks)) {
     const p = perkCatalog.find((x) => x.id === id);
     if (!p || perks.includes(p) || perks.length >= MAX_PERKS) continue;
+    if (access && !hasPerk(access, p.id)) continue;
     perks.push(p);
   }
   // Canonical order (slot order, catalog order): the float products in applyModifiers then
@@ -246,13 +259,16 @@ export function loadoutToWire(l: Loadout): LoadoutWire {
 }
 
 /** From wire indices; unknown indices are dropped (then the usual validation applies). */
-export function loadoutFromWire(w: LoadoutWire): Loadout {
-  return buildLoadout({
-    primary: weaponCatalog[w.primary]?.id,
-    secondary: weaponCatalog[w.secondary]?.id,
-    attachments: w.attachments.map((i) => attachmentCatalog[i]?.id),
-    perks: w.perks.map((i) => perkCatalog[i]?.id),
-  });
+export function loadoutFromWire(w: LoadoutWire, access?: Access): Loadout {
+  return buildLoadout(
+    {
+      primary: weaponCatalog[w.primary]?.id,
+      secondary: weaponCatalog[w.secondary]?.id,
+      attachments: w.attachments.map((i) => attachmentCatalog[i]?.id),
+      perks: w.perks.map((i) => perkCatalog[i]?.id),
+    },
+    access,
+  );
 }
 
 /**
@@ -263,6 +279,7 @@ export function loadoutFromWire(w: LoadoutWire): Loadout {
  */
 export const CONTENT_HASH: string = (() => {
   const text = JSON.stringify([
+    progression,
     maps,
     weaponCatalog,
     equipment,

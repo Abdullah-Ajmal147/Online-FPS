@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useStatus } from './Hud.tsx';
+import { accessOf } from '../profile.ts';
 import { LoadoutPicker } from './Loadout.tsx';
 import {
   ACTIONS,
@@ -57,6 +58,7 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
         <LoadoutPicker
           choice={loadoutChoice(settings)}
           onChange={(choice) => onSettings({ ...settings, ...choice })}
+          access={accessOf(useStatus().profile)}
         />
 
         <label class="row">

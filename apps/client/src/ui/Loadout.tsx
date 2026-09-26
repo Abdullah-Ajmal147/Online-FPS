@@ -2,7 +2,14 @@ import {
   MAX_ATTACHMENTS,
   MAX_PERKS,
   attachmentCatalog,
+  attachmentUnlockLevel,
   buildLoadout,
+  hasAttachment,
+  hasPerk,
+  hasWeapon,
+  unlockLevel,
+  weaponLevelFor,
+  type Access,
   perkCatalog,
   weaponCatalog,
   type Attachment,
@@ -32,6 +39,8 @@ function stats(w: Weapon): [string, number][] {
 interface Props {
   choice: LoadoutChoice;
   onChange: (next: LoadoutChoice) => void;
+  /** The player's unlocks (from their profile); locked items are shown but can't be picked. */
+  access: Access;
 }
 
 const SLOT_LABEL: Record<Attachment['slot'], string> = {
@@ -43,48 +52,56 @@ const SLOT_LABEL: Record<Attachment['slot'], string> = {
 };
 
 /** Primary / sidearm picker. The choice applies at the next spawn (the server enforces it). */
-export function LoadoutPicker({ choice, onChange }: Props) {
-  const { primary, secondary } = choice;
+export function LoadoutPicker({ choice, onChange, access }: Props) {
   // Always show the stats of the weapon as built (attachments and perks applied).
-  const built = buildLoadout(choice);
+  const built = buildLoadout(choice, access);
   const pick = (next: Partial<LoadoutChoice>) =>
-    onChange(buildLoadout({ ...choice, ...next }).choice);
+    onChange(buildLoadout({ ...choice, ...next }, access).choice);
   const slot = (s: 0 | 1) => weaponCatalog.filter((w) => w.slot === s);
-  const card = (w: Weapon, selected: boolean, pick: () => void) => (
-    <button
-      key={w.id}
-      class={`weapon-card${selected ? ' selected' : ''}`}
-      data-testid={`weapon-${w.id}`}
-      aria-pressed={selected}
-      onClick={pick}
-    >
-      <span class="wc-name">{w.name}</span>
-      <span class="wc-class">{CLASS_LABEL[w.class]}</span>
-      {stats(selected && w.slot === 0 ? built.weapons[0] : w).map(([label, v]) => (
-        <span class="weapon-stat" key={label}>
-          <span>{label}</span>
-          <span class="weapon-bar">
-            <span style={{ width: `${Math.round(v * 100)}%` }} />
+  const card = (w: Weapon, selected: boolean, pick: () => void) => {
+    const locked = !hasWeapon(access, w.id);
+    return (
+      <button
+        key={w.id}
+        class={`weapon-card${selected ? ' selected' : ''}`}
+        data-testid={`weapon-${w.id}`}
+        aria-pressed={selected}
+        disabled={locked}
+        onClick={pick}
+      >
+        <span class="wc-name">{w.name}</span>
+        {locked && <span class="lock">Unlocks at level {unlockLevel('weapons', w.id)}</span>}
+        <span class="wc-class">{CLASS_LABEL[w.class]}</span>
+        {stats(selected && w.slot === 0 ? built.weapons[0] : w).map(([label, v]) => (
+          <span class="weapon-stat" key={label}>
+            <span>{label}</span>
+            <span class="weapon-bar">
+              <span style={{ width: `${Math.round(v * 100)}%` }} />
+            </span>
           </span>
-        </span>
-      ))}
-    </button>
-  );
+        ))}
+      </button>
+    );
+  };
   const secondaries = slot(1);
   return (
     <div class="loadout" data-testid="loadout">
       <div class="weapon-grid">
-        {slot(0).map((w) => card(w, w.id === primary, () => pick({ primary: w.id })))}
+        {slot(0).map((w) => card(w, w.id === built.choice.primary, () => pick({ primary: w.id })))}
       </div>
       {secondaries.length > 1 && (
         <div class="weapon-grid">
-          {secondaries.map((w) => card(w, w.id === secondary, () => pick({ secondary: w.id })))}
+          {secondaries.map((w) =>
+            card(w, w.id === built.choice.secondary, () => pick({ secondary: w.id })),
+          )}
         </div>
       )}
       <h3 class="loadout-h">
-        Attachments ({built.choice.attachments.length}/{MAX_ATTACHMENTS})
+        Attachments ({built.choice.attachments.length}/{MAX_ATTACHMENTS}) · {built.weapons[0].name}{' '}
+        weapon level {weaponLevelFor(access.weaponKills[built.choice.primary] ?? 0)}
       </h3>
       <Attachments
+        access={access}
         weapon={built.weapons[0]}
         chosen={built.choice.attachments}
         onToggle={(id) => {
@@ -101,6 +118,7 @@ export function LoadoutPicker({ choice, onChange }: Props) {
       <div class="chip-list">
         {perkCatalog.map((p) => {
           const on = built.choice.perks.includes(p.id);
+          const locked = !hasPerk(access, p.id);
           return (
             <button
               key={p.id}
@@ -108,7 +126,7 @@ export function LoadoutPicker({ choice, onChange }: Props) {
               data-testid={`perk-${p.id}`}
               aria-pressed={on}
               title={p.description}
-              disabled={!on && built.choice.perks.length >= MAX_PERKS}
+              disabled={locked || (!on && built.choice.perks.length >= MAX_PERKS)}
               onClick={() =>
                 pick({
                   perks: on
@@ -118,14 +136,15 @@ export function LoadoutPicker({ choice, onChange }: Props) {
               }
             >
               <b>{p.name}</b>
-              <span>{p.description}</span>
+              <span>
+                {locked ? `Unlocks at level ${unlockLevel('perks', p.id)}` : p.description}
+              </span>
             </button>
           );
         })}
       </div>
       <p class="menu-hint">
-        Sidearm: {weaponCatalog.find((w) => w.id === secondary)?.name}. Changes apply the next time
-        you spawn.
+        Sidearm: {built.weapons[1].name}. Changes apply the next time you spawn.
       </p>
     </div>
   );
@@ -133,6 +152,7 @@ export function LoadoutPicker({ choice, onChange }: Props) {
 
 /** Attachments that fit the primary, grouped by slot; one per slot. */
 function Attachments(props: {
+  access: Access;
   weapon: Weapon;
   chosen: readonly string[];
   onToggle: (id: string) => void;
@@ -156,6 +176,7 @@ function Attachments(props: {
                 .map((a) => {
                   const on = props.chosen.includes(a.id);
                   const full = props.chosen.length >= MAX_ATTACHMENTS && !slotTaken;
+                  const locked = !hasAttachment(props.access, props.weapon.id, a.id);
                   return (
                     <button
                       key={a.id}
@@ -163,11 +184,13 @@ function Attachments(props: {
                       data-testid={`attachment-${a.id}`}
                       aria-pressed={on}
                       title={a.description}
-                      disabled={full}
+                      disabled={full || locked}
                       onClick={() => props.onToggle(a.id)}
                     >
                       <b>{a.name}</b>
-                      <span>{a.description}</span>
+                      <span>
+                        {locked ? `Weapon level ${attachmentUnlockLevel(a.id)}` : a.description}
+                      </span>
                     </button>
                   );
                 })}

@@ -1,3 +1,4 @@
+import { NEW_PLAYER, type Access } from '@sentinel/content';
 import { setStatus } from './store.ts';
 import { urlFromQuery } from './urls.ts';
 
@@ -10,6 +11,16 @@ export interface Profile {
   wins: number;
   kills: number;
   deaths: number;
+  /** Kills per weapon id (weapon levels unlock attachments). */
+  weaponKills: Record<string, number>;
+  /** Local play: everything unlocked (the API decides, the game server follows the same). */
+  unlockAll: boolean;
+}
+
+/** What the menu may offer: the same unlocks the game server enforces. No profile → new player. */
+export function accessOf(p: Profile | null): Access {
+  if (!p) return NEW_PLAYER;
+  return { level: p.level, weaponKills: p.weaponKills ?? {}, unlockAll: p.unlockAll === true };
 }
 
 const TOKEN_KEY = 'sentinel.guestToken';

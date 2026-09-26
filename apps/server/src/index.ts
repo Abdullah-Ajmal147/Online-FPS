@@ -5,6 +5,7 @@ import { resolveApiSecret } from '@sentinel/auth';
 import { PROTOCOL_VERSION } from '@sentinel/protocol';
 import express from 'express';
 import { MatchRoom } from './MatchRoom.ts';
+import { createAccessFetcher } from './access.ts';
 import { createApiReporter } from './apiReporter.ts';
 import { log, metrics } from './ops.ts';
 
@@ -63,6 +64,12 @@ const report = createApiReporter({
   log,
 });
 MatchRoom.onMatchEnd = (summary) => void report(summary);
+// Unlocks (level, weapon kills) come from the API, signed with the same secret.
+MatchRoom.fetchAccess = createAccessFetcher({
+  url: process.env.SENTINEL_API_URL ?? 'http://localhost:8787',
+  secret: resolveApiSecret(process.env),
+  log,
+});
 
 // Colyseus already handles SIGTERM/SIGINT: it stops matchmaking, disposes rooms and exits.
 server.onShutdown(() => log.info('shutting down: closing rooms'));

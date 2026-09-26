@@ -1,0 +1,28 @@
+{
+  "xp": {
+    "participation": 150,
+    "perKill": 100,
+    "perHeadshot": 25,
+    "win": 250,
+    "draw": 100
+  },
+  "levels": { "max": 50, "first": 500, "step": 250 },
+  "accountUnlocks": [
+    { "level": 2, "weapons": ["vireo-smg"] },
+    { "level": 3, "perks": ["quick-hands"] },
+    { "level": 4, "weapons": ["thresher-12"] },
+    { "level": 5, "perks": ["steady-hands"] },
+    { "level": 6, "weapons": ["halberd-mr"] },
+    { "level": 8, "perks": ["flak-vest"] },
+    { "level": 10, "perks": ["deep-pockets"] }
+  ],
+  "weaponLevels": {
+    "killsForLevel": [0, 10, 25, 45, 70, 100, 140, 190, 250, 320],
+    "attachmentUnlocks": [
+      { "level": 2, "attachments": ["vertical-grip", "fast-mag"] },
+      { "level": 3, "attachments": ["long-barrel", "angled-grip"] },
+      { "level": 4, "attachments": ["compensator", "light-stock"] },
+      { "level": 5, "attachments": ["tactical-scope", "heavy-stock"] }
+    ]
+  }
+}

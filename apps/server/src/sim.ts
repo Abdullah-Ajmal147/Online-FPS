@@ -4,6 +4,7 @@ import {
   defaultBuiltLoadout,
   equipment,
   loadoutToWire,
+  weaponCatalog,
   weapons,
   weaponIndex,
   type GameMap,
@@ -134,6 +135,10 @@ export interface SimPlayer {
   nextThrowTick: number;
   kills: number;
   deaths: number;
+  /** This match: kills by headshot, by frag, and per weapon id (progression, challenges). */
+  headshots: number;
+  fragKills: number;
+  weaponKills: Map<string, number>;
   history: HistoryEntry[];
   /** View tick after anti-backtrack governing (see governViewTick). */
   viewTick: number;
@@ -302,6 +307,9 @@ export class MatchSim {
       nextThrowTick: 0,
       kills: 0,
       deaths: 0,
+      headshots: 0,
+      fragKills: 0,
+      weaponKills: new Map(),
       history: [],
       viewTick: 0,
       viewGovernor: { last: null },
@@ -539,6 +547,10 @@ export class MatchSim {
     victim.deaths++;
     if (killer) {
       killer.kills++;
+      if (headshot) killer.headshots++;
+      if (weapon === KILL_SOURCE_FRAG) killer.fragKills++;
+      const id = weaponCatalog[weapon]?.id;
+      if (id) killer.weaponKills.set(id, (killer.weaponKills.get(id) ?? 0) + 1);
       this.rewardAmmo(killer);
     }
     // A fall (no killer) shows as the victim "killing" themselves in the feed.
@@ -613,6 +625,9 @@ export class MatchSim {
     for (const p of this.players.values()) {
       p.kills = 0;
       p.deaths = 0;
+      p.headshots = 0;
+      p.fragKills = 0;
+      p.weaponKills.clear();
     }
   }
 

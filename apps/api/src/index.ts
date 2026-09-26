@@ -12,6 +12,10 @@ const store = new Store(process.env.SENTINEL_DB ?? 'data/sentinel.db');
 // Behind a reverse proxy (TRUST_PROXY=1) the real client IP is the first X-Forwarded-For entry.
 const trustProxy = process.env.TRUST_PROXY === '1';
 const app = createApp(store, secret, {
+  // Local play unlocks everything so every weapon can be tried; production never, unless set.
+  unlockAll:
+    process.env.SENTINEL_UNLOCK_ALL === '1' ||
+    (process.env.SENTINEL_UNLOCK_ALL === undefined && process.env.NODE_ENV !== 'production'),
   clientIp: (c) =>
     (trustProxy && c.req.header('x-forwarded-for')?.split(',')[0]?.trim()) ||
     getConnInfo(c).remote.address ||

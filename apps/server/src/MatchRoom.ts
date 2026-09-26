@@ -5,11 +5,13 @@ import {
   maps,
   modes,
   movement,
+  NEW_PLAYER,
   attachmentCatalog,
   buildLoadout,
   loadoutFromWire,
   perkCatalog,
   weaponCatalog,
+  type Access,
 } from '@sentinel/content';
 import {
   MessageType,
@@ -62,6 +64,9 @@ interface Seat {
   badMessages: number;
   lastPingMs: number;
   lastLoadoutMs: number;
+  guestId: string | null;
+  /** The player's unlocks (refreshed at each new match). */
+  access: Access;
 }
 
 /**
@@ -102,6 +107,8 @@ export class MatchRoom extends Room {
   private rotationIndex = 0;
   /** Called with each finished match (MatchRoom logs it; Phase 4 posts it to the API). */
   static onMatchEnd: ((summary: MatchSummary) => void) | null = null;
+  /** What a player has unlocked (index.ts wires the API; tests: a new player's). */
+  static fetchAccess: (guestId: string | null) => Promise<Access> = async () => NEW_PLAYER;
 
   override async onCreate(): Promise<void> {
     const preset = presetFromEnv(process.env.SENTINEL_LAG);
@@ -131,7 +138,10 @@ export class MatchRoom extends Room {
       },
       this.mapId,
     );
-    this.match.onNextMatch = () => this.rotateMap();
+    this.match.onNextMatch = () => {
+      this.refreshAccess(); // XP from the match just reported may have unlocked something
+      return this.rotateMap();
+    };
     this.match.onMatchEnd = (summary) => {
       // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
       counters.matches.inc();
@@ -180,7 +190,7 @@ export class MatchRoom extends Room {
             msg.attachments.every((i) => attachmentCatalog[i]) &&
             msg.perks.every((i) => perkCatalog[i]);
           if (!known) throw new RangeError('unknown catalog index');
-          this.sim.setLoadout(seat.playerId, loadoutFromWire(msg));
+          this.sim.setLoadout(seat.playerId, loadoutFromWire(msg, seat.access));
         } catch {
           if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
         }
@@ -204,11 +214,11 @@ export class MatchRoom extends Room {
    * Runs before joining: protocol check, per-IP join rate limit, and the guest token. A valid
    * token becomes `client.auth.guestId` (progression); no token is fine, it just earns no XP.
    */
-  override onAuth(
+  override async onAuth(
     _client: Client,
     options: unknown,
     context: AuthContext,
-  ): { guestId: string | null } {
+  ): Promise<{ guestId: string | null; access: Access }> {
     if (!isProtocolCompatible(options)) {
       counters.rejectedJoins.inc();
       throw new ServerError(RELOAD_REQUIRED_CODE, RELOAD_REQUIRED);
@@ -218,7 +228,9 @@ export class MatchRoom extends Room {
       throw new ServerError(429, 'too many joins, try again shortly');
     }
     const token = (options as { token?: unknown }).token;
-    return { guestId: verifyGuestToken(token, API_SECRET) };
+    const guestId = verifyGuestToken(token, API_SECRET);
+    // Unlocks come from the API (server-reported progress), never from the client.
+    return { guestId, access: await MatchRoom.fetchAccess(guestId) };
   }
 
   override onJoin(
@@ -234,18 +246,22 @@ export class MatchRoom extends Room {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
     const team = this.bots ? this.bots.teamForHuman() : undefined;
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
+    const auth = client.auth as { guestId?: string | null; access?: Access } | undefined;
+    const guestId = this.uniqueGuest(auth?.guestId ?? null);
+    const access = auth?.access ?? NEW_PLAYER;
     const player = this.sim.addPlayer({
       name: sanitizeName(options?.name),
-      guestId: this.uniqueGuest(
-        (client.auth as { guestId?: string | null } | undefined)?.guestId ?? null,
-      ),
+      guestId,
       ...(team === undefined ? {} : { team }),
-      loadout: buildLoadout({
-        primary: options?.primary,
-        secondary: options?.secondary,
-        attachments: options?.attachments,
-        perks: options?.perks,
-      }),
+      loadout: buildLoadout(
+        {
+          primary: options?.primary,
+          secondary: options?.secondary,
+          attachments: options?.attachments,
+          perks: options?.perks,
+        },
+        access,
+      ),
     });
     this.seats.set(client.sessionId, {
       playerId: player.id,
@@ -253,6 +269,8 @@ export class MatchRoom extends Room {
       badMessages: 0,
       lastPingMs: -Infinity,
       lastLoadoutMs: -Infinity,
+      guestId,
+      access,
     });
     counters.joins.inc();
     log.info('player joined', {
@@ -273,6 +291,16 @@ export class MatchRoom extends Room {
       }),
     );
     this.sendMatchInfo();
+  }
+
+  /** Re-read every player's unlocks from the API (async; applies to later loadout changes). */
+  private refreshAccess(): void {
+    for (const seat of this.seats.values()) {
+      if (!seat.guestId) continue;
+      void MatchRoom.fetchAccess(seat.guestId).then((access) => {
+        seat.access = access;
+      });
+    }
   }
 
   /** Next map in the rotation (between matches): rebuild the world, tell every client. */

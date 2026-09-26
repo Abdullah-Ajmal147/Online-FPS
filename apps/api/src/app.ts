@@ -23,8 +23,15 @@ const MatchResultSchema = z.object({
         name: z.string().max(32),
         team: z.number().int().min(0).max(1),
         bot: z.boolean(),
-        kills: z.number().int().nonnegative(),
-        deaths: z.number().int().nonnegative(),
+        kills: z.number().int().nonnegative().max(1000),
+        deaths: z.number().int().nonnegative().max(1000),
+        headshots: z.number().int().nonnegative().max(1000).default(0),
+        fragKills: z.number().int().nonnegative().max(1000).default(0),
+        /** Kills per weapon id (weapon levels). Unknown ids are ignored when stored. */
+        weaponKills: z
+          .record(z.string().regex(/^[a-z0-9-]{1,32}$/), z.number().int().nonnegative().max(1000))
+          .default({})
+          .refine((r) => Object.keys(r).length <= 16, 'too many weapons'),
         secondsPlayed: z.number().nonnegative(),
       }),
     )
@@ -50,6 +57,11 @@ export interface AppOptions {
    * one IP (schools, offices, internet cafés, mobile carriers).
    */
   guestLimit?: { burst: number; perSecond: number };
+  /**
+   * Everything counts as unlocked (SENTINEL_UNLOCK_ALL=1: local play and tests). Reported in
+   * each profile, so the game server and the menu follow the same switch.
+   */
+  unlockAll?: boolean;
 }
 
 /** The API app, separate from the Node listener so tests can call it directly. */
@@ -116,10 +128,31 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
         win: parsed.winner === p.team,
         kills: p.kills,
         deaths: p.deaths,
+        weaponKills: p.weaponKills,
       });
       awarded.push({ guestId: p.guestId, xp });
     }
     return c.json({ ok: true, awarded });
+  });
+
+  /**
+   * Game server → API: what a player has unlocked (level, weapon kills). Signed like match
+   * results (HMAC of the guest id), so it isn't rate-limited per IP: one game server asks for
+   * every player it hosts.
+   */
+  app.get('/access/:guestId', (c) => {
+    const guestId = c.req.param('guestId');
+    if (!GUEST_ID.test(guestId)) return c.json({ error: 'bad guest id' }, 400);
+    if (!validSignature(guestId, c.req.header('x-sentinel-signature'), secret)) {
+      counters.rejected.inc();
+      return c.json({ error: 'bad signature' }, 401);
+    }
+    const row = store.profile(guestId);
+    return c.json({
+      level: levelFor(row?.xp ?? 0).level,
+      weaponKills: store.weaponKills(guestId),
+      unlockAll: opts.unlockAll === true,
+    });
   });
 
   /** Public profile: level, XP and totals (defaults for a new guest). */
@@ -141,6 +174,8 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       wins: row?.wins ?? 0,
       kills: row?.kills ?? 0,
       deaths: row?.deaths ?? 0,
+      weaponKills: store.weaponKills(guestId),
+      unlockAll: opts.unlockAll === true,
     });
   });
 

@@ -318,3 +318,48 @@ export const PerkSchema = z.object({
   explosiveDamageTaken: z.number().min(0.2).max(1).default(1),
 });
 export type Perk = z.infer<typeof PerkSchema>;
+
+// ---------------------------------------------------------------------------
+// Progression: XP rules, levels and unlocks. Anything not listed in an unlock table is available
+// from the start. The API computes XP from server-reported results with these numbers.
+// ---------------------------------------------------------------------------
+
+const Level = z.number().int().min(1).max(100);
+
+export const ProgressionSchema = z
+  .object({
+    xp: z.object({
+      participation: z.number().int().nonnegative(),
+      perKill: z.number().int().nonnegative(),
+      perHeadshot: z.number().int().nonnegative(),
+      win: z.number().int().nonnegative(),
+      draw: z.number().int().nonnegative(),
+    }),
+    /** XP to go from level n to n+1 is first + step × (n − 1). */
+    levels: z.object({
+      max: z.number().int().min(2).max(100),
+      first: z.number().int().positive(),
+      step: z.number().int().nonnegative(),
+    }),
+    accountUnlocks: z.array(
+      z.object({
+        level: Level,
+        weapons: z.array(z.string()).default([]),
+        perks: z.array(z.string()).default([]),
+      }),
+    ),
+    weaponLevels: z.object({
+      /** Kills with a weapon needed for weapon level 1, 2, 3, … (first entry 0). */
+      killsForLevel: z.array(z.number().int().nonnegative()).min(1),
+      attachmentUnlocks: z.array(
+        z.object({ level: Level, attachments: z.array(z.string()).default([]) }),
+      ),
+    }),
+  })
+  .refine((p) => p.weaponLevels.killsForLevel[0] === 0, {
+    message: 'weapon level 1 must need 0 kills',
+  })
+  .refine((p) => p.weaponLevels.killsForLevel.every((k, i, a) => i === 0 || k > a[i - 1]!), {
+    message: 'killsForLevel must increase',
+  });
+export type Progression = z.infer<typeof ProgressionSchema>;

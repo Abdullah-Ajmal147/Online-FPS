@@ -14,6 +14,16 @@ import {
   equipment,
   killSourceName,
   MAX_ATTACHMENTS,
+  MAX_WEAPON_LEVEL,
+  NEW_PLAYER,
+  hasAttachment,
+  hasPerk,
+  hasWeapon,
+  levelFor,
+  progression,
+  weaponLevelFor,
+  xpBreakdown,
+  xpForMatch,
   MAX_PERKS,
   applyModifiers,
   attachmentCatalog,
@@ -386,5 +396,73 @@ describe('loadout building is safe for every combination', () => {
     expect(buildLoadout({ attachments: huge, perks: huge }).choice.attachments).toEqual([
       'reflex-sight',
     ]);
+  });
+});
+
+describe('progression (data)', () => {
+  it('unlock tables only name real weapons, perks and attachments', () => {
+    for (const row of progression.accountUnlocks) {
+      for (const id of row.weapons) expect(weapons[id], id).toBeDefined();
+      for (const id of row.perks)
+        expect(
+          perkCatalog.some((p) => p.id === id),
+          id,
+        ).toBe(true);
+    }
+    for (const row of progression.weaponLevels.attachmentUnlocks) {
+      for (const id of row.attachments)
+        expect(
+          attachmentCatalog.some((a) => a.id === id),
+          id,
+        ).toBe(true);
+    }
+  });
+
+  it('a new player has the default loadout available and some things locked', () => {
+    expect(hasWeapon(NEW_PLAYER, 'kestrel-ar')).toBe(true);
+    expect(hasWeapon(NEW_PLAYER, 'wren-sp')).toBe(true);
+    expect(hasWeapon(NEW_PLAYER, 'thresher-12')).toBe(false);
+    const l = buildLoadout(
+      {
+        primary: 'thresher-12',
+        attachments: ['extended-mag', 'compensator'],
+        perks: ['light-step', 'flak-vest'],
+      },
+      NEW_PLAYER,
+    );
+    expect(l.choice).toEqual({
+      primary: 'kestrel-ar', // shotgun locked → default
+      secondary: 'wren-sp',
+      attachments: ['extended-mag'], // compensator needs weapon level 4
+      perks: ['light-step'], // flak vest needs account level 8
+    });
+  });
+
+  it('levels and weapon kills unlock things; unlockAll unlocks everything', () => {
+    const vet = { level: 10, weaponKills: { 'kestrel-ar': 100 } };
+    expect(hasWeapon(vet, 'halberd-mr')).toBe(true);
+    expect(hasAttachment(vet, 'kestrel-ar', 'heavy-stock')).toBe(true);
+    expect(hasAttachment(vet, 'vireo-smg', 'heavy-stock')).toBe(false); // per weapon
+    expect(hasPerk({ ...NEW_PLAYER, unlockAll: true }, 'deep-pockets')).toBe(true);
+  });
+
+  it('weapon levels follow the kill table', () => {
+    expect(weaponLevelFor(0)).toBe(1);
+    expect(weaponLevelFor(9)).toBe(1);
+    expect(weaponLevelFor(10)).toBe(2);
+    expect(weaponLevelFor(1e6)).toBe(MAX_WEAPON_LEVEL);
+  });
+
+  it('XP breakdown adds up and matches the level curve', () => {
+    const lines = xpBreakdown({ team: 0, kills: 3, headshots: 1 }, 0);
+    expect(lines.map((l) => l.label)).toEqual([
+      'Match played',
+      'Kills × 3',
+      'Headshots × 1',
+      'Victory',
+    ]);
+    expect(xpForMatch({ team: 0, kills: 3, headshots: 1 }, 0)).toBe(150 + 300 + 25 + 250);
+    expect(levelFor(0)).toEqual({ level: 1, xpIntoLevel: 0, xpForNext: 500 });
+    expect(levelFor(500 + 750 + 10).level).toBe(3);
   });
 });

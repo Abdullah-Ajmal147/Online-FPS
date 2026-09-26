@@ -31,6 +31,10 @@ export interface MatchSummary {
     bot: boolean;
     kills: number;
     deaths: number;
+    headshots: number;
+    fragKills: number;
+    /** Kills per weapon id (weapon levels). */
+    weaponKills: Record<string, number>;
     /** Time actually spent in the live match (the API requires a minimum for XP). */
     secondsPlayed: number;
   }[];
@@ -199,6 +203,9 @@ export class Match {
       bot: p.bot,
       kills: p.kills,
       deaths: p.deaths,
+      headshots: p.headshots,
+      fragKills: p.fragKills,
+      weaponKills: Object.fromEntries(p.weaponKills),
       secondsPlayed: Math.max(0, Math.round((this.sim.tick - from) / TICK_RATE)),
     };
   }

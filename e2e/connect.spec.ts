@@ -112,10 +112,10 @@ test('two players in two tabs see each other move', async ({ browser }) => {
   expect(moved).toBe(true);
 });
 
-test('the loadout saved in settings is the one the server spawns you with', async ({ page }) => {
+test('the server enforces unlocks: a new player gets unlocked gear only', async ({ page }) => {
   test.setTimeout(60_000);
-  // A player who picked the shotgun last time (settings live in localStorage). One page only:
-  // closing a WebGL tab and opening another makes headless Chrome refuse the new context.
+  // Saved last time: the shotgun (unlocks at level 4) with an extended magazine (unlocked from
+  // the start). This test server uses real unlocks, and this is a brand-new guest (level 1).
   await page.addInitScript(() => {
     if (!localStorage.getItem('sentinel.settings.v1')) {
       localStorage.setItem(
@@ -124,28 +124,29 @@ test('the loadout saved in settings is the one the server spawns you with', asyn
       );
     }
   });
-  const weapon = () =>
-    page.evaluate(async () => (await import('/src/store.ts')).getStatus().combat?.weaponName);
+  const status = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus());
   await page.goto('/');
   await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
-  await expect.poll(weapon, { timeout: 15_000 }).toBe('Thresher 12');
-  // The extended magazine (6 × 1.3 → 8 shells) is simulated by the server and predicted here.
-  const ammo = () =>
-    page.evaluate(async () => (await import('/src/store.ts')).getStatus().combat?.ammo);
-  await expect.poll(ammo).toBe(8);
-  await expect(page.getByTestId('weapon-thresher-12')).toHaveAttribute('aria-pressed', 'true');
+  // The server fell back to the rifle but kept the extended magazine (30 × 1.3 → 39 rounds).
+  await expect
+    .poll(async () => (await status()).combat?.weaponName, { timeout: 15_000 })
+    .toBe('Kestrel AR');
+  await expect.poll(async () => (await status()).combat?.ammo).toBe(39);
+  // The menu shows the same thing: the shotgun is locked, the rifle is selected.
+  await expect(page.getByTestId('weapon-thresher-12')).toBeDisabled();
+  await expect(page.getByTestId('weapon-thresher-12')).toContainText('Unlocks at level 4');
+  await expect(page.getByTestId('weapon-kestrel-ar')).toHaveAttribute('aria-pressed', 'true');
 
-  // Picking another weapon saves it for next time (and tells the server for the next spawn).
-  await page.getByTestId('weapon-vireo-smg').click();
-  await expect(page.getByTestId('weapon-vireo-smg')).toHaveAttribute('aria-pressed', 'true');
-  await page.getByTestId('attachment-vertical-grip').click();
-  await page.getByTestId('perk-quick-hands').click();
-  await expect(page.getByTestId('perk-quick-hands')).toHaveAttribute('aria-pressed', 'true');
+  // Picking unlocked things saves them (and tells the server for the next spawn).
+  await page.getByTestId('attachment-reflex-sight').click();
+  await page.getByTestId('perk-light-step').click();
+  await expect(page.getByTestId('perk-light-step')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('perk-flak-vest')).toBeDisabled();
   const saved = await page.evaluate(() => localStorage.getItem('sentinel.settings.v1'));
   expect(JSON.parse(saved!)).toMatchObject({
-    primary: 'vireo-smg',
-    attachments: ['extended-mag', 'vertical-grip'],
-    perks: ['quick-hands'],
+    primary: 'kestrel-ar',
+    attachments: ['reflex-sight', 'extended-mag'],
+    perks: ['light-step'],
   });
 });
 
