@@ -66,9 +66,44 @@ export class Effects {
     this.add(m, 8, mat);
   }
 
+  /** Frag blast: a bright flash ball that swells and fades, plus a scorch mark below. */
+  explosion(at: THREE.Vector3): void {
+    const flash = new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 1 });
+    const ball = new THREE.Mesh(this.flashGeo, flash);
+    ball.position.copy(at).setY(at.y + 0.4);
+    ball.userData.grow = 45; // 0.06 m sphere → ~3 m across
+    this.add(ball, 0.35, flash);
+    const dust = new THREE.MeshBasicMaterial({
+      color: 0x5b5048,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+    });
+    const cloud = new THREE.Mesh(this.flashGeo, dust);
+    cloud.position.copy(at).setY(at.y + 0.6);
+    cloud.userData.grow = 30;
+    this.add(cloud, 1.4, dust);
+    const down = this.castMap(at.clone().setY(at.y + 0.3), new THREE.Vector3(0, -1, 0), 2);
+    if (down?.face) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x111111,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      });
+      const scorch = new THREE.Mesh(this.impactGeo, mat);
+      scorch.scale.setScalar(20);
+      scorch.position.copy(down.point).setY(down.point.y + 0.012);
+      scorch.rotation.x = -Math.PI / 2;
+      this.add(scorch, 12, mat);
+    }
+  }
+
   update(frame: number): void {
     this.items = this.items.filter((it) => {
       it.age += frame;
+      const grow = it.obj.userData.grow as number | undefined;
+      if (grow) it.obj.scale.setScalar(1 + (grow - 1) * Math.min(1, (it.age / it.life) * 2.5));
       if (it.fade) it.fade.opacity = Math.max(0, 1 - it.age / it.life);
       if (it.age < it.life) return true;
       this.scene.remove(it.obj);

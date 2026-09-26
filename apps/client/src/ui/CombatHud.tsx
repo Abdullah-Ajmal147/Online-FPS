@@ -107,6 +107,14 @@ function Vitals({ c }: { c: CombatHudState }) {
         <div class="weapon-name" data-testid="hud-weapon">
           {c.reloading ? 'reloading…' : c.weaponName}
         </div>
+        <div class="grenades" data-testid="grenades">
+          <span class="grenade-count" data-empty={c.frags === 0} title="Frag grenade">
+            <kbd>G</kbd> frag ×{c.frags}
+          </span>
+          <span class="grenade-count" data-empty={c.smokes === 0} title="Smoke grenade">
+            <kbd>Q</kbd> smoke ×{c.smokes}
+          </span>
+        </div>
       </div>
     </div>
   );

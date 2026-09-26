@@ -83,17 +83,24 @@ test('two players in two tabs see each other move', async ({ browser }) => {
   expect(moved).toBe(true);
 });
 
-test('the loadout picked in the menu is the one the server spawns you with', async ({ page }) => {
-  // The weapon HUD is hidden behind the menu, so read the HUD state from the store.
+test('the loadout saved in settings is the one the server spawns you with', async ({ page }) => {
+  // A player who picked the shotgun last time (settings live in localStorage). One page only:
+  // closing a WebGL tab and opening another makes headless Chrome refuse the new context.
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('sentinel.settings.v1')) {
+      localStorage.setItem('sentinel.settings.v1', JSON.stringify({ primary: 'thresher-12' }));
+    }
+  });
   const weapon = () =>
     page.evaluate(async () => (await import('/src/store.ts')).getStatus().combat?.weaponName);
   await page.goto('/');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
-  await expect.poll(weapon).toBe('Kestrel AR');
-  await page.getByTestId('weapon-thresher-12').click();
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  await expect.poll(weapon, { timeout: 15_000 }).toBe('Thresher 12');
   await expect(page.getByTestId('weapon-thresher-12')).toHaveAttribute('aria-pressed', 'true');
-  // Saved in settings and sent with the next join: after a reload we spawn with it.
-  await page.reload();
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
-  await expect.poll(weapon).toBe('Thresher 12');
+
+  // Picking another weapon saves it for next time (and tells the server for the next spawn).
+  await page.getByTestId('weapon-vireo-smg').click();
+  await expect(page.getByTestId('weapon-vireo-smg')).toHaveAttribute('aria-pressed', 'true');
+  const saved = await page.evaluate(() => localStorage.getItem('sentinel.settings.v1'));
+  expect(JSON.parse(saved!)).toMatchObject({ primary: 'vireo-smg' });
 });

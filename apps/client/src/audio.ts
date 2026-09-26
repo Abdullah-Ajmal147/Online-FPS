@@ -103,6 +103,48 @@ export class GameAudio {
     thump.stop(t + 0.14 + p.length * 0.3);
   }
 
+  /** Frag explosion (deep boom) or smoke release (hiss), placed in 3D. */
+  explosion(kind: 'frag' | 'smoke', at: readonly [number, number, number]): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.noise || !this.master) return;
+    const t = ctx.currentTime;
+    const pan = ctx.createPanner();
+    pan.panningModel = 'HRTF';
+    pan.distanceModel = 'inverse';
+    pan.refDistance = kind === 'frag' ? 8 : 3;
+    pan.rolloffFactor = 1;
+    pan.positionX.value = at[0];
+    pan.positionY.value = at[1];
+    pan.positionZ.value = at[2];
+    pan.connect(this.master);
+    const len = kind === 'frag' ? 0.9 : 1.6;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = kind === 'frag' ? 'lowpass' : 'highpass';
+    filter.frequency.setValueAtTime(kind === 'frag' ? 900 : 2500, t);
+    if (kind === 'frag') filter.frequency.exponentialRampToValueAtTime(120, t + len);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(kind === 'frag' ? 1.6 : 0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + len);
+    src.connect(filter).connect(gain).connect(pan);
+    src.start(t);
+    src.stop(t + len + 0.05);
+    if (kind === 'frag') {
+      const boom = ctx.createOscillator();
+      boom.type = 'sine';
+      boom.frequency.setValueAtTime(70, t);
+      boom.frequency.exponentialRampToValueAtTime(28, t + 0.6);
+      const bg = ctx.createGain();
+      bg.gain.setValueAtTime(1.4, t);
+      bg.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      boom.connect(bg).connect(pan);
+      boom.start(t);
+      boom.stop(t + 0.75);
+    }
+  }
+
   /** Short tick for a confirmed hit; higher for headshots, a two-tone chime for kills. */
   hit(kind: 'hit' | 'head' | 'kill'): void {
     const freqs = kind === 'kill' ? [880, 1320] : kind === 'head' ? [1500] : [1100];

@@ -144,6 +144,18 @@ export interface OwnSnapshot {
   lifeId: number;
   /** 0 while alive; otherwise ticks until respawn. */
   respawnTicks: number;
+  /** Grenades left this life. */
+  frags: number;
+  smokes: number;
+}
+
+/** A thrown grenade, or a smoke cloud once released (server-simulated, drawn by clients). */
+export interface ProjectileState {
+  id: number;
+  kind: 'frag' | 'smoke';
+  /** Smoke only: the cloud is out. */
+  cloud: boolean;
+  position: Vec3;
 }
 
 /** Other players in a snapshot. Positions are int16 at 1/64 m on the wire (ADR 0004). */
@@ -159,6 +171,7 @@ export interface Snapshot {
   serverTickMicros: number;
   own: OwnSnapshot | null;
   entities: EntityState[];
+  projectiles: ProjectileState[];
 }
 
 const OWN_GROUNDED = 1;
@@ -166,6 +179,7 @@ const OWN_CROUCHING = 2;
 const ENT_GROUNDED = 1;
 const ENT_CROUCHING = 2;
 const ENT_ALIVE = 4;
+const PROJ_CLOUD = 0x80;
 
 function writeWeapon(w: BinaryWriter, s: WeaponState): void {
   w.u8(s.slot);
@@ -203,7 +217,9 @@ function writeOwn(w: BinaryWriter, own: OwnSnapshot): void {
   w.u8(own.loadout[0]).u8(own.loadout[1]);
   w.u8(own.health)
     .u8(own.lifeId & 0xff)
-    .u8(own.respawnTicks);
+    .u8(own.respawnTicks)
+    .u8(own.frags)
+    .u8(own.smokes);
 }
 
 function readOwn(r: BinaryReader): OwnSnapshot {
@@ -232,6 +248,8 @@ function readOwn(r: BinaryReader): OwnSnapshot {
     health: r.u8(),
     lifeId: r.u8(),
     respawnTicks: r.u8(),
+    frags: r.u8(),
+    smokes: r.u8(),
   };
 }
 
@@ -239,12 +257,13 @@ const clampI16 = (v: number) => Math.max(-0x8000, Math.min(0x7fff, v));
 
 /**
  * Layout: serverTick u32, lastProcessedSeq u32, inputQueueDepth u8, serverTickMicros u16,
- * hasOwn u8, [own: move 29 + weapon 18 + loadout 2 + health/lifeId/respawn 3 = 52 bytes], entityCount u8,
+ * hasOwn u8, [own: move 29 + weapon 18 + loadout 2 + health/lifeId/respawn 3 + grenades 2 = 54 bytes], entityCount u8,
  * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, weapon, shots).
+ * then projectileCount u8, projectiles × 8 bytes (id, kind|cloud, x/y/z i16).
  * Full snapshots, no delta compression (ADR 0004); 12 players stay under 10 KB/s.
  */
 export function encodeSnapshot(msg: Snapshot): Uint8Array {
-  const w = new BinaryWriter(96 + msg.entities.length * 15);
+  const w = new BinaryWriter(96 + msg.entities.length * 15 + msg.projectiles.length * 8);
   w.u32(msg.serverTick).u32(msg.lastProcessedSeq).u8(Math.min(255, msg.inputQueueDepth));
   w.u16(Math.min(0xffff, Math.round(msg.serverTickMicros)));
   w.u8(msg.own ? 1 : 0);
@@ -262,6 +281,11 @@ export function encodeSnapshot(msg: Snapshot): Uint8Array {
       .i16(e.pitch)
       .u8(e.weapon)
       .u8(e.shotCount & 0xff);
+  }
+  w.u8(msg.projectiles.length);
+  for (const p of msg.projectiles) {
+    w.u8(p.id).u8((p.kind === 'smoke' ? 1 : 0) | (p.cloud ? PROJ_CLOUD : 0));
+    for (const v of p.position) w.i16(clampI16(quantizePosition(v)));
   }
   return w.finish();
 }
@@ -297,7 +321,31 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
       shotCount: r.u8(),
     });
   }
-  return { serverTick, lastProcessedSeq, inputQueueDepth, serverTickMicros, own, entities };
+  const projectiles: ProjectileState[] = [];
+  const projectileCount = r.u8();
+  for (let i = 0; i < projectileCount; i++) {
+    const id = r.u8();
+    const flags = r.u8();
+    projectiles.push({
+      id,
+      kind: (flags & 1) === 1 ? 'smoke' : 'frag',
+      cloud: (flags & PROJ_CLOUD) !== 0,
+      position: [
+        dequantizePosition(r.i16()),
+        dequantizePosition(r.i16()),
+        dequantizePosition(r.i16()),
+      ],
+    });
+  }
+  return {
+    serverTick,
+    lastProcessedSeq,
+    inputQueueDepth,
+    serverTickMicros,
+    own,
+    entities,
+    projectiles,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +382,9 @@ export type GameEvent =
   /** To the shooter: the server confirmed a hit. */
   | { type: 'hit'; victim: number; damage: number; zone: HitZoneCode; killed: boolean }
   /** To the victim: who hit you, from where, and your health now. */
-  | { type: 'damaged'; attacker: number; from: Vec3; health: number };
+  | { type: 'damaged'; attacker: number; from: Vec3; health: number }
+  /** Broadcast: a frag exploded or a smoke released its cloud (effects and sound). */
+  | { type: 'explosion'; kind: 'frag' | 'smoke'; position: Vec3 };
 
 /** Wire value for "no weapon" in kill events and entities. */
 export const NO_WEAPON = 255;
@@ -342,6 +392,7 @@ export const NO_WEAPON = 255;
 const EV_KILL = 1;
 const EV_HIT = 2;
 const EV_DAMAGED = 3;
+const EV_EXPLOSION = 4;
 
 export function encodeEvents(events: GameEvent[]): Uint8Array {
   const w = new BinaryWriter(1 + events.length * 8);
@@ -366,6 +417,10 @@ export function encodeEvents(events: GameEvent[]): Uint8Array {
         w.u8(EV_DAMAGED).u8(e.attacker);
         for (const v of e.from) w.i16(clampI16(quantizePosition(v)));
         w.u8(e.health);
+        break;
+      case 'explosion':
+        w.u8(EV_EXPLOSION).u8(e.kind === 'smoke' ? 1 : 0);
+        for (const v of e.position) w.i16(clampI16(quantizePosition(v)));
         break;
     }
   }
@@ -399,6 +454,14 @@ export function decodeEvents(bytes: Uint8Array): GameEvent[] {
         dequantizePosition(r.i16()),
       ];
       events.push({ type: 'damaged', attacker, from, health: r.u8() });
+    } else if (type === EV_EXPLOSION) {
+      const kind = r.u8() === 1 ? 'smoke' : 'frag';
+      const position: Vec3 = [
+        dequantizePosition(r.i16()),
+        dequantizePosition(r.i16()),
+        dequantizePosition(r.i16()),
+      ];
+      events.push({ type: 'explosion', kind, position });
     } else {
       throw new RangeError(`unknown event type ${type}`);
     }

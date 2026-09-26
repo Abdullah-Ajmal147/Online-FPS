@@ -37,6 +37,9 @@ export interface CombatHud {
   ammo: number;
   reserve: number;
   reloading: boolean;
+  /** Grenades left this life. */
+  frags: number;
+  smokes: number;
   respawnSeconds: number;
   killedBy: string | null;
   /** performance.now() of the last confirmed hit, and what it was. */

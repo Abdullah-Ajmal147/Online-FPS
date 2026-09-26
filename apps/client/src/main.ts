@@ -33,4 +33,13 @@ startGame(canvas, () => settings)
     game = g;
     setStatus({ backend: g.backend });
   })
-  .catch((err: unknown) => console.error('[game] failed to start:', err));
+  .catch((err: unknown) => {
+    console.error('[game] failed to start:', err);
+    // Almost always: no WebGL (blocked, hardware acceleration off, or the GPU gave up).
+    setStatus({
+      net: {
+        state: 'error',
+        text: 'Could not start 3D graphics. Enable hardware acceleration or try another browser.',
+      },
+    });
+  });

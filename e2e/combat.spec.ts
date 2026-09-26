@@ -33,7 +33,14 @@ test('one player shoots another: the server registers hits and the victim takes 
   let hurt = false;
   for (let attempt = 0; attempt < 40 && !hurt; attempt++) {
     const me = await ownPos(a);
-    const [target] = await remotes(a);
+    // Other tests share this server: aim at the remote player standing where B says it is.
+    const bAt = await ownPos(b);
+    const target = bAt
+      ? (await remotes(a)).sort(
+          (p, q) =>
+            Math.hypot(p[0] - bAt[0], p[2] - bAt[2]) - Math.hypot(q[0] - bAt[0], q[2] - bAt[2]),
+        )[0]
+      : undefined;
     if (!me || !target) continue;
     const dx = target[0] - me[0];
     const dz = target[2] - me[2];

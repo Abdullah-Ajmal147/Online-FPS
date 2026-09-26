@@ -362,6 +362,29 @@ body {
   color: #c9d1d9;
 }
 
+.grenades {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+  font:
+    600 12px system-ui,
+    sans-serif;
+  color: #c9d1d9;
+}
+
+.grenade-count[data-empty='true'] {
+  opacity: 0.35;
+}
+
+.grenade-count kbd {
+  padding: 0 4px;
+  border: 1px solid #8b949e;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 10px;
+}
+
 .death {
   position: absolute;
   inset: 0;

@@ -1,4 +1,4 @@
-import { movement } from '@sentinel/content';
+import { equipment, movement } from '@sentinel/content';
 import {
   Button,
   SKIN,
@@ -26,6 +26,8 @@ export interface Difficulty {
   recoilControl: number;
   /** Fires only when the aim is within this many degrees of the aim point. */
   fireToleranceDeg: number;
+  /** Frags per 5 s of mid-range fighting, on average (0 = never throws). */
+  fragRate: number;
 }
 
 /**
@@ -41,6 +43,7 @@ export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
     turnDegPerSecond: 200,
     recoilControl: 0.2,
     fireToleranceDeg: 4,
+    fragRate: 0,
   },
   normal: {
     reactionMs: 480,
@@ -49,6 +52,7 @@ export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
     turnDegPerSecond: 300,
     recoilControl: 0.4,
     fireToleranceDeg: 3,
+    fragRate: 1,
   },
   hard: {
     reactionMs: 240,
@@ -57,12 +61,27 @@ export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
     turnDegPerSecond: 600,
     recoilControl: 0.85,
     fireToleranceDeg: 1.5,
+    fragRate: 1.5,
   },
 };
 
 const DEG = Math.PI / 180;
 const VIEW_RANGE = 70;
 const HALF_FOV = 65 * DEG;
+
+/** Chance per tick at fragRate 1: about one frag per 5 s of mid-range fighting, per bot. */
+const FRAG_CHANCE_PER_TICK = 1 / (5 * TICK_RATE);
+const THROW_WINDUP_TICKS = 18;
+
+/**
+ * Launch angle to land a frag about `dist` metres away (plain projectile range formula, minus a
+ * few metres for the bounce and roll): R = v² sin 2θ / g.
+ */
+function lobPitch(dist: number): number {
+  const v = equipment.frag.throwSpeed;
+  const k = Math.min(1, Math.max(0, ((dist - 4) * movement.gravity) / (v * v)));
+  return Math.asin(k) / 2;
+}
 
 function wrapAngle(a: number): number {
   while (a > Math.PI) a -= 2 * Math.PI;
@@ -88,6 +107,8 @@ export class BotBrain {
   private strafeLeft = true;
   private strafeTicks = 0;
   private jumpCooldown = 0;
+  /** Winding up a frag throw: ticks left; the throw happens near the end, view lobbed up. */
+  private throwTicks = 0;
   private lastLifeId = -1;
   private readonly random: () => number;
 
@@ -109,6 +130,7 @@ export class BotBrain {
     if (me.lifeId !== this.lastLifeId) {
       // (Re)spawned: face where the spawn faces, forget the old plan.
       this.lastLifeId = me.lifeId;
+      this.throwTicks = 0;
       this.yaw = (me.sim.move.yaw / 65536) * 2 * Math.PI;
       this.pitch = 0;
       this.path = [];
@@ -144,7 +166,18 @@ export class BotBrain {
       const recoilPitch = (w.recoilPitch / 65536) * 2 * Math.PI * this.diff.recoilControl;
       const wantYaw = Math.atan2(-dx, -dz) + this.errYaw - recoilYaw;
       const wantPitch = Math.atan2(dy, dist) + this.errPitch - recoilPitch;
-      this.turnTowards(wantYaw, wantPitch);
+      // Now and then, lob a frag at a target in mid range instead of shooting.
+      if (
+        this.throwTicks === 0 &&
+        me.frags > 0 &&
+        this.reactionLeft === 0 &&
+        dist > 8 &&
+        dist < 22 &&
+        this.random() < FRAG_CHANCE_PER_TICK * this.diff.fragRate
+      ) {
+        this.throwTicks = THROW_WINDUP_TICKS;
+      }
+      this.turnTowards(wantYaw, this.throwTicks > 0 ? lobPitch(dist) : wantPitch);
       const decay = Math.max(0, 1 - this.diff.trackingPerSecond / TICK_RATE);
       this.errYaw *= decay;
       this.errPitch *= decay;
@@ -154,7 +187,9 @@ export class BotBrain {
       // Semi-automatic weapons fire once per press: release the trigger every other tick.
       const semi = me.ctx.loadout[w.slot].def.fireMode === 'semi';
       const held = (me.sim.move.prevButtons & Button.Fire) !== 0;
+      if (this.throwTicks > 0 && --this.throwTicks === 1) buttons |= Button.Lethal;
       if (
+        this.throwTicks === 0 &&
         this.reactionLeft === 0 &&
         offBy < this.diff.fireToleranceDeg &&
         mag.ammo > 0 &&
@@ -172,6 +207,7 @@ export class BotBrain {
       this.path = [];
     } else {
       this.targetId = 0;
+      this.throwTicks = 0;
       buttons |= this.roam(me);
       // Out of a fight with a half-empty magazine: top up.
       const magazine = me.ctx.loadout[w.slot].def.magazine;

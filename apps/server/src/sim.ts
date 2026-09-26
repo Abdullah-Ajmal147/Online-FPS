@@ -1,12 +1,21 @@
-import { weaponIndex, type GameMap, type Movement, type Weapon } from '@sentinel/content';
+import {
+  KILL_SOURCE_FRAG,
+  equipment,
+  weaponIndex,
+  type GameMap,
+  type Movement,
+  type Weapon,
+} from '@sentinel/content';
 import { NO_WEAPON, type EntityState, type GameEvent, type Snapshot } from '@sentinel/protocol';
 import {
   MAX_PLAYERS_PER_MATCH,
   MAX_REWIND_MS,
   TICK_RATE,
+  Button,
   buildWorld,
   createMovementContext,
   createPlayerBody,
+  capsuleHeight,
   createPlayerState,
   createRng,
   compileWeapon,
@@ -28,6 +37,7 @@ import {
   type SimState,
   type Vec3,
 } from '@sentinel/shared';
+import { Grenades, type Detonation } from './grenades.ts';
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
 export const MAX_HEALTH = 100;
@@ -103,6 +113,9 @@ export interface SimPlayer {
   respawnTicks: number;
   lastDamageTick: number;
   shotCount: number;
+  /** Grenades left this life (refilled on respawn). */
+  frags: number;
+  smokes: number;
   kills: number;
   deaths: number;
   history: HistoryEntry[];
@@ -141,6 +154,8 @@ export class MatchSim {
   /** Default loadout context; each player has their own (SimPlayer.ctx). */
   private readonly ctx: SimContext;
   private readonly specs = new Map<string, WeaponSpec>();
+  /** Thrown frags and smokes (server-only simulation). */
+  readonly grenades: Grenades;
   private readonly random: () => number;
   private spawnCursor = [0, 0];
 
@@ -154,6 +169,7 @@ export class MatchSim {
     const movementCtx = createMovementContext(rapier, buildWorld(rapier, expandMap(map)), tuning);
     this.ctx = { movement: movementCtx, loadout: [this.spec(loadout[0]), this.spec(loadout[1])] };
     this.random = createRng(seed);
+    this.grenades = new Grenades(rapier, movementCtx.world, tuning.gravity);
   }
 
   /** Compiled weapons are shared between players (compiled once per weapon). */
@@ -224,6 +240,8 @@ export class MatchSim {
       respawnTicks: 0,
       lastDamageTick: -Infinity,
       shotCount: 0,
+      frags: equipment.frag.perLife,
+      smokes: equipment.smoke.perLife,
       kills: 0,
       deaths: 0,
       history: [],
@@ -238,6 +256,7 @@ export class MatchSim {
     const p = this.players.get(id);
     if (!p) return;
     removePlayerBody(this.ctx.movement, p.body);
+    this.grenades.removeOwner(id);
     this.players.delete(id);
   }
 
@@ -260,8 +279,10 @@ export class MatchSim {
       if (!input) continue;
       p.viewTick = governViewTick(p.viewGovernor, input.viewTick);
       if (!p.alive || this.frozen) continue;
+      const before = p.sim;
       const r = stepSim(p.sim, input, p.ctx, p.body);
       p.sim = r.state;
+      this.maybeThrow(p, before);
       if (r.shot) {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
@@ -275,6 +296,7 @@ export class MatchSim {
     // Every shot fired this tick counts, even if its shooter was killed by an earlier shot in
     // this same loop: both players pulled the trigger while alive (fair trades, not join order).
     for (const s of shots) this.resolveShot(s.shooter, s.shot, s.viewTick);
+    if (!this.frozen) for (const d of this.grenades.step()) this.detonate(d);
     this.updateLife();
     this.lastTickMicros = (performance.now() - start) * 1000;
   }
@@ -321,9 +343,17 @@ export class MatchSim {
             health: me.health,
             lifeId: me.lifeId,
             respawnTicks: me.respawnTicks,
+            frags: me.frags,
+            smokes: me.smokes,
           }
         : null,
       entities,
+      projectiles: this.grenades.list.map((g) => ({
+        id: g.id,
+        kind: g.def.kind,
+        cloud: g.cloudTicks > 0,
+        position: g.position,
+      })),
     };
   }
 
@@ -403,25 +433,30 @@ export class MatchSim {
     damage: number,
     zone: HitZone,
     weapon: number,
+    from: Vec3 = attacker.sim.move.position,
   ): void {
     if (!victim.alive || this.tick < victim.protectedUntil) return;
+    const self = victim === attacker;
     victim.health = Math.max(this.noDeath ? 1 : 0, victim.health - damage);
     victim.lastDamageTick = this.tick;
     const killed = victim.health === 0;
-    this.events.push({
-      to: attacker.id,
-      event: { type: 'hit', victim: victim.id, damage, zone, killed },
-    });
+    if (!self) {
+      this.events.push({
+        to: attacker.id,
+        event: { type: 'hit', victim: victim.id, damage, zone, killed },
+      });
+    }
     this.events.push({
       to: victim.id,
       event: {
         type: 'damaged',
         attacker: attacker.id,
-        from: attacker.sim.move.position,
+        from,
         health: victim.health,
       },
     });
-    if (killed) this.kill(victim, attacker, weapon, zone === 'head');
+    // Killing yourself (your own frag) is a death, not a kill: no score, no scavenged ammo.
+    if (killed) this.kill(victim, self ? null : attacker, weapon, zone === 'head');
   }
 
   private kill(
@@ -483,6 +518,8 @@ export class MatchSim {
       p.pendingLoadout = null;
     }
     p.sim = this.freshSim(p.team, p.ctx);
+    p.frags = equipment.frag.perLife;
+    p.smokes = equipment.smoke.perLife;
     p.alive = true;
     p.health = MAX_HEALTH;
     p.respawnTicks = 0;
@@ -494,6 +531,7 @@ export class MatchSim {
 
   /** New match: everyone back to a spawn, full health and ammo. */
   respawnAll(): void {
+    this.grenades.clear();
     for (const p of this.players.values()) this.respawn(p);
   }
 
@@ -524,12 +562,83 @@ export class MatchSim {
       true,
       this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
     );
-    return hit === null;
+    return hit === null && !this.grenades.smokeBlocks(from, to);
   }
 
   /** The shared simulation context (bots plan with the same world). */
   get context(): SimContext {
     return this.ctx;
+  }
+
+  // --- Grenades ---------------------------------------------------------------------------
+
+  /** G / Q pressed this tick (not held): throw along the view, if one is left. */
+  private maybeThrow(p: SimPlayer, before: SimState): void {
+    const pressed = p.sim.move.prevButtons & ~before.move.prevButtons;
+    const lethal = (pressed & Button.Lethal) !== 0 && p.frags > 0;
+    const tactical = (pressed & Button.Tactical) !== 0 && p.smokes > 0;
+    if (!lethal && !tactical) return;
+    const eye = eyePosition(p.sim.move, this.ctx.movement);
+    const dir = directionFromAngles(p.sim.move.yaw, p.sim.move.pitch);
+    p.protectedUntil = 0; // attacking ends spawn protection
+    if (lethal) {
+      p.frags--;
+      this.grenades.throw(equipment.frag, p.id, p.team, eye, dir, p.sim.move.velocity);
+    }
+    if (tactical) {
+      p.smokes--;
+      this.grenades.throw(equipment.smoke, p.id, p.team, eye, dir, p.sim.move.velocity);
+    }
+  }
+
+  /**
+   * A fuse ran out. Smoke: the cloud appears (clients draw it; bots can't see through it).
+   * Frag: damage to enemies and the thrower (never teammates) with a clear line from the blast
+   * to their chest, full within the inner radius, falling off linearly to the outer radius.
+   */
+  private detonate(d: Detonation): void {
+    const kind = d.projectile.def.kind;
+    this.events.push({ to: null, event: { type: 'explosion', kind, position: d.position } });
+    const blast = d.projectile.def.explosion;
+    const owner = this.players.get(d.projectile.ownerId);
+    if (!blast || !owner) return;
+    const at: Vec3 = [d.position[0], d.position[1] + 0.15, d.position[2]];
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      const self = p === owner;
+      if (!self && p.team === owner.team) continue;
+      const m = p.sim.move;
+      const chest: Vec3 = [
+        m.position[0],
+        m.position[1] + capsuleHeight(this.tuning, m.crouching) * 0.6,
+        m.position[2],
+      ];
+      const dist = Math.hypot(chest[0] - at[0], chest[1] - at[1], chest[2] - at[2]);
+      if (dist > blast.outerRadius || !this.clearLine(at, chest)) continue;
+      const t = Math.max(0, (dist - blast.innerRadius) / (blast.outerRadius - blast.innerRadius));
+      let dmg = blast.maxDamage + (blast.minDamage - blast.maxDamage) * Math.min(1, t);
+      if (self) dmg *= blast.selfMultiplier;
+      const amount = Math.round(dmg);
+      if (amount > 0) this.damage(p, owner, amount, 'torso', KILL_SOURCE_FRAG, d.position);
+    }
+  }
+
+  /** Map-only line check (smoke doesn't stop a blast). */
+  private clearLine(from: Vec3, to: Vec3): boolean {
+    const d: Vec3 = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+    const len = Math.hypot(d[0], d[1], d[2]);
+    if (len < 1e-6) return true;
+    return (
+      this.ctx.movement.world.castRay(
+        new this.rapier.Ray(
+          { x: from[0], y: from[1], z: from[2] },
+          { x: d[0] / len, y: d[1] / len, z: d[2] / len },
+        ),
+        len,
+        true,
+        this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+      ) === null
+    );
   }
 
   // --- Hitbox history ----------------------------------------------------------------------

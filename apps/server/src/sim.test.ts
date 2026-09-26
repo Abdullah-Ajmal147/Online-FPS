@@ -3,6 +3,8 @@ import {
   defaultLoadout,
   maps,
   movement,
+  KILL_SOURCE_FRAG,
+  equipment,
   resolveLoadout,
   weaponIndex,
   weapons,
@@ -347,6 +349,130 @@ describe('MatchSim: loadouts', () => {
     feed(sim, shooter, 2, AIM_FIRE, { pitch });
     expect(target.alive).toBe(true);
     expect(target.health).toBeGreaterThan(60);
+  });
+});
+
+describe('MatchSim: grenades', () => {
+  /** Press a button for one tick, then release, then let the world run. */
+  function throwOnce(sim: MatchSim, p: SimPlayer, button: number, pitch = 0) {
+    feed(sim, p, 1, 0, { pitch });
+    feed(sim, p, 1, button, { pitch });
+    feed(sim, p, 1, 0, { pitch });
+  }
+  const fuse = (e: typeof equipment.frag) => Math.round(e.fuseTime * 60) + 10;
+
+  it('a frag at the feet kills an enemy, spares a teammate, and credits the thrower', () => {
+    const sim = newSim(arena);
+    const thrower = sim.addPlayer({ team: 0 });
+    const enemy = sim.addPlayer({ team: 1 });
+    const mate = sim.addPlayer({ team: 0 });
+    place(thrower, [0, 0, 12]);
+    place(enemy, [0, 0, 0]);
+    place(mate, [1, 0, 0]);
+    // Throw straight down at the enemy's feet: aim steeply at a point just in front of them.
+    const events: string[] = [];
+    let kill: unknown;
+    throwOnce(sim, thrower, Button.Lethal, aimPitch(1.67, 0.3, 11));
+    expect(thrower.frags).toBe(0);
+    expect(sim.grenades.list).toHaveLength(1);
+    for (let i = 0; i < fuse(equipment.frag); i++) {
+      sim.step();
+      for (const e of sim.events) {
+        events.push(e.event.type);
+        if (e.event.type === 'kill') kill = e.event;
+      }
+    }
+    expect(events).toContain('explosion');
+    expect(sim.grenades.list).toHaveLength(0);
+    expect(enemy.alive).toBe(false);
+    expect(mate.health).toBe(MAX_HEALTH);
+    expect(kill).toMatchObject({ killer: thrower.id, weapon: KILL_SOURCE_FRAG });
+  });
+
+  it('damage is full inside the inner radius, none beyond the outer, and walls block it', () => {
+    const sim = newSim(arena);
+    const owner = sim.addPlayer({ team: 0 });
+    const near = sim.addPlayer({ team: 1 });
+    const far = sim.addPlayer({ team: 1 });
+    const covered = sim.addPlayer({ team: 1 });
+    place(owner, [20, 0, 20]);
+    place(near, [0.5, 0, 0]);
+    place(far, [0, 0, 8]);
+    // The arena's cover wall spans x −2..2 at z = −20 (1 m thick): hide behind it.
+    place(covered, [0, 0, -22]);
+    const g = sim.grenades.throw(equipment.frag, owner.id, 0, [0, 0.2, -18], [0, -1, 0], [0, 0, 0]);
+    g.velocity = [0, 0, 0];
+    g.position = [0, 0.1, -18.2];
+    g.fuseTicks = 1;
+    const g2 = sim.grenades.throw(equipment.frag, owner.id, 0, [0, 0.2, 0], [0, -1, 0], [0, 0, 0]);
+    g2.velocity = [0, 0, 0];
+    g2.position = [0, 0.1, 0];
+    g2.fuseTicks = 1;
+    sim.step();
+    expect(near.alive).toBe(false); // 130 at the centre
+    expect(far.health).toBe(MAX_HEALTH); // 8 m > 6 m outer radius
+    expect(covered.health).toBe(MAX_HEALTH); // wall between blast and chest
+  });
+
+  it('your own frag hurts you (half) and a self-kill scores nothing', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer({ team: 0 });
+    sim.addPlayer({ team: 1 });
+    place(p, [0, 0, 0]);
+    p.health = 40;
+    const g = sim.grenades.throw(equipment.frag, p.id, 0, [0, 0.2, 0], [0, -1, 0], [0, 0, 0]);
+    g.velocity = [0, 0, 0];
+    g.position = [0, 0.1, 0];
+    g.fuseTicks = 1;
+    sim.step();
+    expect(p.alive).toBe(false);
+    expect(p.kills).toBe(0);
+    expect(p.deaths).toBe(1);
+    expect(sim.events.some((e) => e.event.type === 'hit')).toBe(false);
+  });
+
+  it('one frag and one smoke per life, refilled on respawn; holding G throws once', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    place(p, [0, 0, 0]);
+    feed(sim, p, 10, Button.Lethal | Button.Tactical);
+    expect(p.frags).toBe(0);
+    expect(p.smokes).toBe(0);
+    expect(sim.grenades.list).toHaveLength(2);
+    sim.respawnAll();
+    expect(p.frags).toBe(equipment.frag.perLife);
+    expect(p.smokes).toBe(equipment.smoke.perLife);
+    expect(sim.grenades.list).toHaveLength(0);
+  });
+
+  it('a smoke cloud blocks line of sight (bots cannot see through it), then clears', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    const g = sim.grenades.throw(equipment.smoke, p.id, 0, [0, 1, 0], [0, -1, 0], [0, 0, 0]);
+    g.velocity = [0, 0, 0];
+    g.position = [0, 0.1, 5];
+    g.fuseTicks = 1;
+    const a: Vec3 = [-10, 1.5, 5];
+    const b: Vec3 = [10, 1.5, 5];
+    expect(sim.lineOfSight(a, b)).toBe(true);
+    sim.step();
+    expect(sim.events.map((e) => e.event.type)).toContain('explosion');
+    expect(sim.lineOfSight(a, b)).toBe(false);
+    expect(sim.snapshotFor(p.id).projectiles).toMatchObject([{ kind: 'smoke', cloud: true }]);
+    for (let i = 0; i < equipment.smoke.smoke!.duration * 60; i++) sim.step();
+    expect(sim.lineOfSight(a, b)).toBe(true);
+  });
+
+  it('a grenade thrown into a wall bounces back instead of passing through', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    // Cover wall front face is at z = −19.5; throw at it from 3 m away, flat.
+    const g = sim.grenades.throw(equipment.frag, p.id, 0, [0, 2, -16.5], [0, 0, -1], [0, 0, 0]);
+    g.velocity = [0, 0, -17];
+    for (let i = 0; i < 60; i++) {
+      sim.step();
+      expect(g.position[2]).toBeGreaterThan(-19.5);
+    }
   });
 });
 

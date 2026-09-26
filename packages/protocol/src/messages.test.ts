@@ -56,6 +56,8 @@ const own: OwnSnapshot = {
   health: 64,
   lifeId: 3,
   respawnTicks: 0,
+  frags: 1,
+  smokes: 0,
 };
 
 const entity = (id: number, position: Vec3): EntityState => ({
@@ -72,8 +74,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 6 (Phase 5: loadouts)', () => {
-    expect(PROTOCOL_VERSION).toBe(6);
+  it('is 7 (Phase 5: grenades)', () => {
+    expect(PROTOCOL_VERSION).toBe(7);
   });
 });
 
@@ -145,7 +147,15 @@ describe('Snapshot', () => {
     serverTickMicros: 850,
     own,
     entities: [entity(1, [1.5, 0, -3.25]), entity(3, [-29.984375, 3, 29.5])],
+    projectiles: [
+      { id: 7, kind: 'frag', cloud: false, position: [1.25, 2.5, -3] },
+      { id: 200, kind: 'smoke', cloud: true, position: [-10, 0.0625, 4] },
+    ],
   };
+
+  it('round-trips grenades and smoke clouds', () => {
+    expect(decodeSnapshot(encodeSnapshot(snap)).projectiles).toEqual(snap.projectiles);
+  });
 
   it('round-trips the own block exactly: movement, weapon, health (ADR 0003)', () => {
     expect(decodeSnapshot(encodeSnapshot(snap)).own).toEqual(own);
@@ -190,6 +200,8 @@ describe('Events', () => {
       { type: 'kill', killer: 5, victim: 5, weapon: NO_WEAPON, headshot: false },
       { type: 'hit', victim: 5, damage: 34, zone: 'head', killed: true },
       { type: 'damaged', attacker: 2, from: [10.5, 1.5, -3], health: 66 },
+      { type: 'explosion', kind: 'frag', position: [4, 0.5, -2.25] },
+      { type: 'explosion', kind: 'smoke', position: [-4, 0, 2] },
     ];
     expect(decodeEvents(encodeEvents(events))).toEqual(events);
   });

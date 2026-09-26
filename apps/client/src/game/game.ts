@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu';
 import {
   defaultLoadout,
+  killSourceName,
   maps,
   movement,
   weaponCatalog,
@@ -55,6 +56,7 @@ import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
 import { RemotePlayers } from './remotePlayers.ts';
+import { GrenadeView } from './grenadeView.ts';
 import { Viewmodel } from './viewmodel.ts';
 
 export interface Game {
@@ -76,7 +78,11 @@ export async function startGame(
   settings: () => Settings,
 ): Promise<Game> {
   // --- Renderer ---
-  const renderer = new THREE.WebGPURenderer({ canvas, antialias: true });
+  const renderer = new THREE.WebGPURenderer({
+    canvas,
+    antialias: true,
+    forceWebGL: !(await webgpuAvailable()),
+  });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -124,6 +130,7 @@ export async function startGame(
   let loadoutIdx: readonly number[] = [];
   let predictor!: Predictor; // all assigned by loadMap() right below
   const effects = new Effects(scene);
+  const grenadeView = new GrenadeView(scene);
   const freshSim = (): SimState => {
     const spawn = map.spawns[0]!;
     return {
@@ -161,6 +168,8 @@ export async function startGame(
     weaponName: defaultLoadout[0].name,
     ammo: defaultLoadout[0].magazine,
     reserve: defaultLoadout[0].reserve,
+    frags: 1,
+    smokes: 1,
     reloading: false,
     respawnSeconds: 0,
     killedBy: null,
@@ -338,9 +347,13 @@ export async function startGame(
       hud.alive = alive;
       hud.health = own.health;
       hud.respawnSeconds = own.respawnTicks / 60;
+      if (hud.frags !== own.frags || hud.smokes !== own.smokes) hudDirty = true;
+      hud.frags = own.frags;
+      hud.smokes = own.smokes;
       if (alive) hud.killedBy = null;
     }
 
+    grenadeView.onSnapshot(snap.serverTick, snap.projectiles);
     const present = new Set<number>();
     for (const e of snap.entities) {
       present.add(e.id);
@@ -385,6 +398,10 @@ export async function startGame(
         hud.damage = [...hud.damage.slice(-5), { key: feedKey++, angle, at: performance.now() }];
         hud.health = ev.health;
         audio.hurt();
+      } else if (ev.type === 'explosion') {
+        const [x, y, z] = ev.position;
+        if (ev.kind === 'frag') effects.explosion(new THREE.Vector3(x, y, z));
+        audio.explosion(ev.kind, ev.position);
       } else if (ev.type === 'kill') {
         const entry: KillFeedEntry = {
           key: feedKey++,
@@ -392,7 +409,7 @@ export async function startGame(
           killerTeam: ev.killer === myId ? myTeam() : (teamOf.get(ev.killer) ?? 0),
           victim: nameOf(ev.victim),
           victimTeam: ev.victim === myId ? myTeam() : (teamOf.get(ev.victim) ?? 0),
-          weapon: ev.killer === ev.victim ? 'fell' : (weaponCatalog[ev.weapon]?.name ?? ''),
+          weapon: killSourceName(ev.weapon) || 'fell',
           headshot: ev.headshot,
         };
         hud.killFeed = [...hud.killFeed.slice(-4), entry];
@@ -558,8 +575,12 @@ export async function startGame(
       if (!pose.alive) continue;
       if (pose.team === myTeam()) {
         tags.set(id, { name: nameOf(id), head: remotePlayers.headOf(id, new THREE.Vector3()) });
-      } else if (!onEnemy && rayPlayer(eye, dir, pose.position, pose.crouching, movement, wall)) {
-        onEnemy = true;
+      } else if (
+        !onEnemy &&
+        rayPlayer(eye, dir, pose.position, pose.crouching, movement, wall) &&
+        !grenadeView.smokeBlocks(eye, pose.position)
+      ) {
+        onEnemy = true; // (never through smoke: the red crosshair must not reveal hidden enemies)
       }
     }
     document.body.classList.toggle('aim-enemy', onEnemy && hud.alive);
@@ -675,6 +696,7 @@ export async function startGame(
         remotePoses.set(id, pose);
         remotePlayers.update(id, pose, frame);
       }
+      grenadeView.update(renderTick, performance.now());
     }
     updateAimAndTags();
     feedback.update(camera, frame);
@@ -750,4 +772,20 @@ function eyeHeightFor(crouching: boolean): number {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+/**
+ * Ask for a WebGPU adapter, but give up after a moment: some browsers (and headless Chrome
+ * with several tabs) never answer, which would leave the game stuck on a black screen.
+ * No adapter in time → WebGL 2.
+ */
+async function webgpuAvailable(timeoutMs = 2000): Promise<boolean> {
+  const gpu = (navigator as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  if (!gpu) return false;
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+  try {
+    return (await Promise.race([gpu.requestAdapter(), timeout])) != null;
+  } catch {
+    return false;
+  }
 }
