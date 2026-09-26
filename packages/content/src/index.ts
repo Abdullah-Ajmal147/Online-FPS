@@ -1,9 +1,14 @@
 import {
+  AttachmentSchema,
   EquipmentSchema,
+  PerkSchema,
   MapSchema,
   ModeSchema,
   MovementSchema,
+  type Attachment,
   type Equipment,
+  type Perk,
+  type StatModifiers,
   type GameMap,
   type Mode,
   type Movement,
@@ -16,6 +21,8 @@ import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import relayYardJson from './maps/relay-yard.json' with { type: 'json' };
 import saltlineDepotJson from './maps/saltline-depot.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
+import attachmentsJson from './attachments.json' with { type: 'json' };
+import perksJson from './perks.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
 import { weaponFiles } from './weapons/catalog.gen.ts';
@@ -96,13 +103,162 @@ export function killSourceName(code: number): string {
   return weaponCatalog[code]?.name ?? '';
 }
 
+const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** Weapon attachments, sorted by id (index = wire index). */
+export const attachmentCatalog: readonly Attachment[] = (attachmentsJson as unknown[])
+  .map((a) => AttachmentSchema.parse(a))
+  .sort(byId);
+
+/** Perks, sorted by id (index = wire index). */
+export const perkCatalog: readonly Perk[] = (perksJson as unknown[])
+  .map((p) => PerkSchema.parse(p))
+  .sort(byId);
+
+export const MAX_ATTACHMENTS = 3;
+export const MAX_PERKS = 3;
+
+/** What a player picked, by id. */
+export interface LoadoutChoice {
+  primary: string;
+  secondary: string;
+  /** Primary weapon attachments (one per slot). */
+  attachments: string[];
+  perks: string[];
+}
+
+/** A validated loadout: the chosen ids and the weapons with every modifier applied. */
+export interface Loadout {
+  choice: LoadoutChoice;
+  weapons: readonly [Weapon, Weapon];
+  perks: readonly Perk[];
+}
+
+/** Weapon stats with modifiers applied (validated again, so limits always hold). */
+export function applyModifiers(base: Weapon, mods: readonly StatModifiers[]): Weapon {
+  if (mods.length === 0) return base;
+  const m = (key: Exclude<keyof StatModifiers, 'reserveMagazines'>) =>
+    mods.reduce((f, x) => f * (x[key] ?? 1), 1);
+  const extraMags = mods.reduce((n, x) => n + (x.reserveMagazines ?? 0), 0);
+  const magazine = Math.max(1, Math.min(255, Math.round(base.magazine * m('magazine'))));
+  const range = m('range');
+  const speed = m('moveSpeed');
+  return WeaponSchema.parse({
+    ...base,
+    magazine,
+    reserve: Math.min(65535, Math.round(base.reserve * m('magazine')) + extraMags * magazine),
+    reloadTime: Math.min(4.25, base.reloadTime * m('reloadTime')),
+    equipTime: Math.min(4.25, base.equipTime * m('equipTime')),
+    adsTime: Math.min(4.25, base.adsTime * m('adsTime')),
+    falloff: {
+      ...base.falloff,
+      start: base.falloff.start * range,
+      end: base.falloff.end * range,
+    },
+    maxRange: Math.min(500, base.maxRange * range),
+    spread: {
+      ...base.spread,
+      hip: Math.min(45, base.spread.hip * m('spreadHip')),
+      moving: Math.min(45, base.spread.moving * m('spreadMoving')),
+    },
+    recoil: {
+      ...base.recoil,
+      pattern: base.recoil.pattern.map(([up, right]) => [up * m('recoil'), right * m('recoil')]),
+    },
+    moveSpeedMultiplier: Math.min(1.5, base.moveSpeedMultiplier * speed),
+    adsMoveSpeedMultiplier: Math.min(1.5, base.adsMoveSpeedMultiplier * speed),
+  });
+}
+
 /**
- * Fingerprint of all gameplay content (FNV-1a over the parsed data). Weapons travel as catalog
+ * Build a loadout from untrusted input (join options, menu settings, the wire): unknown or
+ * misfitting weapons fall back to the default, attachments must fit the primary (one per
+ * slot, at most 3), perks must exist (no repeats, at most 3). Invalid picks are dropped.
+ */
+export function buildLoadout(raw: {
+  primary?: unknown;
+  secondary?: unknown;
+  attachments?: unknown;
+  perks?: unknown;
+}): Loadout {
+  const [primary, secondary] = resolveLoadout(raw.primary, raw.secondary);
+  const ids = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const attachments: Attachment[] = [];
+  for (const id of ids(raw.attachments)) {
+    const a = attachmentCatalog.find((x) => x.id === id);
+    if (!a || !a.classes.includes(primary.class)) continue;
+    if (attachments.some((x) => x.slot === a.slot) || attachments.length >= MAX_ATTACHMENTS)
+      continue;
+    attachments.push(a);
+  }
+  const perks: Perk[] = [];
+  for (const id of ids(raw.perks)) {
+    const p = perkCatalog.find((x) => x.id === id);
+    if (!p || perks.includes(p) || perks.length >= MAX_PERKS) continue;
+    perks.push(p);
+  }
+  const perkMods = perks.map((p) => p.modifiers);
+  return {
+    choice: {
+      primary: primary.id,
+      secondary: secondary.id,
+      attachments: attachments.map((a) => a.id),
+      perks: perks.map((p) => p.id),
+    },
+    weapons: [
+      applyModifiers(primary, [...attachments.map((a) => a.modifiers), ...perkMods]),
+      applyModifiers(secondary, perkMods),
+    ],
+    perks,
+  };
+}
+
+/** The default loadout (no attachments, no perks). */
+export const defaultBuiltLoadout: Loadout = buildLoadout({});
+
+/** Loadout as catalog indices for the wire (SetLoadout, own snapshot). */
+export interface LoadoutWire {
+  primary: number;
+  secondary: number;
+  attachments: number[];
+  perks: number[];
+}
+
+export function loadoutToWire(l: Loadout): LoadoutWire {
+  return {
+    primary: weaponIndex(l.choice.primary),
+    secondary: weaponIndex(l.choice.secondary),
+    attachments: l.choice.attachments.map((id) => attachmentCatalog.findIndex((a) => a.id === id)),
+    perks: l.choice.perks.map((id) => perkCatalog.findIndex((p) => p.id === id)),
+  };
+}
+
+/** From wire indices; unknown indices are dropped (then the usual validation applies). */
+export function loadoutFromWire(w: LoadoutWire): Loadout {
+  return buildLoadout({
+    primary: weaponCatalog[w.primary]?.id,
+    secondary: weaponCatalog[w.secondary]?.id,
+    attachments: w.attachments.map((i) => attachmentCatalog[i]?.id),
+    perks: w.perks.map((i) => perkCatalog[i]?.id),
+  });
+}
+
+/**
+ * Fingerprint of all gameplay content: maps, weapons, equipment, movement, attachments, perks
+ * (FNV-1a over the parsed data). Weapons travel as catalog
  * indices and both sides simulate with these numbers, so a client built from different content
  * than the server would predict wrongly; the server refuses such joins like a protocol mismatch.
  */
 export const CONTENT_HASH: string = (() => {
-  const text = JSON.stringify([weaponCatalog, equipment, movement]);
+  const text = JSON.stringify([
+    maps,
+    weaponCatalog,
+    equipment,
+    movement,
+    attachmentCatalog,
+    perkCatalog,
+  ]);
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);

@@ -4,7 +4,6 @@ import {
   defaultLoadout,
   maps,
   modes,
-  MAP_ROTATION,
   movement,
   resolveLoadout,
   weaponCatalog,
@@ -29,10 +28,11 @@ import {
   initPhysics,
 } from '@sentinel/shared';
 import { DIFFICULTIES } from './bots/brain.ts';
-import { BotController } from './bots/controller.ts';
+import { BotController, prewarmNav } from './bots/controller.ts';
 import { FakeLag, presetFromEnv } from './fakeLag.ts';
 import { Match, type MatchSummary } from './match.ts';
 import { TeamDeathmatch } from './mode.ts';
+import { mapRotationFromEnv } from './mapRotation.ts';
 import { sanitizeName } from './names.ts';
 import { isProtocolCompatible } from './protocol-check.ts';
 import { MatchSim } from './sim.ts';
@@ -106,15 +106,9 @@ export class MatchRoom extends Room {
       this.lag = new FakeLag(preset, Date.now() & 0xffff);
       log.warn('fake lag ON (test setting)', { preset });
     }
-    // SENTINEL_MAP pins one map (tests use the open "arena"); otherwise maps rotate per match.
-    this.rotation = process.env.SENTINEL_MAP ? [process.env.SENTINEL_MAP] : [...MAP_ROTATION];
+    this.rotation = mapRotationFromEnv(process.env);
     this.mapId = this.rotation[0]!;
-    const map = maps[this.mapId];
-    if (!map) {
-      throw new Error(
-        `SENTINEL_MAP: unknown map "${this.mapId}" (have ${Object.keys(maps).join(', ')})`,
-      );
-    }
+    const map = maps[this.mapId]!;
     const rapier = await initPhysics();
     this.sim = new MatchSim(rapier, map, movement, defaultLoadout, Date.now() & 0xffffffff);
     if (process.env.SENTINEL_TEST_NO_DEATH) {
@@ -144,6 +138,7 @@ export class MatchRoom extends Room {
 
     if (process.env.SENTINEL_BOTS !== '0') {
       const level = (process.env.SENTINEL_BOT_DIFFICULTY ?? 'normal') as keyof typeof DIFFICULTIES;
+      for (const id of this.rotation) prewarmNav(rapier, movement, maps[id]!);
       this.bots = new BotController(this.sim, map, DIFFICULTIES[level] ?? DIFFICULTIES.normal);
       this.bots.fill();
     }

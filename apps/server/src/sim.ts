@@ -188,7 +188,11 @@ export class MatchSim {
    * Switch to another map between matches (map rotation): a new physics world, every player
    * gets a body in it and is respawned there. Loadouts, names, teams and ids stay.
    */
+  /** Tick of the last map change: rewinds never reach back before it (review L6). */
+  private mapChangedTick = 0;
+
   changeMap(map: GameMap): void {
+    this.mapChangedTick = this.tick;
     const old = this.ctx.movement.world;
     const movementCtx = createMovementContext(
       this.rapier,
@@ -411,7 +415,12 @@ export class MatchSim {
     const spec = shooter.ctx.loadout[shot.slot];
     const weapon = spec.def;
     const origin = eyePosition(shooter.sim.move, this.ctx.movement);
-    const rewindTick = Math.max(this.tick - MAX_REWIND_TICKS, Math.min(this.tick, viewTick));
+    // Never rewind across a map change: poses from the old map mean nothing on this one.
+    const rewindTick = Math.max(
+      this.tick - MAX_REWIND_TICKS,
+      this.mapChangedTick,
+      Math.min(this.tick, viewTick),
+    );
     // Rewound poses are computed once per shot, not once per pellet.
     const targets: { victim: SimPlayer; position: Vec3; crouching: boolean }[] = [];
     for (const target of this.players.values()) {

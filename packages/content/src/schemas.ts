@@ -266,3 +266,55 @@ export const EquipmentSchema = z
     message: 'explosion.outerRadius must be beyond innerRadius',
   });
 export type Equipment = z.infer<typeof EquipmentSchema>;
+
+// ---------------------------------------------------------------------------
+// Attachments and perks: stat modifiers applied to weapon data when a loadout is built, so the
+// simulation (and client prediction) just sees a weapon with different numbers.
+// ---------------------------------------------------------------------------
+
+const Mult = z.number().min(0.5).max(1.5);
+
+export const StatModifiersSchema = z
+  .object({
+    /** Hip-fire and moving spread. */
+    spreadHip: Mult,
+    spreadMoving: Mult,
+    /** Every recoil kick. */
+    recoil: Mult,
+    adsTime: Mult,
+    reloadTime: Mult,
+    equipTime: Mult,
+    /** Magazine and reserve size (rounded). */
+    magazine: Mult,
+    /** Damage falloff distances and max range. */
+    range: Mult,
+    /** Movement speed with the weapon (hip and aiming). */
+    moveSpeed: Mult,
+    /** Extra spare magazines of reserve ammo. */
+    reserveMagazines: z.number().int().min(0).max(3),
+  })
+  .partial()
+  .strict();
+export type StatModifiers = z.infer<typeof StatModifiersSchema>;
+
+export const AttachmentSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/),
+  name: z.string().min(1),
+  slot: z.enum(['optic', 'barrel', 'magazine', 'grip', 'stock']),
+  /** Weapon classes it fits. */
+  classes: z.array(z.enum(['rifle', 'smg', 'shotgun', 'marksman', 'sidearm'])).min(1),
+  description: z.string().min(1),
+  modifiers: StatModifiersSchema,
+});
+export type Attachment = z.infer<typeof AttachmentSchema>;
+
+export const PerkSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  /** Applied to both weapons. */
+  modifiers: StatModifiersSchema.default({}),
+  /** Server-only: multiplier on frag damage taken. */
+  explosiveDamageTaken: z.number().min(0.2).max(1).default(1),
+});
+export type Perk = z.infer<typeof PerkSchema>;

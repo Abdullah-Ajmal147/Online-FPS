@@ -14,7 +14,10 @@ import { dequantizePosition, quantizePosition } from './quantize.ts';
  * Every change to any layout below must bump PROTOCOL_VERSION.
  */
 export const MessageType = {
-  /** Server → client once after join. */
+  /**
+   * Server → client after join, and again whenever the map rotates (v8): the client loads the
+   * map and keeps counting input seqs.
+   */
   Hello: 1,
   /** Client → server every tick: the newest inputs (with redundancy) + snapshot ack. */
   InputCmd: 2,

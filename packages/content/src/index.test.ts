@@ -13,6 +13,12 @@ import {
   MAP_ROTATION,
   equipment,
   killSourceName,
+  applyModifiers,
+  attachmentCatalog,
+  buildLoadout,
+  loadoutFromWire,
+  loadoutToWire,
+  perkCatalog,
   resolveLoadout,
   weaponCatalog,
   weaponIndex,
@@ -254,5 +260,73 @@ describe('equipment', () => {
     expect(killSourceName(KILL_SOURCE_FRAG)).toBe('Frag grenade');
     expect(killSourceName(weaponCatalog.findIndex((w) => w.id === 'vireo-smg'))).toBe('Vireo SMG');
     expect(killSourceName(255)).toBe('');
+  });
+});
+
+describe('attachments and perks', () => {
+  it('load from data, every attachment fits at least one primary', () => {
+    expect(attachmentCatalog.length).toBeGreaterThanOrEqual(8);
+    expect(perkCatalog.length).toBeGreaterThanOrEqual(4);
+    for (const a of attachmentCatalog) {
+      expect(
+        weaponCatalog.some((w) => w.slot === 0 && a.classes.includes(w.class)),
+        a.id,
+      ).toBe(true);
+    }
+  });
+
+  it('modifies weapon numbers: extended mag, compensator, quick hands', () => {
+    const base = weapons['kestrel-ar']!;
+    const l = buildLoadout({
+      primary: 'kestrel-ar',
+      attachments: ['extended-mag', 'compensator'],
+      perks: ['quick-hands'],
+    });
+    const w = l.weapons[0];
+    expect(w.magazine).toBe(Math.round(base.magazine * 1.3));
+    expect(w.recoil.pattern[0]![0]).toBeCloseTo(base.recoil.pattern[0]![0] * 0.82);
+    expect(w.reloadTime).toBeCloseTo(base.reloadTime * 1.12 * 0.8);
+    // Perks also apply to the sidearm; attachments don't.
+    expect(l.weapons[1].reloadTime).toBeCloseTo(weapons['wren-sp']!.reloadTime * 0.8);
+    expect(l.weapons[1].recoil).toEqual(weapons['wren-sp']!.recoil);
+  });
+
+  it('drops invalid picks: wrong class, second of a slot, too many, unknown, repeats', () => {
+    const l = buildLoadout({
+      primary: 'thresher-12',
+      attachments: [
+        'compensator',
+        'reflex-sight',
+        'tactical-scope',
+        'fast-mag',
+        'vertical-grip',
+        'x',
+      ],
+      perks: ['light-step', 'light-step', 'nope', 'flak-vest', 'quick-hands', 'deep-pockets'],
+    });
+    // compensator doesn't fit shotguns; tactical scope is a second optic; the 4th is over max.
+    expect(l.choice.attachments).toEqual(['reflex-sight', 'fast-mag', 'vertical-grip']);
+    expect(l.choice.perks).toEqual(['light-step', 'flak-vest', 'quick-hands']);
+  });
+
+  it('with nothing picked, the weapons are the plain data', () => {
+    expect(buildLoadout({}).weapons).toEqual(defaultLoadout);
+    expect(applyModifiers(weapons['vireo-smg']!, [])).toBe(weapons['vireo-smg']);
+  });
+
+  it('round-trips through wire indices', () => {
+    const l = buildLoadout({
+      primary: 'halberd-mr',
+      attachments: ['tactical-scope', 'heavy-stock'],
+      perks: ['deep-pockets'],
+    });
+    const back = loadoutFromWire(loadoutToWire(l));
+    expect(back.choice).toEqual(l.choice);
+    expect(back.weapons).toEqual(l.weapons);
+  });
+
+  it('deep pockets adds a spare magazine', () => {
+    const l = buildLoadout({ perks: ['deep-pockets'] });
+    expect(l.weapons[0].reserve).toBe(defaultLoadout[0].reserve + defaultLoadout[0].magazine);
   });
 });

@@ -1,5 +1,11 @@
-import { MAX_PLAYERS_PER_MATCH, type Vec3 } from '@sentinel/shared';
-import { resolveLoadout, type GameMap } from '@sentinel/content';
+import {
+  MAX_PLAYERS_PER_MATCH,
+  buildWorld,
+  expandMap,
+  type Rapier,
+  type Vec3,
+} from '@sentinel/shared';
+import { resolveLoadout, type GameMap, type Movement } from '@sentinel/content';
 import type { MatchSim, SimPlayer } from '../sim.ts';
 import { BotBrain, type Difficulty } from './brain.ts';
 import { NavGrid } from './nav.ts';
@@ -142,6 +148,18 @@ export class BotController {
  * static map geometry, so every room on that map can share it.
  */
 const navCache = new Map<string, NavGrid>();
+
+/**
+ * Build (and cache) the grid for a map that isn't loaded yet, in a throwaway physics world.
+ * Rooms call this for every map in their rotation when they open, so a map change later never
+ * blocks the tick loop for the few hundred ms a grid takes.
+ */
+export function prewarmNav(rapier: Rapier, tuning: Movement, map: GameMap): void {
+  if (navCache.has(map.id)) return;
+  const world = buildWorld(rapier, expandMap(map));
+  navCache.set(map.id, new NavGrid(rapier, world, tuning, mapBounds(map)));
+  world.free(); // the grid keeps no reference to the world
+}
 
 function navFor(sim: MatchSim, map: GameMap): NavGrid {
   let nav = navCache.get(map.id);

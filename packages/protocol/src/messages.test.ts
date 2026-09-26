@@ -74,8 +74,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 7 (Phase 5: grenades)', () => {
-    expect(PROTOCOL_VERSION).toBe(7);
+  it('is 8 (Phase 5: Hello again on map rotation)', () => {
+    expect(PROTOCOL_VERSION).toBe(8);
   });
 });
 

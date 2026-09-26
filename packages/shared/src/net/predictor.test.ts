@@ -78,6 +78,36 @@ describe('Predictor.reset', () => {
   });
 });
 
+describe('Predictor map change', () => {
+  it('swaps the collision world but keeps counting seqs; replays match the new world', () => {
+    const old = setup();
+    const p = new Predictor(old.spawn, old.ctx, old.body);
+    for (let i = 0; i < 10; i++) p.tick(input(i)); // seqs 1..10
+    // Map rotation: a new world (Relay Yard) and body; history is dropped, seqs continue.
+    const moveCtx = createMovementContext(
+      rapier,
+      buildWorld(rapier, expandMap(maps['relay-yard']!)),
+      movement,
+    );
+    const ctx = createSimContext(moveCtx, defaultLoadout);
+    const body = createPlayerBody(moveCtx);
+    p.reset(p.state, undefined, ctx, body);
+    expect(p.recentInputs()).toEqual([]);
+    const next = p.tick(input(10));
+    expect(next.sent.seq).toBe(11);
+    // The server respawns us on the new map having applied up to seq 11; 12..15 in flight.
+    for (let i = 11; i < 15; i++) p.tick(input(i));
+    const spawn: SimState = {
+      move: createPlayerState([0, 0, 30], 0),
+      weapon: createWeaponState(ctx.loadout),
+    };
+    p.reset(spawn, 11);
+    let expected = spawn;
+    for (let i = 11; i < 15; i++) expected = stepSim(expected, input(i), ctx, body).state;
+    expect(p.state).toEqual(expected);
+  });
+});
+
 describe('Predictor skip ticks', () => {
   it('sends but does not simulate skipped ticks, in live ticks and in replays', () => {
     const { ctx, body, spawn } = setup();

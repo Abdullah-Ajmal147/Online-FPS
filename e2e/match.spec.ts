@@ -41,6 +41,22 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
     .toBeGreaterThanOrEqual(150);
   expect((await profile())!.matches).toBe(1);
 
-  // After the results, a new match starts.
+  // After the results, a new match starts on the next map in the rotation, and we can move.
+  const mapName = () =>
+    page.evaluate(async () => (await import('/src/store.ts')).getStatus().mapName);
+  expect(await mapName()).toBe('Relay Yard');
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).not.toBe('ended');
+  await expect.poll(mapName, { timeout: 10_000 }).toBe('Saltline Depot');
+  const pos = () =>
+    page.evaluate(async () => (await import('/src/store.ts')).getStatus().player!.position);
+  const before = await pos();
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(1000);
+  await page.keyboard.up('KeyW');
+  await expect
+    .poll(async () => {
+      const now = await pos();
+      return Math.hypot(now[0] - before[0], now[2] - before[2]);
+    })
+    .toBeGreaterThan(1);
 });

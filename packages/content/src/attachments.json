@@ -1,0 +1,82 @@
+[
+  {
+    "id": "reflex-sight",
+    "name": "Reflex sight",
+    "slot": "optic",
+    "classes": ["rifle", "smg", "shotgun", "marksman"],
+    "description": "Faster aim.",
+    "modifiers": { "adsTime": 0.85 }
+  },
+  {
+    "id": "tactical-scope",
+    "name": "Tactical scope",
+    "slot": "optic",
+    "classes": ["rifle", "marksman"],
+    "description": "Steadier, slower to aim.",
+    "modifiers": { "recoil": 0.9, "adsTime": 1.2 }
+  },
+  {
+    "id": "long-barrel",
+    "name": "Long barrel",
+    "slot": "barrel",
+    "classes": ["rifle", "smg", "shotgun", "marksman"],
+    "description": "More range, a bit heavier.",
+    "modifiers": { "range": 1.25, "moveSpeed": 0.97 }
+  },
+  {
+    "id": "compensator",
+    "name": "Compensator",
+    "slot": "barrel",
+    "classes": ["rifle", "smg", "marksman"],
+    "description": "Less kick, wider hip spread.",
+    "modifiers": { "recoil": 0.82, "spreadHip": 1.15 }
+  },
+  {
+    "id": "extended-mag",
+    "name": "Extended magazine",
+    "slot": "magazine",
+    "classes": ["rifle", "smg", "marksman", "shotgun"],
+    "description": "More rounds, slower reload.",
+    "modifiers": { "magazine": 1.3, "reloadTime": 1.12 }
+  },
+  {
+    "id": "fast-mag",
+    "name": "Fast magazine",
+    "slot": "magazine",
+    "classes": ["rifle", "smg", "marksman", "shotgun"],
+    "description": "Quicker reloads.",
+    "modifiers": { "reloadTime": 0.78 }
+  },
+  {
+    "id": "vertical-grip",
+    "name": "Vertical grip",
+    "slot": "grip",
+    "classes": ["rifle", "smg", "shotgun"],
+    "description": "Less recoil.",
+    "modifiers": { "recoil": 0.88 }
+  },
+  {
+    "id": "angled-grip",
+    "name": "Angled grip",
+    "slot": "grip",
+    "classes": ["rifle", "smg", "shotgun", "marksman"],
+    "description": "Faster aim, tighter hip fire.",
+    "modifiers": { "adsTime": 0.88, "spreadHip": 0.9 }
+  },
+  {
+    "id": "light-stock",
+    "name": "Light stock",
+    "slot": "stock",
+    "classes": ["rifle", "smg", "shotgun", "marksman"],
+    "description": "Move faster, more kick.",
+    "modifiers": { "moveSpeed": 1.04, "recoil": 1.08 }
+  },
+  {
+    "id": "heavy-stock",
+    "name": "Heavy stock",
+    "slot": "stock",
+    "classes": ["rifle", "marksman", "shotgun"],
+    "description": "Steadier, slower to aim.",
+    "modifiers": { "recoil": 0.88, "adsTime": 1.1 }
+  }
+]

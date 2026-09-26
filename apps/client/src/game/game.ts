@@ -142,6 +142,8 @@ export async function startGame(
   // --- Map + simulation (same code the server runs). Rebuilt when the server names its map. ---
   let map!: GameMap;
   let mapMeshes: THREE.Group | null = null;
+  /** Map just changed: hold still until the server's spawn on the new map arrives. */
+  let awaitingSpawn = false;
   let moveCtx!: MovementContext;
   let simCtx!: SimContext;
   /** Our loadout as the server confirmed it (catalog indices); predicted with exactly this. */
@@ -162,7 +164,13 @@ export async function startGame(
     if (!next) throw new Error(`unknown map "${id}"`);
     map = next;
     const solids = expandMap(map);
-    if (mapMeshes) scene.remove(mapMeshes);
+    if (mapMeshes) {
+      scene.remove(mapMeshes);
+      mapMeshes.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.geometry.dispose();
+      });
+    }
+    const oldWorld = moveCtx?.world;
     mapMeshes = buildMapMeshes(solids);
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
@@ -174,8 +182,15 @@ export async function startGame(
     const body = createPlayerBody(moveCtx);
     // Map rotation mid-session: keep the predictor (its input sequence numbers must keep
     // counting up, or the server would drop our inputs as old) and just swap its world.
-    if (predictor) predictor.reset(predictor.state, undefined, simCtx, body);
-    else predictor = new Predictor(freshSim(), simCtx, body);
+    if (predictor) {
+      predictor.reset(predictor.state, undefined, simCtx, body);
+      // Until the server's spawn on the new map arrives, stand still (our position is still an
+      // old-map one; stepping it through the new geometry would only show a glitch).
+      awaitingSpawn = true;
+    } else {
+      predictor = new Predictor(freshSim(), simCtx, body);
+    }
+    oldWorld?.free(); // nothing references it now (predictor and simCtx use the new one)
   }
   function applyLighting(preset: GameMap['lighting']): void {
     const l = LIGHTING[preset];
@@ -344,6 +359,7 @@ export async function startGame(
         const joining = !spawnedFromServer;
         spawnedFromServer = true;
         lifeId = own.lifeId;
+        awaitingSpawn = false;
         const look = predictor.state.move;
         const [pi, si] = own.loadout;
         let ctx: SimContext | undefined;
@@ -653,7 +669,7 @@ export async function startGame(
       prevState = predictor.state;
       const sample = input.sample();
       // Frozen (countdown/results) or dead: the server doesn't step us, so neither do we.
-      const skip = spawnedFromServer && (frozen || !hud.alive);
+      const skip = spawnedFromServer && (frozen || !hud.alive || awaitingSpawn);
       const { shot } = predictor.tick(
         { ...sample, weaponSlot: sample.weaponSlot ?? 0, viewTick },
         { skip },

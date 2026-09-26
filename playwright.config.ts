@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Game servers:
  *   :2567 — no bots, open arena, long warm-up: functional tests (movement, two players, combat)
- *   :2568 — bots fill to 12, Relay Yard, 45 s matches: the full match-flow test (?server=…)
+ *   :2568 — bots, Relay Yard → Saltline Depot rotation, 45 s matches: the match-flow test
  *   :2569 — open arena, easy bots, 10 min matches: the hip-fire kill regression test
  *   :2570 — no bots, open arena: grenade test (its smoke and frag would disturb other tests)
  *   :2571 — no bots, open arena: the two-player combat test (exactly two players, so they are
@@ -34,7 +34,7 @@ export default defineConfig({
       url: 'http://localhost:2568/healthz',
       env: {
         PORT: '2568',
-        SENTINEL_MAP: 'relay-yard',
+        SENTINEL_MAP_ROTATION: 'relay-yard,saltline-depot',
         SENTINEL_WARMUP_SECONDS: '3',
         SENTINEL_MATCH_SECONDS: '45',
         SENTINEL_RESULTS_SECONDS: '6',

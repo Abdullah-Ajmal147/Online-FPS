@@ -1,0 +1,32 @@
+[
+  {
+    "id": "quick-hands",
+    "name": "Quick Hands",
+    "description": "Reload and switch weapons faster.",
+    "modifiers": { "reloadTime": 0.8, "equipTime": 0.75 }
+  },
+  {
+    "id": "light-step",
+    "name": "Light Step",
+    "description": "Move 5% faster.",
+    "modifiers": { "moveSpeed": 1.05 }
+  },
+  {
+    "id": "steady-hands",
+    "name": "Steady Hands",
+    "description": "Tighter hip fire, on the move too.",
+    "modifiers": { "spreadHip": 0.75, "spreadMoving": 0.7 }
+  },
+  {
+    "id": "flak-vest",
+    "name": "Flak Vest",
+    "description": "Take 45% less damage from grenades.",
+    "explosiveDamageTaken": 0.55
+  },
+  {
+    "id": "deep-pockets",
+    "name": "Deep Pockets",
+    "description": "Spawn with an extra magazine for each weapon.",
+    "modifiers": { "reserveMagazines": 1 }
+  }
+]
