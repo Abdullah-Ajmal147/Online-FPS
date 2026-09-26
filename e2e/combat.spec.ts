@@ -3,7 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 type Vec = [number, number, number];
 
 async function join(page: Page) {
-  await page.goto('/');
+  // Own server: two players only, so they always end up on opposite teams.
+  await page.goto('/?server=http://localhost:2571');
   await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
 }
 
@@ -33,7 +34,7 @@ test('one player shoots another: the server registers hits and the victim takes 
   let hurt = false;
   for (let attempt = 0; attempt < 40 && !hurt; attempt++) {
     const me = await ownPos(a);
-    // Other tests share this server: aim at the remote player standing where B says it is.
+    // Aim at the remote player standing where B says it is.
     const bAt = await ownPos(b);
     const target = bAt
       ? (await remotes(a)).sort(

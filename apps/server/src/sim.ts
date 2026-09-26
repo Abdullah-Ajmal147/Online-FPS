@@ -116,6 +116,13 @@ export interface SimPlayer {
   /** Grenades left this life (refilled on respawn). */
   frags: number;
   smokes: number;
+  /**
+   * The grenade keys were seen released since this life (or live play) began. A key held
+   * through a respawn or the countdown must not throw on the first live tick.
+   */
+  throwArmed: boolean;
+  /** No new throw before this tick (throw cooldown). */
+  nextThrowTick: number;
   kills: number;
   deaths: number;
   history: HistoryEntry[];
@@ -242,6 +249,8 @@ export class MatchSim {
       shotCount: 0,
       frags: equipment.frag.perLife,
       smokes: equipment.smoke.perLife,
+      throwArmed: false,
+      nextThrowTick: 0,
       kills: 0,
       deaths: 0,
       history: [],
@@ -304,9 +313,13 @@ export class MatchSim {
   snapshotFor(id: number): Snapshot {
     const me = this.players.get(id);
     const entities: EntityState[] = [];
+    const myEye = me ? eyePosition(me.sim.move, this.ctx.movement) : null;
     for (const p of this.players.values()) {
       if (p.id === id) continue;
       const m = p.sim.move;
+      // An enemy fully hidden by smoke is not sent at all: a client that just stops drawing
+      // the cloud must not learn where they are (review M1). Clients drop missing players.
+      if (myEye && me && p.team !== me.team && this.hiddenBySmoke(myEye, p)) continue;
       entities.push({
         id: p.id,
         team: p.team,
@@ -520,6 +533,7 @@ export class MatchSim {
     p.sim = this.freshSim(p.team, p.ctx);
     p.frags = equipment.frag.perLife;
     p.smokes = equipment.smoke.perLife;
+    p.throwArmed = false;
     p.alive = true;
     p.health = MAX_HEALTH;
     p.respawnTicks = 0;
@@ -572,23 +586,31 @@ export class MatchSim {
 
   // --- Grenades ---------------------------------------------------------------------------
 
-  /** G / Q pressed this tick (not held): throw along the view, if one is left. */
+  /**
+   * G / Q pressed this tick (not held): throw along the view, if one is left. One throw per
+   * tick (frag first), then a cooldown; keys held since spawn don't count (see throwArmed).
+   * Throwing doesn't lock the gun (that would need client prediction of throws).
+   */
   private maybeThrow(p: SimPlayer, before: SimState): void {
-    const pressed = p.sim.move.prevButtons & ~before.move.prevButtons;
-    const lethal = (pressed & Button.Lethal) !== 0 && p.frags > 0;
-    const tactical = (pressed & Button.Tactical) !== 0 && p.smokes > 0;
-    if (!lethal && !tactical) return;
+    const held = p.sim.move.prevButtons;
+    const keys = Button.Lethal | Button.Tactical;
+    if (!p.throwArmed) {
+      if ((held & keys) === 0) p.throwArmed = true;
+      return;
+    }
+    const pressed = held & ~before.move.prevButtons;
+    if ((pressed & keys) === 0 || this.tick < p.nextThrowTick) return;
+    const frag = (pressed & Button.Lethal) !== 0 && p.frags > 0;
+    const smoke = !frag && (pressed & Button.Tactical) !== 0 && p.smokes > 0;
+    if (!frag && !smoke) return;
+    const def = frag ? equipment.frag : equipment.smoke;
     const eye = eyePosition(p.sim.move, this.ctx.movement);
     const dir = directionFromAngles(p.sim.move.yaw, p.sim.move.pitch);
+    if (!this.grenades.throw(def, p.id, eye, dir, p.sim.move.velocity)) return; // world cap
+    if (frag) p.frags--;
+    else p.smokes--;
+    p.nextThrowTick = this.tick + Math.round(def.cooldown * TICK_RATE);
     p.protectedUntil = 0; // attacking ends spawn protection
-    if (lethal) {
-      p.frags--;
-      this.grenades.throw(equipment.frag, p.id, p.team, eye, dir, p.sim.move.velocity);
-    }
-    if (tactical) {
-      p.smokes--;
-      this.grenades.throw(equipment.smoke, p.id, p.team, eye, dir, p.sim.move.velocity);
-    }
   }
 
   /**
@@ -602,7 +624,18 @@ export class MatchSim {
     const blast = d.projectile.def.explosion;
     const owner = this.players.get(d.projectile.ownerId);
     if (!blast || !owner) return;
-    const at: Vec3 = [d.position[0], d.position[1] + 0.15, d.position[2]];
+    // Lift the blast point off the floor, but never through a ceiling right above it.
+    const up = this.ctx.movement.world.castRay(
+      new this.rapier.Ray(
+        { x: d.position[0], y: d.position[1], z: d.position[2] },
+        { x: 0, y: 1, z: 0 },
+      ),
+      0.15,
+      true,
+      this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+    );
+    const lift = up ? Math.max(0, up.timeOfImpact - 0.02) : 0.15;
+    const at: Vec3 = [d.position[0], d.position[1] + lift, d.position[2]];
     for (const p of this.players.values()) {
       if (!p.alive) continue;
       const self = p === owner;
@@ -621,6 +654,16 @@ export class MatchSim {
       const amount = Math.round(dmg);
       if (amount > 0) this.damage(p, owner, amount, 'torso', KILL_SOURCE_FRAG, d.position);
     }
+  }
+
+  /** Head and chest both behind smoke, as seen from `eye`. */
+  private hiddenBySmoke(eye: Vec3, p: SimPlayer): boolean {
+    if (!this.grenades.hasClouds) return false;
+    const m = p.sim.move;
+    const h = capsuleHeight(this.tuning, m.crouching);
+    const head: Vec3 = [m.position[0], m.position[1] + h * 0.9, m.position[2]];
+    const chest: Vec3 = [m.position[0], m.position[1] + h * 0.6, m.position[2]];
+    return this.grenades.smokeBlocks(eye, head) && this.grenades.smokeBlocks(eye, chest);
   }
 
   /** Map-only line check (smoke doesn't stop a blast). */
@@ -705,7 +748,8 @@ export class MatchSim {
         const p = e.sim.move.position;
         const d = Math.hypot(p[0] - s.position[0], p[2] - s.position[2]);
         nearest = Math.min(nearest, d);
-        if (!seen && d < 80 && this.lineOfSight(enemyEyes[k]!, head)) seen = true;
+        // Map-only check: a smoke must not make a spawn next to an enemy look safe (review M2).
+        if (!seen && d < 80 && this.clearLine(enemyEyes[k]!, head)) seen = true;
       });
       const score = nearest - (seen ? 10_000 : 0);
       if (score > bestScore) {

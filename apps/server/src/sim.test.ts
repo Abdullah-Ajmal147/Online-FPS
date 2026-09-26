@@ -27,6 +27,7 @@ import {
   governViewTick,
   type SimPlayer,
 } from './sim.ts';
+import { MAX_PROJECTILES } from './grenades.ts';
 
 let rapier: Rapier;
 beforeAll(async () => {
@@ -400,11 +401,11 @@ describe('MatchSim: grenades', () => {
     place(far, [0, 0, 8]);
     // The arena's cover wall spans x −2..2 at z = −20 (1 m thick): hide behind it.
     place(covered, [0, 0, -22]);
-    const g = sim.grenades.throw(equipment.frag, owner.id, 0, [0, 0.2, -18], [0, -1, 0], [0, 0, 0]);
+    const g = sim.grenades.throw(equipment.frag, owner.id, [0, 0.2, -18], [0, -1, 0], [0, 0, 0])!;
     g.velocity = [0, 0, 0];
     g.position = [0, 0.1, -18.2];
     g.fuseTicks = 1;
-    const g2 = sim.grenades.throw(equipment.frag, owner.id, 0, [0, 0.2, 0], [0, -1, 0], [0, 0, 0]);
+    const g2 = sim.grenades.throw(equipment.frag, owner.id, [0, 0.2, 0], [0, -1, 0], [0, 0, 0])!;
     g2.velocity = [0, 0, 0];
     g2.position = [0, 0.1, 0];
     g2.fuseTicks = 1;
@@ -420,7 +421,7 @@ describe('MatchSim: grenades', () => {
     sim.addPlayer({ team: 1 });
     place(p, [0, 0, 0]);
     p.health = 40;
-    const g = sim.grenades.throw(equipment.frag, p.id, 0, [0, 0.2, 0], [0, -1, 0], [0, 0, 0]);
+    const g = sim.grenades.throw(equipment.frag, p.id, [0, 0.2, 0], [0, -1, 0], [0, 0, 0])!;
     g.velocity = [0, 0, 0];
     g.position = [0, 0.1, 0];
     g.fuseTicks = 1;
@@ -435,8 +436,12 @@ describe('MatchSim: grenades', () => {
     const sim = newSim(arena);
     const p = sim.addPlayer();
     place(p, [0, 0, 0]);
-    feed(sim, p, 10, Button.Lethal | Button.Tactical);
+    feed(sim, p, 2, 0);
+    feed(sim, p, 10, Button.Lethal); // held: one throw
     expect(p.frags).toBe(0);
+    expect(sim.grenades.list).toHaveLength(1);
+    feed(sim, p, 40, 0); // wait out the throw cooldown
+    feed(sim, p, 10, Button.Tactical);
     expect(p.smokes).toBe(0);
     expect(sim.grenades.list).toHaveLength(2);
     sim.respawnAll();
@@ -445,10 +450,87 @@ describe('MatchSim: grenades', () => {
     expect(sim.grenades.list).toHaveLength(0);
   });
 
+  it('G held through a respawn does not throw until released and pressed again', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    place(p, [0, 0, 0]);
+    feed(sim, p, 30, Button.Lethal); // held since spawn
+    expect(sim.grenades.list).toHaveLength(0);
+    feed(sim, p, 1, 0);
+    feed(sim, p, 1, Button.Lethal);
+    feed(sim, p, 1, Button.Lethal);
+    expect(sim.grenades.list).toHaveLength(1);
+  });
+
+  it('frag and smoke pressed together: only the frag, then a cooldown before the smoke', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    place(p, [0, 0, 0]);
+    feed(sim, p, 2, 0);
+    feed(sim, p, 1, Button.Lethal | Button.Tactical);
+    feed(sim, p, 1, 0);
+    expect(p.frags).toBe(0);
+    expect(p.smokes).toBe(1);
+    feed(sim, p, 1, Button.Tactical); // inside the cooldown: ignored
+    feed(sim, p, 1, 0);
+    expect(p.smokes).toBe(1);
+    feed(sim, p, Math.round(equipment.frag.cooldown * 60), 0);
+    feed(sim, p, 1, Button.Tactical);
+    feed(sim, p, 1, 0);
+    expect(p.smokes).toBe(0);
+  });
+
+  it('nobody throws while dead or during the frozen countdown', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    place(p, [0, 0, 0]);
+    feed(sim, p, 2, 0);
+    sim.frozen = true;
+    feed(sim, p, 1, Button.Lethal);
+    feed(sim, p, 1, 0);
+    expect(sim.grenades.list).toHaveLength(0);
+    sim.frozen = false;
+    p.alive = false;
+    feed(sim, p, 1, Button.Lethal);
+    expect(sim.grenades.list).toHaveLength(0);
+  });
+
+  it('caps live grenades (the snapshot count is one byte)', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer();
+    for (let i = 0; i < MAX_PROJECTILES; i++) {
+      expect(
+        sim.grenades.throw(equipment.smoke, p.id, [0, 1, 0], [0, 1, 0], [0, 0, 0]),
+      ).not.toBeNull();
+    }
+    expect(sim.grenades.throw(equipment.frag, p.id, [0, 1, 0], [0, 1, 0], [0, 0, 0])).toBeNull();
+  });
+
+  it('an enemy hidden by smoke is left out of your snapshot; teammates never are', () => {
+    const sim = newSim(arena);
+    const me = sim.addPlayer({ team: 0 });
+    const enemy = sim.addPlayer({ team: 1 });
+    const mate = sim.addPlayer({ team: 0 });
+    place(me, [0, 0, 10]);
+    place(enemy, [0, 0, -10]);
+    place(mate, [0.5, 0, -10]);
+    const ids = () => sim.snapshotFor(me.id).entities.map((e) => e.id);
+    expect(ids()).toContain(enemy.id);
+    const g = sim.grenades.throw(equipment.smoke, me.id, [0, 1, 0], [0, -1, 0], [0, 0, 0])!;
+    g.velocity = [0, 0, 0];
+    g.position = [0, 0.1, 0];
+    g.fuseTicks = 1;
+    sim.step();
+    expect(ids()).not.toContain(enemy.id);
+    expect(ids()).toContain(mate.id);
+    // The enemy's own view of us is blocked the same way (symmetric).
+    expect(sim.snapshotFor(enemy.id).entities.map((e) => e.id)).not.toContain(me.id);
+  });
+
   it('a smoke cloud blocks line of sight (bots cannot see through it), then clears', () => {
     const sim = newSim(arena);
     const p = sim.addPlayer();
-    const g = sim.grenades.throw(equipment.smoke, p.id, 0, [0, 1, 0], [0, -1, 0], [0, 0, 0]);
+    const g = sim.grenades.throw(equipment.smoke, p.id, [0, 1, 0], [0, -1, 0], [0, 0, 0])!;
     g.velocity = [0, 0, 0];
     g.position = [0, 0.1, 5];
     g.fuseTicks = 1;
@@ -467,7 +549,7 @@ describe('MatchSim: grenades', () => {
     const sim = newSim(arena);
     const p = sim.addPlayer();
     // Cover wall front face is at z = −19.5; throw at it from 3 m away, flat.
-    const g = sim.grenades.throw(equipment.frag, p.id, 0, [0, 2, -16.5], [0, 0, -1], [0, 0, 0]);
+    const g = sim.grenades.throw(equipment.frag, p.id, [0, 2, -16.5], [0, 0, -1], [0, 0, 0])!;
     g.velocity = [0, 0, -17];
     for (let i = 0; i < 60; i++) {
       sim.step();

@@ -230,6 +230,8 @@ export const EquipmentSchema = z
     slot: z.enum(['lethal', 'tactical']),
     /** Carried per life. */
     perLife: z.number().int().min(0).max(5),
+    /** Seconds after a throw before the next grenade of any kind. */
+    cooldown: z.number().nonnegative().max(5).default(0.6),
     /** Launch speed along the view, m/s (plus a little upward lob). */
     throwSpeed: z.number().positive().max(40),
     /** Seconds from the throw until it goes off. */

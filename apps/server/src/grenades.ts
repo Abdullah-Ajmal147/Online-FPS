@@ -13,13 +13,17 @@ const REST_SPEED = 0.8;
 const TANGENT_KEEP = 0.75;
 /** A thrown grenade also goes up a bit, so a throw at the horizon still lobs. */
 const LOB_UP = 3;
+/**
+ * Most grenades and clouds alive at once (snapshot count is a u8, wire ids wrap at 256).
+ * Today's content (1 + 1 per life, 12 s clouds) stays far below it; a throw beyond is refused.
+ */
+export const MAX_PROJECTILES = 64;
 
 export interface Projectile {
   /** Wire id (wraps at 256; at most a handful exist at once). */
   id: number;
   def: Equipment;
   ownerId: number;
-  ownerTeam: number;
   position: Vec3;
   velocity: [number, number, number];
   /** Ticks until the fuse goes off. */
@@ -52,7 +56,8 @@ export class Grenades {
    * Throw from an eye position along a view direction. The start point is pulled back if a wall
    * is closer than the hand, so a grenade thrown into a wall never starts on its far side.
    */
-  throw(def: Equipment, ownerId: number, ownerTeam: number, eye: Vec3, dir: Vec3, carry: Vec3) {
+  throw(def: Equipment, ownerId: number, eye: Vec3, dir: Vec3, carry: Vec3): Projectile | null {
+    if (this.list.length >= MAX_PROJECTILES) return null;
     const reach = 0.5;
     const blocked = this.cast(eye, dir, reach);
     const d = blocked === null ? reach : Math.max(0, blocked - RADIUS * 2);
@@ -60,7 +65,6 @@ export class Grenades {
       id: this.nextId++ & 0xff,
       def,
       ownerId,
-      ownerTeam,
       position: [eye[0] + dir[0] * d, eye[1] + dir[1] * d, eye[2] + dir[2] * d],
       velocity: [
         dir[0] * def.throwSpeed + carry[0] * 0.5,
@@ -108,18 +112,17 @@ export class Grenades {
     this.list.length = 0;
   }
 
-  /** Smoke clouds currently up (for vision checks). */
-  *clouds(): Generator<{ position: Vec3; radius: number }> {
-    for (const p of this.list) {
-      if (p.cloudTicks > 0 && p.def.smoke)
-        yield { position: p.position, radius: p.def.smoke.radius };
-    }
+  /** Any smoke cloud up? (Cheap early-out for vision checks.) */
+  get hasClouds(): boolean {
+    for (const p of this.list) if (p.cloudTicks > 0) return true;
+    return false;
   }
 
   /** True if the segment a→b passes through any smoke cloud. */
   smokeBlocks(a: Vec3, b: Vec3): boolean {
-    for (const c of this.clouds()) {
-      if (segmentSphere(a, b, c.position, c.radius)) return true;
+    for (const p of this.list) {
+      if (p.cloudTicks > 0 && p.def.smoke && segmentSphere(a, b, p.position, p.def.smoke.radius))
+        return true;
     }
     return false;
   }
@@ -191,17 +194,18 @@ export class Grenades {
   }
 }
 
-/** Does the segment a→b come within r of centre c? */
+/** Does the segment a→b come within r of centre c? (Scalar math: called often, no garbage.) */
 export function segmentSphere(a: Vec3, b: Vec3, c: Vec3, r: number): boolean {
-  const ab: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-  const ac: Vec3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-  const len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
-  const t =
-    len2 === 0
-      ? 0
-      : Math.max(0, Math.min(1, (ac[0] * ab[0] + ac[1] * ab[1] + ac[2] * ab[2]) / len2));
-  const dx = a[0] + ab[0] * t - c[0];
-  const dy = a[1] + ab[1] * t - c[1];
-  const dz = a[2] + ab[2] * t - c[2];
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const abz = b[2] - a[2];
+  const acx = c[0] - a[0];
+  const acy = c[1] - a[1];
+  const acz = c[2] - a[2];
+  const len2 = abx * abx + aby * aby + abz * abz;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, (acx * abx + acy * aby + acz * abz) / len2));
+  const dx = abx * t - acx;
+  const dy = aby * t - acy;
+  const dz = abz * t - acz;
   return dx * dx + dy * dy + dz * dz <= r * r;
 }
