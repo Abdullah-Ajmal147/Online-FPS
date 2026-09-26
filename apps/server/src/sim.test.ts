@@ -38,6 +38,7 @@ beforeAll(async () => {
 const arena: GameMap = {
   id: 'arena',
   name: 'Arena',
+  lighting: 'day',
   killY: -20,
   geometry: [
     { kind: 'box', center: [0, -0.5, 0], size: [60, 1, 60], yawDeg: 0, material: 'floor' },
@@ -555,6 +556,29 @@ describe('MatchSim: grenades', () => {
       sim.step();
       expect(g.position[2]).toBeGreaterThan(-19.5);
     }
+  });
+});
+
+describe('MatchSim: map rotation', () => {
+  it('changeMap keeps players, loadouts and ids; shots and walls use the new world', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer({ team: 0, loadout: resolveLoadout('vireo-smg', 'wren-sp') });
+    const target = sim.addPlayer({ team: 1 });
+    sim.grenades.throw(equipment.smoke, shooter.id, [0, 1, 0], [0, 1, 0], [0, 0, 0]);
+    sim.changeMap(maps['saltline-depot']!);
+    expect(sim.grenades.list).toHaveLength(0);
+    expect(shooter.ctx.loadout[0].def.id).toBe('vireo-smg');
+    expect(sim.players.size).toBe(2);
+    // A ray through the new map's central platform is blocked; the old arena had nothing there.
+    expect(sim.lineOfSight([0, 1, 8], [0, 1, -8])).toBe(false);
+    // Shooting still resolves against the new world.
+    // Open ground between the ramp and a container on team 1's side.
+    place(shooter, [-2.6, 0, -14]);
+    place(target, [-2.6, 0, -24]);
+    const pitch = aimPitch(1.67, 1.1, 10);
+    aimIn(sim, shooter, pitch);
+    const shots = feed(sim, shooter, 2, AIM_FIRE, { pitch });
+    expect(shots.some((s) => s.hit?.victim === target.id)).toBe(true);
   });
 });
 

@@ -10,6 +10,7 @@ import {
   movement,
   EquipmentSchema,
   KILL_SOURCE_FRAG,
+  MAP_ROTATION,
   equipment,
   killSourceName,
   resolveLoadout,
@@ -64,9 +65,9 @@ describe('maps', () => {
   });
 });
 
-describe('Relay Yard', () => {
+describe.each(['relay-yard', 'saltline-depot'])('%s', (id) => {
   it('is point-symmetric: rotated 180° it is the same map with the teams swapped (fair)', () => {
-    const m = maps['relay-yard']!;
+    const m = maps[id]!;
     const near = (a: readonly number[], b: readonly number[]) =>
       a.every((v, i) => Math.abs(v - b[i]!) < 1e-9);
     const flip = (p: readonly number[]) => [-p[0]! + 0, p[1]!, -p[2]! + 0];
@@ -98,9 +99,16 @@ describe('Relay Yard', () => {
   });
 
   it('has six spawns per team for 6v6', () => {
-    const m = maps['relay-yard']!;
+    const m = maps[id]!;
     expect(m.spawns.filter((s) => s.team === 0)).toHaveLength(6);
     expect(m.spawns.filter((s) => s.team === 1)).toHaveLength(6);
+  });
+});
+
+describe('map rotation', () => {
+  it('only lists real maps, with at least two', () => {
+    expect(MAP_ROTATION.length).toBeGreaterThanOrEqual(2);
+    for (const id of MAP_ROTATION) expect(maps[id], id).toBeDefined();
   });
 });
 

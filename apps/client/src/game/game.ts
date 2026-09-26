@@ -95,7 +95,8 @@ export async function startGame(
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8ec3ef);
   scene.fog = new THREE.Fog(0x8ec3ef, 70, 160);
-  scene.add(new THREE.HemisphereLight(0xe8f3ff, 0x5a5048, 1.7));
+  const hemi = new THREE.HemisphereLight(0xe8f3ff, 0x5a5048, 1.7);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
   sun.position.set(20, 40, 15);
   sun.castShadow = true;
@@ -147,10 +148,31 @@ export async function startGame(
     mapMeshes = buildMapMeshes(solids);
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
+    grenadeView.clear();
+    applyLighting(map.lighting);
+    setStatus({ mapName: map.name });
     moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
     simCtx = createSimContext(moveCtx, loadout);
-    predictor = new Predictor(freshSim(), simCtx, createPlayerBody(moveCtx));
+    const body = createPlayerBody(moveCtx);
+    // Map rotation mid-session: keep the predictor (its input sequence numbers must keep
+    // counting up, or the server would drop our inputs as old) and just swap its world.
+    if (predictor) predictor.reset(predictor.state, undefined, simCtx, body);
+    else predictor = new Predictor(freshSim(), simCtx, body);
   }
+  function applyLighting(preset: GameMap['lighting']): void {
+    const l = LIGHTING[preset];
+    (scene.background as THREE.Color).set(l.sky);
+    (scene.fog as THREE.Fog).color.set(l.sky);
+    (scene.fog as THREE.Fog).near = l.fogNear;
+    (scene.fog as THREE.Fog).far = l.fogFar;
+    hemi.color.set(l.hemiSky);
+    hemi.groundColor.set(l.hemiGround);
+    hemi.intensity = l.hemiIntensity;
+    sun.color.set(l.sun);
+    sun.intensity = l.sunIntensity;
+    sun.position.set(...l.sunPosition);
+  }
+
   loadMap('greybox'); // offline practice until the server tells us its map
   let prevState: SimState = predictor.state;
 
@@ -789,3 +811,42 @@ async function webgpuAvailable(timeoutMs = 2000): Promise<boolean> {
     return false;
   }
 }
+
+/** Sky, fog and light per map lighting preset (map data picks one). */
+const LIGHTING: Record<
+  GameMap['lighting'],
+  {
+    sky: number;
+    fogNear: number;
+    fogFar: number;
+    hemiSky: number;
+    hemiGround: number;
+    hemiIntensity: number;
+    sun: number;
+    sunIntensity: number;
+    sunPosition: [number, number, number];
+  }
+> = {
+  day: {
+    sky: 0x8ec3ef,
+    fogNear: 70,
+    fogFar: 160,
+    hemiSky: 0xe8f3ff,
+    hemiGround: 0x5a5048,
+    hemiIntensity: 1.7,
+    sun: 0xfff4e0,
+    sunIntensity: 2.6,
+    sunPosition: [20, 40, 15],
+  },
+  dusk: {
+    sky: 0xe39a6b,
+    fogNear: 60,
+    fogFar: 150,
+    hemiSky: 0xffd2b0,
+    hemiGround: 0x4a4050,
+    hemiIntensity: 1.7,
+    sun: 0xff9a5c,
+    sunIntensity: 2.2,
+    sunPosition: [35, 14, -20],
+  },
+};

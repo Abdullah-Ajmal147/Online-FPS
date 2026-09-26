@@ -43,7 +43,9 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
     <div class="menu" data-testid="menu">
       <div class="menu-card">
         <h1>Sentinel Strike</h1>
-        <p class="menu-sub">Team Deathmatch · 6v6 · Relay Yard</p>
+        <p class="menu-sub">
+          Team Deathmatch · 6v6{useStatus().mapName ? ` · ${useStatus().mapName}` : ''}
+        </p>
         <ProfileCard />
         <button class="play" data-testid="play" onClick={onPlay}>
           Click to play

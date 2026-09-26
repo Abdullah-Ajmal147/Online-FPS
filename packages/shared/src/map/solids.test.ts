@@ -40,6 +40,7 @@ describe('expandMap', () => {
   const tinyMap = (geometry: GameMap['geometry']): GameMap => ({
     id: 'tiny',
     name: 'Tiny',
+    lighting: 'day',
     killY: -10,
     geometry,
     spawns: [],

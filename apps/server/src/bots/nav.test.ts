@@ -55,3 +55,34 @@ describe('NavGrid on the greybox', () => {
     expect(performance.now() - t).toBeLessThan(20);
   });
 });
+
+describe.each(['relay-yard', 'saltline-depot'])('NavGrid on %s', (id) => {
+  it('every spawn can walk to every other spawn (no spawn cut off from the fight)', () => {
+    const map = maps[id]!;
+    const nav = new NavGrid(rapier, buildWorld(rapier, expandMap(map)), movement, {
+      minX: -40,
+      maxX: 40,
+      minZ: -40,
+      maxZ: 40,
+    });
+    const [first, ...rest] = map.spawns;
+    for (const s of rest) {
+      expect(nav.findPath(first!.position, s.position), JSON.stringify(s)).not.toBeNull();
+    }
+  });
+});
+
+describe('NavGrid on Saltline Depot', () => {
+  it('reaches the top of the central platform from the ramp and the stairs', () => {
+    const nav = new NavGrid(
+      rapier,
+      buildWorld(rapier, expandMap(maps['saltline-depot']!)),
+      movement,
+      { minX: -40, maxX: 40, minZ: -40, maxZ: 40 },
+    );
+    const top = nav.findPath([0, 0, 25], [0, 2, 0]);
+    expect(top).not.toBeNull();
+    expect(top!.at(-1)![1]).toBeCloseTo(2, 1);
+    expect(nav.findPath([20, 0, 0], [0, 2, 0])).not.toBeNull(); // via the east stairs
+  });
+});

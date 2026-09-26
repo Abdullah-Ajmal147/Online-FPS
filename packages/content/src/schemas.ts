@@ -86,6 +86,8 @@ export const MapSchema = z
     killY: z.number(),
     geometry: z.array(PrimitiveSchema).min(1),
     spawns: z.array(SpawnSchema).min(2),
+    /** Sky, fog and sun preset the client draws the map with. */
+    lighting: z.enum(['day', 'dusk']).default('day'),
   })
   .refine((m) => [0, 1].every((team) => m.spawns.some((s) => s.team === team)), {
     message: 'every team needs at least one spawn',

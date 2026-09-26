@@ -50,6 +50,11 @@ export class Match {
   matchesPlayed = 0;
   private phaseEndsAt: number;
   private liveStartedAt = 0;
+  /**
+   * Called when the results screen closes, before the next warm-up: the room rotates the map
+   * here. Returns the map id now in play.
+   */
+  onNextMatch: (() => string) | null = null;
   /** Set when a match ends; the room forwards it (log, API). */
   onMatchEnd: ((summary: MatchSummary) => void) | null = null;
 
@@ -57,7 +62,7 @@ export class Match {
     private readonly sim: MatchSim,
     private readonly mode: GameMode,
     private readonly timings: MatchTimings,
-    private readonly mapId: string,
+    private mapId: string,
   ) {
     this.phaseEndsAt = sim.tick + this.ticks(timings.warmupSeconds);
   }
@@ -96,6 +101,7 @@ export class Match {
       case MatchPhase.Live:
         return this.end(this.mode.winnerAtTime());
       case MatchPhase.Ended:
+        if (this.onNextMatch) this.mapId = this.onNextMatch();
         return this.enter(MatchPhase.Warmup);
     }
     return false;

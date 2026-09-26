@@ -51,6 +51,7 @@ export function flatMap(extra: GameMap['geometry'] = []): GameMap {
   return {
     id: 'test-flat',
     name: 'Test flat',
+    lighting: 'day',
     killY: -10,
     geometry: [
       { kind: 'box', center: [0, -0.5, 0], size: [40, 1, 40], yawDeg: 0, material: 'floor' },

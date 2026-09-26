@@ -159,16 +159,16 @@ export class MatchSim {
    */
   noDeath = false;
   /** Default loadout context; each player has their own (SimPlayer.ctx). */
-  private readonly ctx: SimContext;
+  private ctx: SimContext;
   private readonly specs = new Map<string, WeaponSpec>();
   /** Thrown frags and smokes (server-only simulation). */
-  readonly grenades: Grenades;
+  grenades: Grenades;
   private readonly random: () => number;
   private spawnCursor = [0, 0];
 
   constructor(
     private readonly rapier: Rapier,
-    private readonly map: GameMap,
+    private map: GameMap,
     private readonly tuning: Movement,
     loadout: readonly [Weapon, Weapon],
     seed = 1,
@@ -177,6 +177,35 @@ export class MatchSim {
     this.ctx = { movement: movementCtx, loadout: [this.spec(loadout[0]), this.spec(loadout[1])] };
     this.random = createRng(seed);
     this.grenades = new Grenades(rapier, movementCtx.world, tuning.gravity);
+  }
+
+  /** The map being played. */
+  get currentMap(): GameMap {
+    return this.map;
+  }
+
+  /**
+   * Switch to another map between matches (map rotation): a new physics world, every player
+   * gets a body in it and is respawned there. Loadouts, names, teams and ids stay.
+   */
+  changeMap(map: GameMap): void {
+    const old = this.ctx.movement.world;
+    const movementCtx = createMovementContext(
+      this.rapier,
+      buildWorld(this.rapier, expandMap(map)),
+      this.tuning,
+    );
+    this.map = map;
+    this.ctx = { movement: movementCtx, loadout: this.ctx.loadout };
+    this.grenades = new Grenades(this.rapier, movementCtx.world, this.tuning.gravity);
+    this.spawnCursor = [0, 0];
+    for (const p of this.players.values()) {
+      p.body = createPlayerBody(movementCtx);
+      p.ctx = { movement: movementCtx, loadout: p.ctx.loadout };
+      p.history = [];
+    }
+    old.free();
+    this.respawnAll();
   }
 
   /** Compiled weapons are shared between players (compiled once per weapon). */

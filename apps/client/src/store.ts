@@ -75,6 +75,8 @@ export interface MatchHud {
 
 export interface ClientStatus {
   backend: 'WebGPU' | 'WebGL 2' | 'starting';
+  /** Name of the map being played (changes with the rotation). */
+  mapName: string;
   net: { state: 'connecting' | 'connected' | 'error'; text: string };
   /** True while the mouse is captured and the player is in control. */
   playing: boolean;
@@ -93,6 +95,7 @@ type Listener = (status: ClientStatus) => void;
 
 let status: ClientStatus = {
   backend: 'starting',
+  mapName: '',
   net: { state: 'connecting', text: 'connecting…' },
   playing: false,
   player: null,

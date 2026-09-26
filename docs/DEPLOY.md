@@ -38,13 +38,13 @@ Caddy gets a Let's Encrypt certificate automatically. Open `https://play.example
 
 ## 4. Operate
 
-| What                 | How                                                                                                                                            |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Health               | `curl https://play.example.com/healthz` and `/api/healthz`                                                                                     |
-| Metrics (Prometheus) | `docker compose exec game curl -s localhost:2567/metrics` (rooms, players, tick p50/p99, slow ticks, errors, matches) and `api …:8787/metrics` |
-| Logs (JSON lines)    | `docker compose logs -f game api`                                                                                                              |
-| Update               | `git pull && docker compose up -d --build` (in-progress matches end; players rejoin)                                                           |
-| Settings             | `SENTINEL_BOT_DIFFICULTY=easy                                                                                                                  | normal | hard`, `SENTINEL_BOTS=0`to disable bots,`SENTINEL_MAP` |
+| What                 | How                                                                                                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health               | `curl https://play.example.com/healthz` and `/api/healthz`                                                                                                     |
+| Metrics (Prometheus) | `docker compose exec game curl -s localhost:2567/metrics` (rooms, players, tick p50/p99, slow ticks, errors, matches) and `api …:8787/metrics`                 |
+| Logs (JSON lines)    | `docker compose logs -f game api`                                                                                                                              |
+| Update               | `git pull && docker compose up -d --build` (in-progress matches end; players rejoin)                                                                           |
+| Settings             | `SENTINEL_BOT_DIFFICULTY` (easy, normal, hard), `SENTINEL_BOTS=0` (no bots), `SENTINEL_MAP` (pin one map) or `SENTINEL_MAP_ROTATION=relay-yard,saltline-depot` |
 
 Metrics are not exposed publicly by Caddy; scrape them from inside the network.
 

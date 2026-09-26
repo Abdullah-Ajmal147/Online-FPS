@@ -31,7 +31,7 @@ const CALLSIGNS = [
 const BOT_PRIMARIES = ['kestrel-ar', 'vireo-smg', 'kestrel-ar', 'halberd-mr'] as const;
 
 export class BotController {
-  readonly nav: NavGrid;
+  nav: NavGrid;
   private brains = new Map<number, BotBrain>();
   private nameCursor = 0;
   private seed = 1;
@@ -43,6 +43,19 @@ export class BotController {
     private readonly target = MAX_PLAYERS_PER_MATCH,
   ) {
     this.nav = navFor(sim, map);
+  }
+
+  /** New map (rotation): new grid, fresh brains (their plans were for the old map). */
+  setMap(map: GameMap): void {
+    this.nav = navFor(this.sim, map);
+    for (const id of this.brains.keys()) {
+      const p = this.sim.players.get(id);
+      if (!p) continue;
+      this.brains.set(
+        id,
+        new BotBrain(p, this.sim, this.nav, this.difficulty, this.seed++, this.planBudget),
+      );
+    }
   }
 
   get count(): number {

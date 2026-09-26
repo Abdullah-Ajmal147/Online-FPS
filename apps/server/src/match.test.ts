@@ -56,6 +56,36 @@ describe('Match phases', () => {
     return { sim, match, run };
   }
 
+  it('rotates the map when the results screen closes (players respawn on the new map)', () => {
+    const { sim, match, run } = setup(1);
+    const bots = new BotController(sim, maps.arena!, DIFFICULTIES.normal, 6);
+    bots.fill();
+    const ids = [...sim.players.keys()];
+    match.onNextMatch = () => {
+      sim.changeMap(maps['saltline-depot']!);
+      bots.setMap(maps['saltline-depot']!);
+      return 'saltline-depot';
+    };
+    run(1 + 1 + 1 + 0.5); // warm-up, countdown, live, into results
+    expect(match.phase).toBe(MatchPhase.Ended);
+    expect(sim.currentMap.id).toBe('arena');
+    run(1);
+    expect(match.phase).toBe(MatchPhase.Warmup);
+    expect(sim.currentMap.id).toBe('saltline-depot');
+    expect([...sim.players.keys()]).toEqual(ids);
+    // Everyone stands on a Saltline Depot spawn point.
+    const spawnSpots = maps['saltline-depot']!.spawns.map((s) => s.position.join());
+    for (const p of sim.players.values()) {
+      expect(spawnSpots).toContain([p.sim.move.position[0], 0, p.sim.move.position[2]].join());
+    }
+    // Bots keep playing on the new map without errors.
+    for (let i = 0; i < 5 * TICK_RATE; i++) {
+      bots.think();
+      sim.step();
+      match.update();
+    }
+  });
+
   it('goes warm-up → countdown (frozen) → live → ended (frozen) → warm-up', () => {
     const { sim, match, run } = setup();
     expect(match.phase).toBe(MatchPhase.Warmup);

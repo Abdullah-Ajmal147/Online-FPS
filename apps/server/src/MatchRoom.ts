@@ -4,6 +4,7 @@ import {
   defaultLoadout,
   maps,
   modes,
+  MAP_ROTATION,
   movement,
   resolveLoadout,
   weaponCatalog,
@@ -94,6 +95,8 @@ export class MatchRoom extends Room {
   /** Set by `pnpm dev:lag --preset <name>` (SENTINEL_LAG). Never on in production. */
   private lag: FakeLag | null = null;
   private mapId = 'greybox';
+  private rotation: string[] = [];
+  private rotationIndex = 0;
   /** Called with each finished match (MatchRoom logs it; Phase 4 posts it to the API). */
   static onMatchEnd: ((summary: MatchSummary) => void) | null = null;
 
@@ -103,8 +106,9 @@ export class MatchRoom extends Room {
       this.lag = new FakeLag(preset, Date.now() & 0xffff);
       log.warn('fake lag ON (test setting)', { preset });
     }
-    // SENTINEL_MAP picks the map (tests use the open "arena").
-    this.mapId = process.env.SENTINEL_MAP ?? 'relay-yard';
+    // SENTINEL_MAP pins one map (tests use the open "arena"); otherwise maps rotate per match.
+    this.rotation = process.env.SENTINEL_MAP ? [process.env.SENTINEL_MAP] : [...MAP_ROTATION];
+    this.mapId = this.rotation[0]!;
     const map = maps[this.mapId];
     if (!map) {
       throw new Error(
@@ -130,6 +134,7 @@ export class MatchRoom extends Room {
       },
       this.mapId,
     );
+    this.match.onNextMatch = () => this.rotateMap();
     this.match.onMatchEnd = (summary) => {
       // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
       counters.matches.inc();
@@ -256,6 +261,39 @@ export class MatchRoom extends Room {
       }),
     );
     this.sendMatchInfo();
+  }
+
+  /** Next map in the rotation (between matches): rebuild the world, tell every client. */
+  private rotateMap(): string {
+    if (this.rotation.length < 2) return this.mapId;
+    this.rotationIndex = (this.rotationIndex + 1) % this.rotation.length;
+    const next = maps[this.rotation[this.rotationIndex]!];
+    if (!next) return this.mapId;
+    this.mapId = next.id;
+    this.sim.changeMap(next);
+    this.bots?.setMap(next);
+    log.info('map rotated', { room: this.roomId, map: next.id });
+    // Hello again: the client loads the new map (same player id and team).
+    for (const client of this.clients) {
+      const seat = this.seats.get(client.sessionId);
+      const p = seat && this.sim.players.get(seat.playerId);
+      if (p) this.sendHello(client, p.id, p.team);
+    }
+    return this.mapId;
+  }
+
+  private sendHello(client: Client, playerId: number, team: number): void {
+    this.reliable(
+      client,
+      MessageType.Hello,
+      encodeHello({
+        protocolVersion: PROTOCOL_VERSION,
+        serverTickRate: TICK_RATE,
+        playerId,
+        team,
+        mapId: this.mapId,
+      }),
+    );
   }
 
   /** One seat per guest earns XP: a second tab with the same guest plays without progression. */

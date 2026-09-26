@@ -14,6 +14,7 @@ import teamDeathmatchJson from './modes/team-deathmatch.json' with { type: 'json
 import arenaJson from './maps/arena.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import relayYardJson from './maps/relay-yard.json' with { type: 'json' };
+import saltlineDepotJson from './maps/saltline-depot.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
@@ -30,9 +31,14 @@ export const maps: Record<string, GameMap> = {
   greybox: MapSchema.parse(greyboxJson),
   /** First real map: compact, original, three lanes (Phase 3). */
   'relay-yard': MapSchema.parse(relayYardJson),
+  /** Second real map (Phase 5): dusk shipping depot, central platform, flank warehouses. */
+  'saltline-depot': MapSchema.parse(saltlineDepotJson),
   /** Open test arena with a clear line between spawns (netcode and hit-registration tests). */
   arena: MapSchema.parse(arenaJson),
 };
+
+/** Maps played in turn when the server isn't pinned to one (SENTINEL_MAP). */
+export const MAP_ROTATION: readonly string[] = ['relay-yard', 'saltline-depot'];
 
 export const movement: Movement = MovementSchema.parse(movementJson);
 
