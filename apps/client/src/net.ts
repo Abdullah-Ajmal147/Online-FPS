@@ -62,6 +62,8 @@ export class Connection {
       mode: string;
       region: string;
       allowJoin: boolean;
+      /** Create a private match instead of joining one (Play screen). */
+      private?: { map: string; bots: boolean } | undefined;
     },
   ): Promise<void> {
     const { name, token, loadout, mode } = join;
@@ -88,6 +90,8 @@ export class Connection {
           console.warn('[net] invite room unavailable, joining any match:', err);
         }
       }
+      if (!room && join.private)
+        room = await joinWithPool(client, { ...options, private: true, ...join.private }, 'create');
       room ??= await joinWithPool(client, options);
       this.room = room;
 
@@ -189,6 +193,11 @@ export class Connection {
   sendLoadout(loadout: LoadoutWire): void {
     this.room?.sendBytes(MessageType.SetLoadout, encodeSetLoadout(loadout));
   }
+
+  /** Private matches: ask to move to the other team (the server decides). */
+  switchTeam(): void {
+    this.room?.sendBytes(MessageType.SwitchTeam, new Uint8Array(0));
+  }
 }
 
 /** Invite parameters from this page's URL, if it was opened from an invite link. */
@@ -222,15 +231,21 @@ function inviteRegion(): string | null {
  * joinOrCreate, following the server if it assigns another pool ("POOL:shadow"): moderated
  * players are matched with each other. A ban is reported as such.
  */
-async function joinWithPool(client: Client, options: Record<string, unknown>): Promise<Room> {
+async function joinWithPool(
+  client: Client,
+  options: Record<string, unknown>,
+  how: 'joinOrCreate' | 'create' = 'joinOrCreate',
+): Promise<Room> {
+  const go = (o: Record<string, unknown>) =>
+    how === 'create' ? client.create('match', o) : client.joinOrCreate('match', o);
   try {
-    return await client.joinOrCreate('match', options);
+    return await go(options);
   } catch (err) {
     const msg = String((err as { message?: unknown }).message ?? err);
     const reroute = /REROUTE:(\w*)/.exec(msg);
     if (reroute) {
       const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== 'pool'));
-      return client.joinOrCreate('match', reroute[1] ? { ...rest, pool: reroute[1] } : rest);
+      return go(reroute[1] ? { ...rest, pool: reroute[1] } : rest);
     }
     if (msg.includes('BANNED'))
       throw new Error('This account is banned from matches.', { cause: err });

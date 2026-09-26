@@ -70,8 +70,13 @@ import { Viewmodel } from './viewmodel.ts';
 import { DEATH_PAUSE_MS, KillcamRecorder, type KillcamPlan } from './killcam.ts';
 
 export interface Game {
-  /** Join a match (first DEPLOY). Resolves once the join was sent; safe to call twice. */
-  join(): Promise<void>;
+  /**
+   * Join a match (first DEPLOY), or create a private one. Resolves once the join was sent;
+   * safe to call twice.
+   */
+  join(opts?: { private?: { map: string; bots: boolean } }): Promise<void>;
+  /** Private matches: move to the other team. */
+  switchTeam(): void;
   /** Back to the main menu: leave the match with a clean page. */
   leave(): void;
   requestPlay(): Promise<void>;
@@ -380,6 +385,7 @@ export async function startGame(
         scores: [info.teamScores[mine as 0 | 1], info.teamScores[(1 - mine) as 0 | 1]],
         myTeam: mine,
         mode: info.mode,
+        private: info.private,
         points: info.points,
         result:
           info.phase !== MatchPhase.Ended
@@ -684,14 +690,14 @@ export async function startGame(
    */
   let joined = false;
   let joining: Promise<void> | null = null;
-  const join = () =>
+  const join = (opts?: { private?: { map: string; bots: boolean } }) =>
     (joining ??= (async () => {
       setStatus({ net: { state: 'connecting', text: 'connecting…' }, inMatch: true });
       const guest = await ensureGuest(); // signed guest token (XP); the game works without it
       joined = true;
-      await joinMatch(guest?.token ?? null);
+      await joinMatch(guest?.token ?? null, opts?.private);
     })());
-  const joinMatch = (token: string | null) =>
+  const joinMatch = (token: string | null, privateMatch?: { map: string; bots: boolean }) =>
     conn.connect(
       {
         onHello: (hello) => {
@@ -715,6 +721,7 @@ export async function startGame(
         mode: settings().mode,
         region: settings().region,
         allowJoin: settings().allowJoin,
+        private: privateMatch,
       },
     );
   let sentLoadout = JSON.stringify(loadoutChoice(settings()));
@@ -1131,6 +1138,7 @@ export async function startGame(
       url.searchParams.delete('with');
       location.assign(url.toString());
     },
+    switchTeam: () => conn.switchTeam(),
     requestPlay: () => {
       audio.unlock();
       return input.requestLock();

@@ -78,8 +78,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 12 (Phase 8: modes and capture points in MatchInfo)', () => {
-    expect(PROTOCOL_VERSION).toBe(12);
+  it('is 13 (private matches: MatchInfo.private, SwitchTeam)', () => {
+    expect(PROTOCOL_VERSION).toBe(13);
   });
 });
 
@@ -270,6 +270,7 @@ describe('MatchInfo', () => {
       winner: 255,
       mvp: 0,
       mode: 'domination',
+      private: true,
       points: [
         { id: 'A', owner: 0, control: 1 },
         { id: 'B', owner: -1, control: -0.37 },
@@ -292,6 +293,7 @@ describe('MatchInfo', () => {
       winner: 255,
       mvp: 0,
       mode: 'team-deathmatch',
+      private: false,
       points: [],
       players: [],
     };

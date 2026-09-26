@@ -10,6 +10,7 @@ import {
 } from '@sentinel/auth';
 import {
   defaultLoadout,
+  MAP_ROTATION,
   maps,
   modes,
   movement,
@@ -88,6 +89,7 @@ interface Seat {
   chatKey: string;
   /** The player lets friends see this match and join it (Settings; default on). */
   allowJoin: boolean;
+  lastSwitchMs: number;
 }
 
 /** One room's humans, for friends' Join buttons (index.ts sends it to the API, signed). */
@@ -106,6 +108,17 @@ const REGION = /^[a-z0-9-]{1,24}$/.test(process.env.SENTINEL_REGION ?? '')
   : 'default';
 /** Presence heartbeat; the API forgets a room after ~2.5 missed beats. */
 const PRESENCE_EVERY_MS = 20_000;
+
+/**
+ * Private matches: each one builds a physics world and bots, so creating them is limited per
+ * IP (burst 3, then one per 30 s) and per process (SENTINEL_MAX_PRIVATE_ROOMS, default 30).
+ * Checked in the static onAuth, which runs before a room exists.
+ */
+const privateCreateLimit = new RateLimiter(3, 1 / 30);
+const MAX_PRIVATE_ROOMS = Math.max(0, Number(process.env.SENTINEL_MAX_PRIVATE_ROOMS ?? 30) || 0);
+let privateRooms = 0;
+/** Team switches (private matches) at most every 2 s per player. */
+const MIN_SWITCH_INTERVAL_MS = 2000;
 
 /**
  * Joins per IP (Phase 4 task 10): burst 20, then one per second. Stops join floods while
@@ -163,7 +176,35 @@ export class MatchRoom extends Room {
   /** Matchmaking pool: 'shadow' rooms only hold shadow-banned players (index.ts filterBy). */
   private pool: 'normal' | 'shadow' = 'normal';
 
-  override async onCreate(options?: { pool?: unknown; mode?: unknown }): Promise<void> {
+  /**
+   * Runs before matchmaking, even before a room is created (Colyseus static hook): limits who
+   * may create private rooms. Every other check is in the instance onAuth below. It must
+   * return plain `true`: returning auth data would make Colyseus skip the instance onAuth.
+   */
+  static override async onAuth(
+    _token: unknown,
+    options: unknown,
+    context: AuthContext,
+  ): Promise<true> {
+    if ((options as { private?: unknown } | null)?.private === true) {
+      if (privateRooms >= MAX_PRIVATE_ROOMS)
+        throw new ServerError(503, 'private matches are full right now, try again soon');
+      if (!privateCreateLimit.take(context.ip ?? 'unknown'))
+        throw new ServerError(429, 'too many private matches, wait a moment');
+    }
+    return true;
+  }
+
+  override async onCreate(options?: {
+    pool?: unknown;
+    mode?: unknown;
+    /** Private match (Play screen): not in matchmaking; invite link or Join button only. */
+    private?: unknown;
+    /** Private match: the first map (then the usual rotation). */
+    map?: unknown;
+    /** Private match: fill empty slots with bots. */
+    bots?: unknown;
+  }): Promise<void> {
     // Only two pools exist: none (normal) or the opaque shadow id. Anything else is refused
     // here, before a physics world and bots are built (no private-room or room-spam tricks).
     if (options?.pool !== undefined && options.pool !== SHADOW_POOL) {
@@ -176,6 +217,14 @@ export class MatchRoom extends Room {
       log.warn('fake lag ON (test setting)', { preset });
     }
     this.rotation = mapRotationFromEnv(process.env);
+    if (options?.private === true) {
+      this.isPrivateMatch = true;
+      privateRooms++;
+      await this.setPrivate(true);
+      // The creator's map first, if it's a real map (anything else keeps the rotation).
+      if (typeof options.map === 'string' && MAP_ROTATION.includes(options.map))
+        this.rotation = [options.map, ...MAP_ROTATION.filter((m) => m !== options.map)];
+    }
     this.mapId = this.rotation[0]!;
     const map = maps[this.mapId]!;
     const rapier = await initPhysics();
@@ -201,6 +250,7 @@ export class MatchRoom extends Room {
       },
       this.mapId,
     );
+    this.match.isPrivate = this.isPrivateMatch;
     this.match.onNextMatch = () => this.rotateMap();
     this.match.onMatchEnd = (summary) => {
       // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
@@ -210,7 +260,8 @@ export class MatchRoom extends Room {
       void Promise.resolve(MatchRoom.onMatchEnd?.(summary)).finally(() => this.refreshAccess());
     };
 
-    if (process.env.SENTINEL_BOTS !== '0') {
+    const wantBots = this.isPrivateMatch ? options?.bots !== false : true;
+    if (process.env.SENTINEL_BOTS !== '0' && wantBots) {
       const level = (process.env.SENTINEL_BOT_DIFFICULTY ?? 'normal') as keyof typeof DIFFICULTIES;
       for (const id of this.rotation) prewarmNav(rapier, movement, maps[id]!);
       this.bots = new BotController(this.sim, map, DIFFICULTIES[level] ?? DIFFICULTIES.normal);
@@ -291,6 +342,19 @@ export class MatchRoom extends Room {
       });
     });
 
+    // Private matches: switch to the other team (at most every 2 s, only if it has room).
+    this.onMessageBytes(MessageType.SwitchTeam, (client: Client, bytes: Uint8Array) => {
+      const seat = this.seats.get(client.sessionId);
+      const now = performance.now();
+      if (!seat || !this.isPrivateMatch || now - seat.lastSwitchMs < MIN_SWITCH_INTERVAL_MS) return;
+      if (bytes.length !== 0) {
+        if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+        return;
+      }
+      seat.lastSwitchMs = now;
+      this.inboundReliable(client, () => this.switchTeam(client, seat));
+    });
+
     // Standalone ack (normally the ack rides on InputCmd).
     this.onMessageBytes(MessageType.SnapshotAck, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
@@ -337,6 +401,12 @@ export class MatchRoom extends Room {
     const pool = access.status === 'shadow' ? 'shadow' : 'normal';
     if (pool !== this.pool)
       throw new ServerError(4409, `REROUTE:${pool === 'shadow' ? SHADOW_POOL : ''}`);
+    // Private match: after its creator, only with the invite token of someone inside (a room
+    // id alone isn't enough, e.g. from a shared screenshot of the address bar).
+    if (this.isPrivateMatch && this.seats.size > 0) {
+      const token = (options as { with?: unknown }).with;
+      if (!this.seatByInvite(token)) throw new ServerError(4404, 'PRIVATE');
+    }
     return { guestId, access, ip: context.ip ?? null };
   }
 
@@ -391,6 +461,7 @@ export class MatchRoom extends Room {
       ipHash: ipHash(API_SECRET, auth?.ip ?? 'unknown'),
       chatKey: guestId ?? `ip:${auth?.ip ?? client.sessionId}`,
       allowJoin: options?.allowJoin !== false,
+      lastSwitchMs: -Infinity,
     });
     this.presenceSoon();
     counters.joins.inc();
@@ -421,13 +492,37 @@ export class MatchRoom extends Room {
    * humans ahead of the other (so a leaked link can't stack one side).
    */
   private partyTeam(token: unknown): number | undefined {
-    if (typeof token !== 'string' || token.length > 32) return undefined;
-    const seat = [...this.seats.values()].find((s) => s.inviteToken === token);
+    const seat = this.seatByInvite(token);
     const host = seat && this.sim.players.get(seat.playerId);
     if (!host) return undefined;
     const humans: [number, number] = [0, 0];
     for (const p of this.sim.players.values()) if (!p.bot) humans[p.team as 0 | 1]++;
     return partyTeamFor(humans, host.team, modes['team-deathmatch']!.playersPerTeam);
+  }
+
+  private seatByInvite(token: unknown): Seat | undefined {
+    if (typeof token !== 'string' || token.length === 0 || token.length > 32) return undefined;
+    return [...this.seats.values()].find((s) => s.inviteToken === token);
+  }
+
+  /**
+   * Private matches: to the other team if it has room for another human. With bots, one of
+   * its bots makes way and a new bot fills the side the player left, so teams stay 6 v 6.
+   */
+  private switchTeam(client: Client, seat: Seat): void {
+    const p = this.sim.players.get(seat.playerId);
+    if (!p) return;
+    const target = 1 - p.team;
+    const perTeam = modes[this.modeId]?.playersPerTeam ?? 6;
+    let humans = 0;
+    for (const q of this.sim.players.values()) if (!q.bot && q.team === target) humans++;
+    if (humans >= perTeam) return;
+    this.bots?.makeRoomFor(target);
+    this.sim.switchTeam(p.id, target);
+    this.bots?.fill();
+    log.info('switched team', { room: this.roomId, player: p.id, team: target });
+    this.sendHello(client, p.id, target); // the client learns its new team
+    this.sendMatchInfo();
   }
 
   /** Re-read every player's unlocks from the API (async; applies to later loadout changes). */
@@ -578,6 +673,7 @@ export class MatchRoom extends Room {
     clearInterval(this.presenceBeat);
     clearTimeout(this.presenceTimer);
     this.reportPresence(true); // everyone here is gone
+    if (this.isPrivateMatch) privateRooms--;
     liveRooms.delete(this.gauges);
     log.info('room closed', { room: this.roomId, tickErrors: this.tickErrors });
   }

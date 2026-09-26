@@ -38,6 +38,8 @@ export const MessageType = {
   ChatSend: 10,
   /** Server → client: a chat line (filtered by the server). */
   Chat: 11,
+  /** Client → server, empty: move me to the other team (private matches only; v13). */
+  SwitchTeam: 12,
 } as const;
 
 export type { SequencedInput, OwnState };
@@ -622,6 +624,8 @@ export interface MatchInfo {
   mvp: number;
   /** Mode id (content modes), e.g. 'team-deathmatch', 'domination'. */
   mode: string;
+  /** Private match: invite / Join only, team switching allowed (v13). */
+  private: boolean;
   /** Capture points (objective modes; empty otherwise). */
   points: CapturePointState[];
   players: ScoreboardRow[];
@@ -642,7 +646,9 @@ export function encodeMatchInfo(m: MatchInfo): Uint8Array {
     .u16(Math.min(0xffff, Math.max(0, Math.ceil(m.secondsLeft))))
     .u16(m.scoreLimit);
   w.u16(m.teamScores[0]).u16(m.teamScores[1]).u8(m.winner).u8(m.mvp);
-  w.string(m.mode).u8(m.points.length);
+  w.string(m.mode)
+    .u8(m.private ? 1 : 0)
+    .u8(m.points.length);
   for (const p of m.points) {
     w.string(p.id)
       .u8(p.owner < 0 ? 255 : p.owner)
@@ -671,6 +677,8 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
   const winner = r.u8();
   const mvp = r.u8();
   const mode = r.string();
+  const priv = r.u8();
+  if (priv > 1) throw new RangeError('bad private flag');
   const pointCount = r.u8();
   if (pointCount > 8) throw new RangeError('too many capture points');
   const points: CapturePointState[] = [];
@@ -700,6 +708,7 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
     winner,
     mvp,
     mode,
+    private: priv === 1,
     points,
     players,
   };

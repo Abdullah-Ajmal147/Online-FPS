@@ -35,6 +35,8 @@ trackGameplay(platform());
 let game: Game | undefined;
 /** DEPLOY pressed before the game finished loading. */
 let wantToJoin = false;
+/** "Create private match" pressed before the game finished loading. */
+let pendingPrivate: { map: string; bots: boolean } | undefined;
 // Opened by a friend's Join button (?room=…&with=…&join=1): join as soon as the game has
 // loaded; the first click then captures the mouse (browsers need a click for that).
 if (new URLSearchParams(location.search).get('join') === '1') {
@@ -67,6 +69,17 @@ const rerender = () =>
         void game.requestPlay();
       },
       onLeave: () => game?.leave(),
+      onCreatePrivate: (p: { map: string; bots: boolean }) => {
+        if (!game) {
+          pendingPrivate = p;
+          wantToJoin = true;
+          setStatus({ net: { state: 'connecting', text: 'loading…' } });
+          return;
+        }
+        void game.join({ private: p });
+        void game.requestPlay();
+      },
+      onSwitchTeam: () => game?.switchTeam(),
     }),
     ui,
   );
@@ -83,7 +96,8 @@ startGame(canvas, () => settings)
   .then((g) => {
     game = g;
     void probeRegions(regions()); // again, now that loading no longer blocks the page
-    if (wantToJoin) void g.join(); // the mouse is captured on the next click (RESUME)
+    // The mouse is captured on the next click (RESUME).
+    if (wantToJoin) void g.join(pendingPrivate ? { private: pendingPrivate } : undefined);
     setStatus({ backend: g.backend });
     platform().loadingDone();
   })

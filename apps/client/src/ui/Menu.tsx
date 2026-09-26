@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { lore, maps, modes, news } from '@sentinel/content';
+import { lore, MAP_ROTATION, maps, modes, news } from '@sentinel/content';
 import {
   accessOf,
   apiUrl,
@@ -35,6 +35,10 @@ interface Props {
   onPlay: () => void;
   /** LEAVE MATCH (pause menu). */
   onLeave: () => void;
+  /** Play screen: create a private match (friends join by invite link or Join button). */
+  onCreatePrivate: (p: { map: string; bots: boolean }) => void;
+  /** Private match, pause menu: move to the other team. */
+  onSwitchTeam: () => void;
 }
 
 /** Playlists offered on the Play screen (content mode ids). */
@@ -103,7 +107,13 @@ export function Menu(props: Props) {
 
       <main class="menu-screen" key={screen}>
         {screen === 'play' && (
-          <PlayScreen onGo={setScreen} settings={props.settings} onSettings={props.onSettings} />
+          <PlayScreen
+            onGo={setScreen}
+            settings={props.settings}
+            onSettings={props.onSettings}
+            onCreatePrivate={props.onCreatePrivate}
+            onSwitchTeam={props.onSwitchTeam}
+          />
         )}
         {screen === 'loadout' && (
           <Screen title="Loadout" kicker="Applies the next time you spawn">
@@ -186,10 +196,14 @@ function PlayScreen({
   onGo,
   settings,
   onSettings,
+  onCreatePrivate,
+  onSwitchTeam,
 }: {
   onGo: (s: Screen) => void;
   settings: Settings;
   onSettings: (next: Settings) => void;
+  onCreatePrivate: (p: { map: string; bots: boolean }) => void;
+  onSwitchTeam: () => void;
 }) {
   const status = useStatus();
   const map = maps[status.mapId] ?? maps['relay-yard']!;
@@ -240,6 +254,15 @@ function PlayScreen({
             You fight for the <b>{team.name}</b>. {team.motto}
           </div>
         )}
+        {status.inMatch && m?.private && (
+          <div class="notice private-notice">
+            <b>Private match.</b> Friends join with your invite link (Squad) or their Join button.
+            <button class="btn" data-testid="switch-team" onClick={onSwitchTeam}>
+              Switch team
+            </button>
+          </div>
+        )}
+        {!status.inMatch && !invited && <PrivateMatch onCreate={onCreatePrivate} />}
       </div>
 
       <div class="map-card">
@@ -275,6 +298,45 @@ function PlayScreen({
         Esc pause
       </p>
     </section>
+  );
+}
+
+/** Create a private match: pick the map and whether bots fill the empty slots. */
+function PrivateMatch({ onCreate }: { onCreate: (p: { map: string; bots: boolean }) => void }) {
+  const [map, setMap] = useState(MAP_ROTATION[0]!);
+  const [bots, setBots] = useState(true);
+  return (
+    <details class="private-match" data-testid="private-match">
+      <summary>Private match with friends</summary>
+      <div class="private-row">
+        <select
+          value={map}
+          data-testid="private-map"
+          onChange={(e) => setMap((e.target as HTMLSelectElement).value)}
+        >
+          {MAP_ROTATION.map((id) => (
+            <option key={id} value={id}>
+              {maps[id]?.name ?? id}
+            </option>
+          ))}
+        </select>
+        <label>
+          <input
+            type="checkbox"
+            checked={bots}
+            data-testid="private-bots"
+            onChange={(e) => setBots((e.target as HTMLInputElement).checked)}
+          />{' '}
+          Fill with bots
+        </label>
+        <button class="btn" data-testid="create-private" onClick={() => onCreate({ map, bots })}>
+          Create
+        </button>
+      </div>
+      <small class="muted">
+        Only people you invite can join. XP counts with 4 or more real players.
+      </small>
+    </details>
   );
 }
 

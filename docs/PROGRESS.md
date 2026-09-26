@@ -414,4 +414,19 @@ Measured with headless Chrome on the real GPU (Intel Arrow Lake iGPU, the budget
 
 Learned: never create materials during play with three's WebGPU renderer; pool and pre-warm.
 
+## Friends: Join button and private matches (owner request, 2026-09-26)
+
+- Live status: game servers report each room's players to the API (signed, every 20 s and
+  on changes); anyone with a player's code (owner's choice) sees "In a match · map · mode"
+  and a **Join** button, which reloads straight into that match on the friend's team.
+  "Let friends join my match" (Settings → Game) hides the Join details.
+- Private matches (protocol v13): Play screen → map, bots on/off → Create. Never in
+  matchmaking; after the creator, joining needs a valid invite token from someone inside
+  (a room id alone is refused). Creation is limited per IP (burst 3, then 1 per 30 s) and to
+  30 rooms per process, checked before a room exists. **Switch team** in the pause menu
+  (private only, ≥ 2 s apart, a bot makes way). XP only with ≥ 4 real players (owner's rule).
+
+Learned: Colyseus' static `onAuth` runs before room creation, but returning auth data from it
+skips the instance `onAuth` (bans, pools); it must return plain `true`.
+
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

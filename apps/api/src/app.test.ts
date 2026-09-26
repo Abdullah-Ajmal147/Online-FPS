@@ -735,3 +735,34 @@ describe('presence (friends: Join button)', () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe('private matches: XP only with at least 4 real players', () => {
+  const profileXp = async (a: ReturnType<typeof app>, guest: string) =>
+    ((await (await a.request(`/profiles/${guest}`)).json()) as { xp: number }).xp;
+  it('two friends against bots earn nothing; four real players do', async () => {
+    const a = app();
+    // result(): 2 humans + 1 bot.
+    const priv = { ...result('aaaaaaaa-0000-4000-8000-000000000001'), private: true };
+    expect((await post(a, priv)).status).toBe(200);
+    expect(await profileXp(a, GUEST)).toBe(0);
+    const four = {
+      ...result('aaaaaaaa-0000-4000-8000-000000000002'),
+      private: true,
+    } as ReturnType<typeof result> & { private: boolean };
+    const extra = (id: string, name: string) => ({
+      guestId: id,
+      name,
+      team: 1,
+      bot: false,
+      kills: 1,
+      deaths: 1,
+      secondsPlayed: 600,
+    });
+    four.players.push(
+      extra('1b1b1b1b-1b1b-4b1b-8b1b-1b1b1b1b1b1b', 'Sana') as never,
+      extra('2c2c2c2c-2c2c-4c2c-8c2c-2c2c2c2c2c2c', 'Bilal') as never,
+    );
+    expect((await post(a, four)).status).toBe(200);
+    expect(await profileXp(a, GUEST)).toBeGreaterThan(0);
+  });
+});

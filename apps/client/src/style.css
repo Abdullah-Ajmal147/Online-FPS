@@ -2148,3 +2148,46 @@ details.patch summary small {
 .friend-live {
   color: #5cc27d !important;
 }
+
+/* Private matches */
+.private-match {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.private-match summary {
+  cursor: pointer;
+  font: 600 12px var(--display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.private-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+
+.private-row select {
+  padding: 5px 8px;
+  border: 1px solid var(--line-strong);
+  background: #0b0f0e;
+  color: var(--text);
+}
+
+.private-notice .btn {
+  margin-left: 10px;
+}
+
+.scorebar .private-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  font: 600 10px var(--display);
+  letter-spacing: 0.16em;
+}

@@ -80,6 +80,8 @@ export interface CombatHud {
 
 export interface MatchHud {
   phase: 'warmup' | 'countdown' | 'live' | 'ended';
+  /** Private match: invite / Join only; team switching allowed. */
+  private: boolean;
   secondsLeft: number;
   scoreLimit: number;
   /** [my team, enemy team] */

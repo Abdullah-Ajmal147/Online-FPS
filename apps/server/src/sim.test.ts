@@ -894,3 +894,23 @@ describe('MatchSim: review fixes', () => {
     expect(b.alive).toBe(false);
   });
 });
+
+describe('switchTeam (private matches)', () => {
+  it('moves a player to the other side at a fresh spawn, without a death, kills kept', () => {
+    const sim = newSim(maps['relay-yard']!);
+    const p = sim.addPlayer({ name: 'Ayesha', team: 0 });
+    p.kills = 3;
+    const life = p.lifeId;
+    sim.switchTeam(p.id, 1);
+    expect(p.team).toBe(1);
+    expect(p.kills).toBe(3);
+    expect(p.deaths).toBe(0);
+    expect(p.alive).toBe(true);
+    expect(p.lifeId).not.toBe(life); // the client resets its prediction to the new spawn
+    const spawn = maps['relay-yard']!.spawns.filter((s) => s.team === 1);
+    const pos = p.sim.move.position;
+    expect(
+      spawn.some((s) => Math.hypot(s.position[0] - pos[0], s.position[2] - pos[2]) < 1.5),
+    ).toBe(true);
+  });
+});

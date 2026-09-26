@@ -36,6 +36,10 @@ export async function deploy(page: Page, url = '/'): Promise<void> {
       );
       throw e;
     });
+  // DEPLOY clicked while the engine was still loading joins once it's ready, but the mouse is
+  // only captured on the next click (browsers require a click): press RESUME like a player.
+  if (!(await status(page)).playing) await page.getByTestId('play').click();
+  await expect.poll(async () => (await status(page)).playing).toBe(true);
 }
 
 /** Release the mouse (what Esc does in a real browser): the pause menu opens. */

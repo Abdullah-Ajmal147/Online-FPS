@@ -27,6 +27,8 @@ export interface MatchSummary {
   /** Unique per match: the API counts each id once. */
   matchId: string;
   mode: string;
+  /** Private match: the API gives XP only with enough real players in it. */
+  private: boolean;
   map: string;
   winner: number;
   teamScores: [number, number];
@@ -64,6 +66,8 @@ export interface MatchSummary {
  *   - ended: frozen, results on screen, then a new match starts
  */
 export class Match {
+  /** Private match (set by the room): reported in match info and the result. */
+  isPrivate = false;
   phase: MatchPhaseId = MatchPhase.Warmup;
   winner = NO_WINNER;
   mvp = 0;
@@ -148,6 +152,7 @@ export class Match {
       winner: this.winner,
       mvp: this.mvp,
       mode: this.mode.def.id,
+      private: this.isPrivate,
       points: (this.mode.points?.() ?? []).map((p) => ({
         id: p.id,
         owner: p.owner,
@@ -280,6 +285,7 @@ export class Match {
     return {
       matchId: randomUUID(),
       mode: this.mode.def.id,
+      private: this.isPrivate,
       map: this.mapId,
       winner: this.winner,
       teamScores: this.mode.teamScores(),

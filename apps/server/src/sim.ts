@@ -357,6 +357,17 @@ export class MatchSim {
     return player;
   }
 
+  /**
+   * Private matches: move a player to the other side. They respawn there at once, with no
+   * death counted and their kills kept (their team's score is the team's, not theirs).
+   */
+  switchTeam(id: number, team: number): void {
+    const p = this.players.get(id);
+    if (!p || p.team === team) return;
+    p.team = team;
+    this.respawn(p);
+  }
+
   removePlayer(id: number): void {
     const p = this.players.get(id);
     if (!p) return;

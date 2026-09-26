@@ -6,6 +6,7 @@ import type { MatchSummary } from './match.ts';
 const summary: MatchSummary = {
   matchId: '11111111-1111-4111-8111-111111111111',
   mode: 'team-deathmatch',
+  private: false,
   map: 'relay-yard',
   winner: 0,
   teamScores: [75, 60],

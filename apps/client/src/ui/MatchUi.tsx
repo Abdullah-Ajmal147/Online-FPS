@@ -57,7 +57,14 @@ function ScoreBar({ m }: { m: MatchHud }) {
         {m.phase === 'live' ? clock(m.secondsLeft) : m.phase === 'warmup' ? 'WARM-UP' : '—'}
       </span>
       <span class={`sb-score ${TEAM_CLASS[enemy]}`}>{m.scores[1]}</span>
-      <div class="sb-limit">first to {m.scoreLimit}</div>
+      <div class="sb-limit">
+        first to {m.scoreLimit}
+        {m.private && (
+          <span class="private-tag" data-testid="private-tag">
+            PRIVATE
+          </span>
+        )}
+      </div>
       {m.points.length > 0 && <Points m={m} />}
     </div>
   );
@@ -155,7 +162,13 @@ function Results({ m }: { m: MatchHud }) {
         {m.scores[0]} – {m.scores[1]}
       </div>
       {m.mvp && <div class="results-mvp">MVP: {m.mvp}</div>}
-      <XpPanel />
+      {m.private && m.players.filter((p) => !p.bot).length < 4 ? (
+        <div class="xp-panel xp-pending" data-testid="private-no-xp">
+          Private match: XP counts with 4 or more real players.
+        </div>
+      ) : (
+        <XpPanel />
+      )}
       <Table m={m} />
       <div class="results-next">Next match in {Math.ceil(m.secondsLeft)} s</div>
     </div>

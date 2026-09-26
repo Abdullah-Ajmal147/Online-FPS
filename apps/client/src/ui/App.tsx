@@ -15,6 +15,8 @@ interface Props {
   onSettings: (next: Settings) => void;
   onPlay: () => void;
   onLeave: () => void;
+  onCreatePrivate: (p: { map: string; bots: boolean }) => void;
+  onSwitchTeam: () => void;
 }
 
 export function App(props: Props) {

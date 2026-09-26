@@ -18,6 +18,9 @@ import { levelFor, xpBreakdown } from './xp.ts';
 
 const GUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** Private matches give XP only with this many real players (the owner's rule). */
+export const PRIVATE_XP_MIN_HUMANS = 4;
+
 /** What the game server reports at the end of a match (never accepted from a browser). */
 /** Match log (review replay). Validated on its own: a bad log is dropped, the result kept. */
 const MatchLogSchema = z.object({
@@ -28,6 +31,8 @@ const MatchLogSchema = z.object({
 const MatchResultSchema = z.object({
   matchId: z.string().regex(GUEST_ID),
   mode: z.string(),
+  /** Private match: XP only with at least PRIVATE_XP_MIN_HUMANS real players (no bot farming). */
+  private: z.boolean().default(false),
   map: z.string(),
   winner: z.number().int().min(0).max(255),
   durationSeconds: z.number().nonnegative(),
@@ -166,12 +171,15 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     counters.matches.inc();
     const awarded: { guestId: string; xp: number }[] = [];
     const seen = new Set<string>();
+    const humans = parsed.players.filter((p) => !p.bot).length;
+    const noXp = parsed.private && humans < PRIVATE_XP_MIN_HUMANS;
     for (const p of parsed.players) {
       if (p.bot || !p.guestId || seen.has(p.guestId)) continue; // each guest once per match
       seen.add(p.guestId);
       // Flags count whatever the time played (a hacker who quits early is still flagged).
       if (p.flags.length > 0)
         store.addFlags(p.guestId, parsed.matchId, p.flags, p.aim ?? {}, now());
+      if (noXp) continue; // flags above still count
       // No XP for joining in the last seconds: at least 60 s, or a quarter of a short match.
       if (p.secondsPlayed < Math.min(60, parsed.durationSeconds / 4)) continue;
       const won = parsed.winner === p.team;
