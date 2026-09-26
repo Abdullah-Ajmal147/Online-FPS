@@ -16,6 +16,15 @@ export interface ProfileRow {
  * Local SQLite store (Phase 4 lite). The real schema moves to Supabase Postgres in Phase 4
  * (profiles, matches, match_players, loadouts, progression); this keeps the same shape small.
  */
+const DAY = 86_400_000;
+
+export interface RetentionRate {
+  /** Players whose first day is in the window. */
+  cohort: number;
+  /** Share who came back that many days later (null: no cohort yet). */
+  pct: number | null;
+}
+
 export class Store {
   private readonly db: DatabaseSync;
 
@@ -80,6 +89,20 @@ export class Store {
         status TEXT NOT NULL,
         at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS activity (
+        guest_id TEXT NOT NULL,
+        day INTEGER NOT NULL,
+        PRIMARY KEY (guest_id, day)
+      );
+      CREATE INDEX IF NOT EXISTS activity_day ON activity (day);
+      CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day INTEGER NOT NULL,
+        crashed INTEGER NOT NULL,
+        ping_ms INTEGER,
+        region TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS sessions_day ON sessions (day);
       CREATE TABLE IF NOT EXISTS feedback (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         code TEXT NOT NULL,
@@ -123,11 +146,11 @@ export class Store {
   }
 
   /** Records a match once. Returns false if this match id was already recorded (replay). */
-  recordMatch(matchId: string, summary: unknown): boolean {
+  recordMatch(matchId: string, summary: unknown, at = Date.now()): boolean {
     try {
       this.db
         .prepare('INSERT INTO matches (match_id, received_at, summary) VALUES (?, ?, ?)')
-        .run(matchId, Date.now(), JSON.stringify(summary));
+        .run(matchId, at, JSON.stringify(summary));
       return true;
     } catch {
       return false;
@@ -218,6 +241,8 @@ export class Store {
 
   /** Match logs are kept for review for LOG_DAYS, then deleted. */
   static readonly LOG_DAYS = 14;
+  /** How long anonymous session reports are kept. */
+  static readonly SESSION_DAYS = 30;
   /** How long player feedback is kept. */
   static readonly FEEDBACK_DAYS = 180;
 
@@ -458,6 +483,94 @@ export class Store {
          ON CONFLICT(guest_id) DO UPDATE SET last_ip = excluded.last_ip`,
       )
       .run(guestId, at, code, ipHash);
+    this.db
+      .prepare('INSERT OR IGNORE INTO activity (guest_id, day) VALUES (?, ?)')
+      .run(guestId, Math.floor(at / DAY));
+  }
+
+  /** One anonymous session report (crash-free rate, ping); kept SESSION_DAYS. */
+  addSession(s: { crashed: boolean; pingMs: number | null; region: string; at: number }): void {
+    const day = Math.floor(s.at / DAY);
+    this.db
+      .prepare('INSERT INTO sessions (day, crashed, ping_ms, region) VALUES (?, ?, ?, ?)')
+      .run(day, s.crashed ? 1 : 0, s.pingMs, s.region);
+    this.db.prepare('DELETE FROM sessions WHERE day < ?').run(day - Store.SESSION_DAYS);
+  }
+
+  /**
+   * Dashboard numbers (Phase 8): players per day, D1/D7 retention, matches per hour, session
+   * health. Days are UTC. Retention: of the players whose first day was D, the share who played
+   * again on D+1 (D+7), over first days in the last 30 days that are old enough to know.
+   */
+  stats(now: number): {
+    days: {
+      day: string;
+      players: number;
+      newPlayers: number;
+      sessions: number;
+      crashFreePct: number | null;
+    }[];
+    retention: { d1: RetentionRate; d7: RetentionRate };
+    matchesPerHour: number[];
+    ping: { region: string; medianMs: number; sessions: number }[];
+  } {
+    const today = Math.floor(now / DAY);
+    const iso = (d: number) => new Date(d * DAY).toISOString().slice(0, 10);
+    const firsts = `SELECT guest_id, MIN(day) AS first FROM activity GROUP BY guest_id`;
+    const days = [];
+    for (let d = today - 6; d <= today; d++) {
+      const players = this.db
+        .prepare('SELECT COUNT(*) AS n FROM activity WHERE day = ?')
+        .get(d) as { n: number };
+      const fresh = this.db
+        .prepare(`SELECT COUNT(*) AS n FROM (${firsts}) WHERE first = ?`)
+        .get(d) as { n: number };
+      const ses = this.db
+        .prepare('SELECT COUNT(*) AS n, SUM(crashed) AS c FROM sessions WHERE day = ?')
+        .get(d) as { n: number; c: number | null };
+      days.push({
+        day: iso(d),
+        players: players.n,
+        newPlayers: fresh.n,
+        sessions: ses.n,
+        crashFreePct: ses.n > 0 ? Math.round((1000 * (ses.n - (ses.c ?? 0))) / ses.n) / 10 : null,
+      });
+    }
+    const retention = (after: number): RetentionRate => {
+      const row = this.db
+        .prepare(
+          `SELECT COUNT(*) AS cohort,
+                  SUM(EXISTS (SELECT 1 FROM activity a WHERE a.guest_id = f.guest_id AND a.day = f.first + ?)) AS back
+             FROM (${firsts}) f WHERE f.first >= ? AND f.first <= ?`,
+        )
+        .get(after, today - 30, today - after - 1) as { cohort: number; back: number | null };
+      return {
+        cohort: row.cohort,
+        pct: row.cohort > 0 ? Math.round((1000 * (row.back ?? 0)) / row.cohort) / 10 : null,
+      };
+    };
+    const hour = 3_600_000;
+    const matchesPerHour = new Array<number>(24).fill(0);
+    const rows = this.db
+      .prepare('SELECT received_at AS at FROM matches WHERE received_at > ?')
+      .all(now - 24 * hour) as { at: number }[];
+    for (const r of rows) {
+      const i = 23 - Math.floor((now - r.at) / hour);
+      if (i >= 0 && i < 24) matchesPerHour[i]!++;
+    }
+    const pings = this.db
+      .prepare(
+        'SELECT region, ping_ms AS ms FROM sessions WHERE day > ? AND ping_ms IS NOT NULL ORDER BY region, ping_ms',
+      )
+      .all(today - 7) as { region: string; ms: number }[];
+    const byRegion = new Map<string, number[]>();
+    for (const p of pings) byRegion.set(p.region, [...(byRegion.get(p.region) ?? []), p.ms]);
+    const ping = [...byRegion].map(([region, ms]) => ({
+      region,
+      medianMs: ms[Math.floor(ms.length / 2)]!,
+      sessions: ms.length,
+    }));
+    return { days, retention: { d1: retention(1), d7: retention(7) }, matchesPerHour, ping };
   }
 
   /** The stricter of the profile's and the IP's moderation status. */

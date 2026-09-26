@@ -157,7 +157,7 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       counters.rejected.inc();
       return c.json({ error: 'bad match result' }, 400);
     }
-    if (!store.recordMatch(parsed.matchId, parsed)) {
+    if (!store.recordMatch(parsed.matchId, parsed, now())) {
       counters.rejected.inc();
       return c.json({ error: 'match already recorded' }, 409);
     }
@@ -282,6 +282,29 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     });
     counters.reports.inc();
     return c.json({ ok: true }, 202);
+  });
+
+  /**
+   * Anonymous session report, sent by the browser when the page closes (sendBeacon, so the
+   * body arrives as text/plain): did the session hit an uncaught error, median ping, region.
+   * No ids of any kind: only counts for the dashboard.
+   */
+  const sessionLimit = new RateLimiter(20, 1 / 60);
+  const SessionSchema = z.object({
+    crashed: z.boolean(),
+    pingMs: z.number().int().min(0).max(5000).nullable(),
+    region: z.string().regex(/^[a-z0-9-]{1,24}$/),
+  });
+  app.post('/telemetry/session', bodyLimit({ maxSize: 1024 }), async (c) => {
+    if (!sessionLimit.take(ipOf(c))) return c.body(null, 429);
+    let parsed;
+    try {
+      parsed = SessionSchema.parse(JSON.parse(await c.req.text()));
+    } catch {
+      return c.body(null, 400);
+    }
+    store.addSession({ ...parsed, at: now() });
+    return c.body(null, 204);
   });
 
   const feedbackLimit = new RateLimiter(3, 1 / 300);

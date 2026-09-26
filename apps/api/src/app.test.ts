@@ -443,6 +443,51 @@ describe('moderation (Phase 7)', () => {
     expect(JSON.stringify(rows)).not.toContain('forged');
   });
 
+  it('dashboard: players per day, D1/D7 retention, matches per hour, crash-free, ping', async () => {
+    const DAY = 86_400_000;
+    const t0 = Date.UTC(2026, 8, 1, 12);
+    let clock = t0;
+    const store = new Store(':memory:');
+    const a = createApp(store, SECRET, { adminPassword: ADMIN, now: () => clock });
+    const guests = ['a', 'b', 'c', 'd'].map((x) => `${x.repeat(8)}-0000-4000-8000-000000000000`);
+    // Day 0: four new players. Day 1: two come back. Day 7: one comes back.
+    for (const g of guests) store.touchProfile(g, g.slice(0, 16), IP_HASH, t0);
+    for (const g of guests.slice(0, 2)) store.touchProfile(g, g.slice(0, 16), IP_HASH, t0 + DAY);
+    store.touchProfile(guests[0]!, 'x', IP_HASH, t0 + 7 * DAY);
+    clock = t0 + 9 * DAY;
+    await post(a, result('ffffffff-0000-4000-8000-0000000000aa'), SECRET, clock);
+    const beacon = (body: unknown) =>
+      a.request('/telemetry/session', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' }, // what sendBeacon sends
+        body: JSON.stringify(body),
+      });
+    expect((await beacon({ crashed: false, pingMs: 40, region: 'eu-west' })).status).toBe(204);
+    expect((await beacon({ crashed: false, pingMs: 60, region: 'eu-west' })).status).toBe(204);
+    expect((await beacon({ crashed: true, pingMs: 90, region: 'eu-west' })).status).toBe(204);
+    expect((await beacon({ crashed: false, pingMs: 70, region: 'EU west!' })).status).toBe(400);
+    expect((await beacon({ crashed: false, pingMs: 70, region: 'x', guest: 'id' })).status).toBe(
+      204, // unknown keys are dropped, never stored
+    );
+    expect((await a.request('/admin/api/stats')).status).toBe(401);
+    const stats = (await (await a.request('/admin/api/stats', { headers: auth })).json()) as {
+      days: { players: number; sessions: number; crashFreePct: number | null }[];
+      retention: { d1: { cohort: number; pct: number }; d7: { cohort: number; pct: number } };
+      matchesPerHour: number[];
+      ping: { region: string; medianMs: number; sessions: number }[];
+    };
+    expect(stats.retention.d1).toEqual({ cohort: 4, pct: 50 });
+    expect(stats.retention.d7).toEqual({ cohort: 4, pct: 25 });
+    expect(stats.matchesPerHour.at(-1)).toBe(1);
+    expect(stats.days.at(-1)).toMatchObject({ sessions: 4, crashFreePct: 75 });
+    expect(stats.days.at(-3)).toMatchObject({ players: 1 }); // day 7
+    expect(stats.ping.find((p) => p.region === 'eu-west')).toEqual({
+      region: 'eu-west',
+      medianMs: 60,
+      sessions: 3,
+    });
+  });
+
   it('players report by code with their signed token; no self-reports; rate-limited', async () => {
     const a = modApp();
     await post(a, result('ffffffff-0000-4000-8000-000000000002'));

@@ -73,6 +73,7 @@ export function mountAdmin(
 
   app.get('/admin', (c) => c.html(ADMIN_PAGE));
   app.get('/admin/api/queue', (c) => c.json(store.moderationQueue()));
+  app.get('/admin/api/stats', (c) => c.json(store.stats(now())));
   app.get('/admin/api/feedback', (c) => c.json(store.recentFeedback()));
   app.get('/admin/api/players/:code', (c) => {
     const file = store.playerFile(c.req.param('code'));
@@ -124,10 +125,18 @@ const ADMIN_PAGE = /* html */ `<!doctype html>
   h2{font:600 14px 'Bahnschrift','Arial Narrow',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#f0b429;margin:18px 0 6px}
   canvas{background:#111614;border:1px solid #28312d;max-width:100%}
   .muted{color:#86938d}
-  .wide{grid-column:1/-1} #feedback td{vertical-align:top} #feedback td:nth-child(4){white-space:pre-wrap;max-width:600px}
+  .wide{grid-column:1/-1}
+  .cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+  .card{min-width:150px;padding:10px 14px;border:1px solid #28312d;background:#111614}
+  .card b{display:block;font:600 26px 'Bahnschrift','Arial Narrow',sans-serif;color:#dfe6e1}
+  .card small{color:#86938d;text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:60px;padding:4px 0;border-bottom:1px solid #28312d}
+  .bars i{flex:1;background:#f0b429;min-height:1px}
+  .health-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px} #feedback td{vertical-align:top} #feedback td:nth-child(4){white-space:pre-wrap;max-width:600px}
 </style></head><body>
 <header>Sentinel <b>Strike</b> · moderation</header>
 <main>
+  <section class="wide" id="health"><h2>Health</h2><p class="muted">Loading…</p></section>
   <section><h2>Queue: reported or flagged</h2><table id="queue"><thead><tr><th>Player</th><th>Status</th><th>Reports</th><th>Flagged</th></tr></thead><tbody></tbody></table></section>
   <section id="file"><p class="muted">Pick a player on the left.</p></section>
   <section class="wide"><h2>Player feedback (newest first)</h2><table id="feedback"><thead><tr><th>When</th><th>Kind</th><th>Player</th><th>Text</th><th>Context</th></tr></thead><tbody></tbody></table></section>
@@ -142,6 +151,25 @@ async function loadQueue() {
   document.querySelectorAll('tr.pick').forEach((tr) => tr.onclick = () => openPlayer(tr.dataset.code));
 }
 const base = location.pathname.replace(/\\/admin\\/?$/, '') + '/admin/api';
+async function loadHealth() {
+  const s = await j(base + '/stats');
+  const pct = (v) => (v === null ? '—' : v + '%');
+  const today = s.days[s.days.length - 1];
+  const max = Math.max(1, ...s.matchesPerHour);
+  $('#health').innerHTML = '<h2>Health</h2><div class="cards">' +
+    '<div class="card"><small>Players today</small><b>' + today.players + '</b><small>' + today.newPlayers + ' new</small></div>' +
+    '<div class="card"><small>D1 retention</small><b>' + pct(s.retention.d1.pct) + '</b><small>of ' + s.retention.d1.cohort + ' new players</small></div>' +
+    '<div class="card"><small>D7 retention</small><b>' + pct(s.retention.d7.pct) + '</b><small>of ' + s.retention.d7.cohort + ' new players</small></div>' +
+    '<div class="card"><small>Crash-free today</small><b>' + pct(today.crashFreePct) + '</b><small>' + today.sessions + ' sessions</small></div>' +
+    '<div class="card"><small>Matches, 24 h</small><b>' + s.matchesPerHour.reduce((a, b) => a + b, 0) + '</b><small>live players: sentinel_players_human on game servers</small></div>' +
+    '</div><div class="health-cols"><div><h2>Matches per hour (last 24 h)</h2><div class="bars">' +
+    s.matchesPerHour.map((n) => '<i title="' + n + '" style="height:' + (100 * n / max) + '%"></i>').join('') +
+    '</div><h2>Median ping, 7 days</h2><table><tr><th>Region</th><th>Median</th><th>Sessions</th></tr>' +
+    (s.ping.map((p) => '<tr><td>' + esc(p.region) + '</td><td>' + p.medianMs + ' ms</td><td>' + p.sessions + '</td></tr>').join('') || '<tr><td colspan="3" class="muted">No sessions yet.</td></tr>') +
+    '</table></div><div><h2>Last 7 days</h2><table><tr><th>Day</th><th>Players</th><th>New</th><th>Sessions</th><th>Crash-free</th></tr>' +
+    s.days.slice().reverse().map((d) => '<tr><td>' + d.day + '</td><td>' + d.players + '</td><td>' + d.newPlayers + '</td><td>' + d.sessions + '</td><td>' + pct(d.crashFreePct) + '</td></tr>').join('') +
+    '</table></div></div>';
+}
 async function loadFeedback() {
   const rows = await j(base + '/feedback');
   $('#feedback tbody').innerHTML = rows.map((f) => '<tr><td>' + new Date(f.at).toLocaleString() + '</td><td><span class="tag">' + esc(f.kind) + '</span></td><td class="pick" data-code="' + esc(f.code) + '">' + esc(f.name ?? f.code) + '</td><td>' + esc(f.text) + '</td><td><small class="muted">' + esc(Object.entries(f.context ?? {}).map(([k, v]) => k + ': ' + v).join(' · ')) + '</small></td></tr>').join('') || '<tr><td colspan="5" class="muted">No feedback yet.</td></tr>';
@@ -197,4 +225,5 @@ async function replay(matchId, code) {
 }
 loadQueue();
 loadFeedback();
+loadHealth();
 </script></body></html>`;

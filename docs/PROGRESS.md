@@ -351,6 +351,11 @@ Done:
      other, 1000 chars, sends build + renderer + mode, rate-limited per guest and IP, kept 180
      days, listed on the admin page), community link slot (hidden until the owner has a
      Discord). Deploy screen shows a gameplay tip.
+- 8. Dashboard on the admin page: players per day (new / returning), D1 and D7 retention,
+     matches per hour (24 h), crash-free sessions and median ping by region. Sessions come
+     from an anonymous beacon when the page closes (uncaught error yes/no, median ping,
+     region; no ids, kept 30 days). Live player count stays on the game servers' `/metrics`
+     (`sentinel_players_human`).
 
 Open issues: name tags of players standing together overlap (seen in a primer screenshot).
 

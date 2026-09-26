@@ -3,9 +3,12 @@ import { startGame, type Game } from './game/game.ts';
 import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { getStatus, setStatus } from './store.ts';
+import { startSessionTelemetry } from './telemetry.ts';
 import { App } from './ui/App.tsx';
 
 let settings: Settings = loadSettings();
+// Region names come with the multi-region servers (Phase 8 task 4); one region until then.
+startSessionTelemetry(() => 'default');
 let game: Game | undefined;
 /** DEPLOY pressed before the game finished loading. */
 let wantToJoin = false;
