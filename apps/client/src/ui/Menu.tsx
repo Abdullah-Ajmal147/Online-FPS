@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { lore, maps, modes } from '@sentinel/content';
-import { accessOf, apiUrl, reportPlayer } from '../profile.ts';
+import { lore, maps, modes, news } from '@sentinel/content';
+import { accessOf, apiUrl, reportPlayer, sendFeedback } from '../profile.ts';
 import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
 import {
   ACTIONS,
@@ -29,7 +29,7 @@ interface Props {
 /** Playlists offered on the Play screen (content mode ids). */
 const PLAYLISTS = ['team-deathmatch', 'domination'] as const;
 
-type Screen = 'play' | 'loadout' | 'career' | 'squad' | 'intel' | 'settings';
+type Screen = 'play' | 'loadout' | 'career' | 'squad' | 'intel' | 'comms' | 'settings';
 
 const SCREENS: { id: Screen; label: string }[] = [
   { id: 'play', label: 'Play' },
@@ -37,6 +37,7 @@ const SCREENS: { id: Screen; label: string }[] = [
   { id: 'career', label: 'Career' },
   { id: 'squad', label: 'Squad' },
   { id: 'intel', label: 'Intel' },
+  { id: 'comms', label: 'Comms' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -105,6 +106,7 @@ export function Menu(props: Props) {
         {screen === 'career' && <CareerScreen />}
         {screen === 'squad' && <SquadScreen />}
         {screen === 'intel' && <IntelScreen />}
+        {screen === 'comms' && <CommsScreen mode={props.settings.mode} />}
         {screen === 'settings' && (
           <SettingsScreen settings={props.settings} onSettings={props.onSettings} />
         )}
@@ -516,6 +518,134 @@ function IntelScreen() {
             <p>{m.description}</p>
           </div>
         ))}
+      </div>
+    </Screen>
+  );
+}
+
+// --- Comms: patch notes, feedback, community ----------------------------------------------
+
+type FeedbackKind = 'bug' | 'idea' | 'other';
+
+function CommsScreen({ mode }: { mode: string }) {
+  const status = useStatus();
+  const [kind, setKind] = useState<FeedbackKind>('bug');
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [latest, ...older] = news.patches;
+
+  const submit = async (e: Event) => {
+    e.preventDefault();
+    if (sending || text.trim().length < 3) return;
+    setSending(true);
+    const r = await sendFeedback(kind, text.trim(), {
+      build: news.patches[0]!.version,
+      renderer: status.backend,
+      mode,
+      userAgent: navigator.userAgent.slice(0, 300),
+    });
+    setSending(false);
+    setResult(r);
+    if (r.ok) setText('');
+  };
+
+  return (
+    <Screen title="Comms" kicker={`Build ${latest!.version} · ${latest!.date}`}>
+      <div class="play-cols">
+        <div>
+          <div class="panel patch" data-testid="patch-notes">
+            <div class="panel-h">
+              {latest!.version} — {latest!.title}
+            </div>
+            <ul>
+              {latest!.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </div>
+          {older.map((p) => (
+            <details class="panel patch" key={p.version}>
+              <summary class="panel-h">
+                {p.version} — {p.title} <small class="muted">{p.date}</small>
+              </summary>
+              <ul>
+                {p.notes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </div>
+        <div>
+          <form class="panel feedback" onSubmit={submit} data-testid="feedback">
+            <div class="panel-h">Send feedback</div>
+            <p>{news.community.feedbackNote}</p>
+            <div class="tabs" role="radiogroup" aria-label="Kind">
+              {(['bug', 'idea', 'other'] as const).map((k) => (
+                <button
+                  type="button"
+                  key={k}
+                  role="radio"
+                  aria-checked={kind === k}
+                  class={`tab${kind === k ? ' active' : ''}`}
+                  data-testid={`feedback-${k}`}
+                  onClick={() => setKind(k)}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+            <textarea
+              data-testid="feedback-text"
+              maxLength={1000}
+              rows={5}
+              placeholder={
+                kind === 'bug'
+                  ? 'What happened, and what were you doing? (map, mode, weapon)'
+                  : 'Tell us…'
+              }
+              value={text}
+              onInput={(e) => {
+                setText((e.target as HTMLTextAreaElement).value);
+                setResult(null);
+              }}
+            />
+            <div class="field-row">
+              <small class="muted">
+                {text.length}/1000 · sends your build and renderer, nothing personal
+              </small>
+              <button
+                class="btn"
+                type="submit"
+                disabled={sending || text.trim().length < 3}
+                data-testid="feedback-send"
+              >
+                {sending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+            {result && (
+              <p class={result.ok ? 'ok' : 'warn'} data-testid="feedback-result" role="status">
+                {result.message}
+              </p>
+            )}
+          </form>
+          <div class="panel">
+            <div class="panel-h">Community</div>
+            {news.community.discord ? (
+              <a
+                class="btn"
+                href={news.community.discord}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Join the Discord
+              </a>
+            ) : (
+              <p class="muted">The community server opens with the public beta.</p>
+            )}
+          </div>
+        </div>
       </div>
     </Screen>
   );

@@ -404,6 +404,45 @@ describe('moderation (Phase 7)', () => {
     expect(log.players.find((p) => p.focus)?.name).toBe('Ayesha');
   });
 
+  it('player feedback: signed token, validated, rate-limited, listed for the admin', async () => {
+    const a = modApp();
+    const token = await guestToken(a);
+    const send = (body: object) =>
+      a.request('/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const good = {
+      token,
+      kind: 'bug',
+      text: 'Fell through the floor on B',
+      context: { mode: 'domination' },
+    };
+    expect((await send({ ...good, token: 'forged' })).status).toBe(401);
+    expect((await send({ ...good, kind: 'rant' })).status).toBe(400);
+    expect((await send({ ...good, text: 'x'.repeat(1001) })).status).toBe(400);
+    expect((await send({ ...good, context: { email: 'a@b.c' } })).status).toBe(400); // no extras
+    expect((await send(good)).status).toBe(202);
+    let limited = false;
+    for (let i = 0; i < 6; i++) limited ||= (await send(good)).status === 429;
+    expect(limited).toBe(true);
+    expect((await a.request('/admin/api/feedback')).status).toBe(401);
+    const rows = (await (await a.request('/admin/api/feedback', { headers: auth })).json()) as {
+      code: string;
+      kind: string;
+      text: string;
+      context: { mode: string };
+    }[];
+    expect(rows[0]).toMatchObject({
+      kind: 'bug',
+      text: good.text,
+      context: { mode: 'domination' },
+    });
+    expect(rows[0]!.code).toMatch(/^[0-9a-f]{16}$/);
+    expect(JSON.stringify(rows)).not.toContain('forged');
+  });
+
   it('players report by code with their signed token; no self-reports; rate-limited', async () => {
     const a = modApp();
     await post(a, result('ffffffff-0000-4000-8000-000000000002'));

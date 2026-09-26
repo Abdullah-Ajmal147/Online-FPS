@@ -1,4 +1,5 @@
-import { lore, maps } from '@sentinel/content';
+import { lore, maps, news } from '@sentinel/content';
+import { useState } from 'preact/hooks';
 import type { Settings } from '../settings.ts';
 import { Chat } from './Chat.tsx';
 import { CombatHud } from './CombatHud.tsx';
@@ -39,6 +40,8 @@ function DeployScreen() {
   const status = useStatus();
   const map = maps[status.mapId] ?? maps['relay-yard']!;
   const team = status.match ? lore.factions[status.match.myTeam] : undefined;
+  // A different tip each deploy (UI only; nothing simulated depends on it).
+  const [tip] = useState(() => news.tips[Math.floor(Math.random() * news.tips.length)]!);
   return (
     <div class="deploy-screen" data-testid="deploying">
       <div class="map-kicker">Deploying</div>
@@ -50,6 +53,9 @@ function DeployScreen() {
           {team.name} · {team.motto}
         </div>
       )}
+      <div class="tip" data-testid="deploy-tip">
+        <b>Tip</b> {tip}
+      </div>
       <div class="net-line">
         <span class="status-dot" data-state={status.net.state} /> {status.net.text}
       </div>

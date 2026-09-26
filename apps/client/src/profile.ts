@@ -149,3 +149,25 @@ export async function reportPlayer(
     return 'Could not send the report.';
   }
 }
+
+/** Feedback from the Comms screen (bug / idea / other) with a little context for bug reports. */
+export async function sendFeedback(
+  kind: 'bug' | 'idea' | 'other',
+  text: string,
+  context: Record<string, string>,
+): Promise<{ ok: boolean; message: string }> {
+  const guest = await ensureGuest();
+  if (!guest) return { ok: false, message: 'Feedback needs the progression service (offline).' };
+  try {
+    const res = await fetch(`${apiUrl()}/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: guest.token, kind, text, context }),
+    });
+    if (res.status === 202) return { ok: true, message: 'Sent. Thank you, it will be read.' };
+    if (res.status === 429) return { ok: false, message: 'Sent plenty already; try again later.' };
+    return { ok: false, message: 'Could not send it. Check the text and try again.' };
+  } catch {
+    return { ok: false, message: 'Could not send it (offline?).' };
+  }
+}

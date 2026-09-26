@@ -73,6 +73,7 @@ export function mountAdmin(
 
   app.get('/admin', (c) => c.html(ADMIN_PAGE));
   app.get('/admin/api/queue', (c) => c.json(store.moderationQueue()));
+  app.get('/admin/api/feedback', (c) => c.json(store.recentFeedback()));
   app.get('/admin/api/players/:code', (c) => {
     const file = store.playerFile(c.req.param('code'));
     return file ? c.json(file) : c.json({ error: 'not found' }, 404);
@@ -123,11 +124,13 @@ const ADMIN_PAGE = /* html */ `<!doctype html>
   h2{font:600 14px 'Bahnschrift','Arial Narrow',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#f0b429;margin:18px 0 6px}
   canvas{background:#111614;border:1px solid #28312d;max-width:100%}
   .muted{color:#86938d}
+  .wide{grid-column:1/-1} #feedback td{vertical-align:top} #feedback td:nth-child(4){white-space:pre-wrap;max-width:600px}
 </style></head><body>
 <header>Sentinel <b>Strike</b> · moderation</header>
 <main>
   <section><h2>Queue: reported or flagged</h2><table id="queue"><thead><tr><th>Player</th><th>Status</th><th>Reports</th><th>Flagged</th></tr></thead><tbody></tbody></table></section>
   <section id="file"><p class="muted">Pick a player on the left.</p></section>
+  <section class="wide"><h2>Player feedback (newest first)</h2><table id="feedback"><thead><tr><th>When</th><th>Kind</th><th>Player</th><th>Text</th><th>Context</th></tr></thead><tbody></tbody></table></section>
 </main>
 <script>
 const $ = (s) => document.querySelector(s);
@@ -139,6 +142,11 @@ async function loadQueue() {
   document.querySelectorAll('tr.pick').forEach((tr) => tr.onclick = () => openPlayer(tr.dataset.code));
 }
 const base = location.pathname.replace(/\\/admin\\/?$/, '') + '/admin/api';
+async function loadFeedback() {
+  const rows = await j(base + '/feedback');
+  $('#feedback tbody').innerHTML = rows.map((f) => '<tr><td>' + new Date(f.at).toLocaleString() + '</td><td><span class="tag">' + esc(f.kind) + '</span></td><td class="pick" data-code="' + esc(f.code) + '">' + esc(f.name ?? f.code) + '</td><td>' + esc(f.text) + '</td><td><small class="muted">' + esc(Object.entries(f.context ?? {}).map(([k, v]) => k + ': ' + v).join(' · ')) + '</small></td></tr>').join('') || '<tr><td colspan="5" class="muted">No feedback yet.</td></tr>';
+  document.querySelectorAll('#feedback td.pick').forEach((td) => td.onclick = () => openPlayer(td.dataset.code));
+}
 async function openPlayer(code) {
   const f = await j(base + '/players/' + code);
   const p = f.profile;
@@ -188,4 +196,5 @@ async function replay(matchId, code) {
   draw(log.samples.length - 1);
 }
 loadQueue();
+loadFeedback();
 </script></body></html>`;

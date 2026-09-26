@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  news,
+  NewsSchema,
   MapSchema,
   ModeSchema,
   MovementSchema,
@@ -587,5 +589,18 @@ describe('chat filter: review bypasses', () => {
     expect(cleanChat('ㅤ')).toBe('');
     expect(cleanChat('⠀⠀')).toBe('');
     expect(cleanChat('hi\u{E0041}')).toBe('hi');
+  });
+});
+
+describe('news (patch notes, tips)', () => {
+  it('patch notes are newest first with unique versions', () => {
+    const dates = news.patches.map((p) => p.date);
+    expect([...dates].sort().reverse()).toEqual(dates);
+    expect(new Set(news.patches.map((p) => p.version)).size).toBe(news.patches.length);
+  });
+
+  it('rejects non-https community links', () => {
+    const bad = { ...news, community: { ...news.community, discord: 'http://example.com' } };
+    expect(() => NewsSchema.parse(bad)).toThrow();
   });
 });

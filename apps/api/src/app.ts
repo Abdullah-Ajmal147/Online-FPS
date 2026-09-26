@@ -284,6 +284,41 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     return c.json({ ok: true }, 202);
   });
 
+  const feedbackLimit = new RateLimiter(3, 1 / 300);
+  const feedbackIpLimit = new RateLimiter(10, 1 / 360);
+  const FeedbackSchema = z.object({
+    token: z.string().max(200),
+    kind: z.enum(['bug', 'idea', 'other']),
+    text: z.string().trim().min(3).max(1000),
+    // What the game was doing (helps with bug reports); nothing personal.
+    context: z
+      .object({
+        build: z.string().max(40).optional(),
+        renderer: z.string().max(20).optional(),
+        screen: z.string().max(20).optional(),
+        mode: z.string().max(40).optional(),
+        userAgent: z.string().max(300).optional(),
+      })
+      .strict()
+      .default({}),
+  });
+  app.post('/feedback', bodyLimit({ maxSize: 8 * 1024 }), async (c) => {
+    const parsed = FeedbackSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'bad feedback' }, 400);
+    const guest = verifyGuestToken(parsed.data.token, secret);
+    if (!guest) return c.json({ error: 'bad token' }, 401);
+    if (!feedbackLimit.take(guest) || !feedbackIpLimit.take(ipOf(c)))
+      return c.json({ error: 'too much feedback' }, 429);
+    store.addFeedback({
+      code: publicCode(secret, guest),
+      kind: parsed.data.kind,
+      text: parsed.data.text,
+      context: parsed.data.context,
+      at: now(),
+    });
+    return c.json({ ok: true }, 202);
+  });
+
   mountAdmin(app, store, opts.adminPassword, (guestId) => publicCode(secret, guestId), ipOf, now);
 
   /** Friends: a player's public card by code (name, level, last played). */

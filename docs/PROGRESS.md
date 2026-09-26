@@ -341,6 +341,10 @@ Done:
      held node per second + 1 per kill, 200 to win). Picked on the Play screen; the server
      filters rooms by mode. Nodes shown as coloured rings/beams and A/B/C badges in the score
      bar. Bots go for nodes they don't hold.
+- 7. Comms screen: patch notes (`news.json`, newest first), a feedback form (bug / idea /
+     other, 1000 chars, sends build + renderer + mode, rate-limited per guest and IP, kept 180
+     days, listed on the admin page), community link slot (hidden until the owner has a
+     Discord). Deploy screen shows a gameplay tip.
 
 Learned: points must be built during warm-up too (`GameMode.sync`), not only in the live
 tick — otherwise the first MatchInfo has no nodes and the HUD stays empty.

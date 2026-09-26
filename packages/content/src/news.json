@@ -1,0 +1,62 @@
+{
+  "community": {
+    "discord": null,
+    "feedbackNote": "Bug, idea, complaint? It goes straight to the developer. Include what you were doing."
+  },
+  "tips": [
+    "Aim down sights (right mouse) for tighter spread. Hip-fire is for close range.",
+    "Headshots deal extra damage on every weapon. Aim for the upper body and let recoil climb.",
+    "Throw a smoke (Q) to cross an open lane. Enemies can't see through it, and neither can you.",
+    "Frags (G) bounce. Cook one off a wall to clear a corner without stepping out.",
+    "In Domination, capturing is faster with teammates on the node. A contested node doesn't move.",
+    "You heal after a few seconds out of fire. Break line of sight instead of trading at low health.",
+    "Reload behind cover. An empty magazine in the open is the most common way to lose a duel.",
+    "Crouching (C) steadies your aim, but a crouched player is easy to flank."
+  ],
+  "patches": [
+    {
+      "version": "0.8",
+      "date": "2026-09-26",
+      "title": "Domination",
+      "notes": [
+        "New playlist: Domination. Hold relay nodes A, B and C on Relay Yard and Saltline Depot.",
+        "Nodes show as rings and light beams on the map and as badges in the score bar.",
+        "Bots now go for nodes their team doesn't hold.",
+        "Comms screen: patch notes and a feedback form."
+      ]
+    },
+    {
+      "version": "0.7",
+      "date": "2026-09-26",
+      "title": "Static on the line",
+      "notes": [
+        "New front end: separate Play, Loadout, Career, Squad, Intel and Settings screens.",
+        "The story so far: the Relay, the Blackout Winter, Aegis Directive vs Ember Syndicate.",
+        "You now join only when you press DEPLOY. Esc opens a pause menu.",
+        "You spawn facing into the map, not at the wall.",
+        "Report players from the scoreboard. Reports are reviewed by a person.",
+        "Enemies you can't see are no longer sent to your game (anti-wallhack)."
+      ]
+    },
+    {
+      "version": "0.6",
+      "date": "2026-09-25",
+      "title": "Ranks and squads",
+      "notes": [
+        "Levels, weapon levels and unlocks. Daily orders give bonus XP.",
+        "Friend codes, recent players and invite links: squads join the same team.",
+        "Text chat with a filter, team chat and mute."
+      ]
+    },
+    {
+      "version": "0.5",
+      "date": "2026-09-24",
+      "title": "Saltline Depot",
+      "notes": [
+        "New map: Saltline Depot, a shipping depot at dusk.",
+        "Attachments and perks for your loadout.",
+        "Frag and smoke grenades."
+      ]
+    }
+  ]
+}

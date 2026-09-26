@@ -433,3 +433,29 @@ export const LoreSchema = z.object({
     .length(2),
 });
 export type Lore = z.infer<typeof LoreSchema>;
+
+// ---------------------------------------------------------------------------
+// News: patch notes, loading tips, community links (menu Comms screen)
+// ---------------------------------------------------------------------------
+
+export const NewsSchema = z.object({
+  community: z.object({
+    /** Community invite link; null until one exists (the menu then hides it). */
+    discord: z.string().url().startsWith('https://').nullable(),
+    feedbackNote: z.string().min(1),
+  }),
+  /** One is shown on the deploy screen and the first-match tips. */
+  tips: z.array(z.string().min(1).max(140)).min(1),
+  /** Newest first. */
+  patches: z
+    .array(
+      z.object({
+        version: z.string().regex(/^\d+\.\d+(\.\d+)?$/),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        title: z.string().min(1),
+        notes: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .min(1),
+});
+export type News = z.infer<typeof NewsSchema>;

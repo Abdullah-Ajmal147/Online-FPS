@@ -80,6 +80,15 @@ export class Store {
         status TEXT NOT NULL,
         at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        text TEXT NOT NULL,
+        context TEXT NOT NULL,
+        at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS feedback_at ON feedback (at);
       CREATE TABLE IF NOT EXISTS matches (
         match_id TEXT PRIMARY KEY,
         received_at INTEGER NOT NULL,
@@ -209,6 +218,8 @@ export class Store {
 
   /** Match logs are kept for review for LOG_DAYS, then deleted. */
   static readonly LOG_DAYS = 14;
+  /** How long player feedback is kept. */
+  static readonly FEEDBACK_DAYS = 180;
 
   saveMatchLog(matchId: string, at: number, log: unknown): void {
     this.db
@@ -247,6 +258,43 @@ export class Store {
         'INSERT OR REPLACE INTO player_flags (guest_id, match_id, flags, aim, at) VALUES (?, ?, ?, ?, ?)',
       )
       .run(guestId, matchId, JSON.stringify(flags), JSON.stringify(aim), at);
+  }
+
+  /** Player feedback (menu Comms screen). Kept FEEDBACK_DAYS; the newest few thousand. */
+  addFeedback(f: { code: string; kind: string; text: string; context: unknown; at: number }): void {
+    this.db
+      .prepare('INSERT INTO feedback (code, kind, text, context, at) VALUES (?, ?, ?, ?, ?)')
+      .run(f.code, f.kind, f.text, JSON.stringify(f.context), f.at);
+    this.db
+      .prepare(
+        'DELETE FROM feedback WHERE at < ? OR id <= (SELECT id FROM feedback ORDER BY id DESC LIMIT 1 OFFSET 5000)',
+      )
+      .run(f.at - Store.FEEDBACK_DAYS * 86_400_000);
+  }
+
+  recentFeedback(limit = 200): {
+    code: string;
+    name: string | null;
+    kind: string;
+    text: string;
+    context: unknown;
+    at: number;
+  }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT f.code, p.name, f.kind, f.text, f.context, f.at
+           FROM feedback f LEFT JOIN profiles p ON p.code = f.code
+          ORDER BY f.id DESC LIMIT ?`,
+      )
+      .all(limit) as {
+      code: string;
+      name: string | null;
+      kind: string;
+      text: string;
+      context: string;
+      at: number;
+    }[];
+    return rows.map((r) => ({ ...r, context: JSON.parse(r.context) as unknown }));
   }
 
   addReport(r: {

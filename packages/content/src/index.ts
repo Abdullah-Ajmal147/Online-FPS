@@ -1,6 +1,7 @@
 import {
   AttachmentSchema,
   LoreSchema,
+  NewsSchema,
   EquipmentSchema,
   PerkSchema,
   MapSchema,
@@ -26,6 +27,7 @@ import movementJson from './movement.json' with { type: 'json' };
 import attachmentsJson from './attachments.json' with { type: 'json' };
 import perksJson from './perks.json' with { type: 'json' };
 import loreJson from './lore.json' with { type: 'json' };
+import newsJson from './news.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
 import { challengeData } from './challenges.ts';
@@ -306,3 +308,6 @@ export const CONTENT_HASH: string = (() => {
 
 /** The setting: premise, season, factions (menus and briefings). */
 export const lore = LoreSchema.parse(loreJson);
+
+/** Patch notes (newest first), tips and community links. */
+export const news = NewsSchema.parse(newsJson);
