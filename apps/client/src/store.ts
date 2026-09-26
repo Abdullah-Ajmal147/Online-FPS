@@ -64,6 +64,8 @@ export interface CombatHud {
   smokes: number;
   respawnSeconds: number;
   killedBy: string | null;
+  /** Killcam replay running: who killed us, with what. */
+  killcam: { killer: string; weapon: string } | null;
   /** performance.now() of the last confirmed hit, and what it was. */
   hitAt: number;
   hitKind: 'hit' | 'head' | 'kill' | 'predicted';

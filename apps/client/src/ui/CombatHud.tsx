@@ -121,6 +121,20 @@ function Vitals({ c }: { c: CombatHudState }) {
 }
 
 function DeathScreen({ c }: { c: CombatHudState }) {
+  if (c.killcam) {
+    return (
+      <div class="killcam" data-testid="killcam">
+        <div class="killcam-tag">Killcam</div>
+        <div class="killcam-who">
+          {c.killcam.killer}
+          {c.killcam.weapon && <small> · {c.killcam.weapon}</small>}
+        </div>
+        <div class="killcam-sub">
+          Respawning in {Math.max(0, c.respawnSeconds).toFixed(1)} s · Space to skip
+        </div>
+      </div>
+    );
+  }
   return (
     <div class="death" data-testid="death-screen">
       <div class="death-title">Eliminated{c.killedBy ? ` by ${c.killedBy}` : ''}</div>

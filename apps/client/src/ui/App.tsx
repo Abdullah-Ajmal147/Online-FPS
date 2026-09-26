@@ -28,7 +28,7 @@ export function App(props: Props) {
           <CombatHud />
           <MatchUi />
           <Chat />
-          {!primerDone() && status.spawned && status.playing && (
+          {!primerDone() && status.spawned && status.playing && status.combat?.alive !== false && (
             <Primer settings={props.settings} />
           )}
         </>

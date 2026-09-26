@@ -55,6 +55,8 @@ export interface Settings {
   mode: string;
   /** Game server region id, or 'auto' (lowest ping). */
   region: string;
+  /** Replay your death from the killer's eyes. */
+  killcam: boolean;
   /** Loadout weapon ids (applied at the next spawn). */
   primary: string;
   secondary: string;
@@ -71,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   headBob: false,
   mode: 'team-deathmatch',
   region: 'auto',
+  killcam: true,
   graphics: 'medium',
   renderScale: 1,
   primary: 'kestrel-ar',
@@ -147,6 +150,7 @@ export function normalizeSettings(raw: unknown): Settings {
     toggleSprint:
       typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
     headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
+    killcam: typeof r.killcam === 'boolean' ? r.killcam : DEFAULT_SETTINGS.killcam,
     bindings,
   };
 }

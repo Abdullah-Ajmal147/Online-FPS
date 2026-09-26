@@ -825,6 +825,15 @@ function SettingsScreen({
               onChange={(e) => set('headBob', (e.target as HTMLInputElement).checked)}
             />
           </label>
+          <label class="row">
+            <span>Killcam (replay your death from the killer's view)</span>
+            <input
+              type="checkbox"
+              checked={settings.killcam}
+              data-testid="killcam-toggle"
+              onChange={(e) => set('killcam', (e.target as HTMLInputElement).checked)}
+            />
+          </label>
           <PrimerReset />
         </div>
       )}

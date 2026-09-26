@@ -60,6 +60,12 @@ export class RemotePlayers {
     for (const m of r.flashMats) m.emissiveIntensity = flashing ? 1.6 : 0;
   }
 
+  /** Hide one player until their next update (killcam: the camera is inside the killer). */
+  hide(id: number): void {
+    const r = this.remotes.get(id);
+    if (r) r.root.visible = false;
+  }
+
   /** Brief white flash: the server confirmed our hit on this player. */
   flash(id: number): void {
     const r = this.remotes.get(id);

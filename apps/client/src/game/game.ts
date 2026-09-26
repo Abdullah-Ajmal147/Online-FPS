@@ -24,6 +24,7 @@ import {
 import {
   Predictor,
   SKIN,
+  TICK_RATE,
   TICKS_PER_SNAPSHOT,
   UNITS_PER_DEGREE,
   adsFraction,
@@ -65,6 +66,7 @@ import { RemotePlayers } from './remotePlayers.ts';
 import { GrenadeView } from './grenadeView.ts';
 import { PointMarkers } from './pointMarkers.ts';
 import { Viewmodel } from './viewmodel.ts';
+import { DEATH_PAUSE_MS, KillcamRecorder, type KillcamPlan } from './killcam.ts';
 
 export interface Game {
   /** Join a match (first DEPLOY). Resolves once the join was sent; safe to call twice. */
@@ -242,6 +244,7 @@ export async function startGame(
     reloading: false,
     respawnSeconds: 0,
     killedBy: null,
+    killcam: null,
     hitAt: -Infinity,
     hitKind: 'hit',
     confirmedHits: 0,
@@ -339,6 +342,20 @@ export async function startGame(
   const remoteBuffers = new Map<number, RemoteBuffer>();
   const remotePlayers = new RemotePlayers(scene);
   const remotePoses = new Map<number, RemotePose>();
+  /** Last few seconds of snapshots, for the killcam (see killcam.ts). */
+  const killcamRec = new KillcamRecorder();
+  /** Set when we're killed by someone: replay plan (null = death cam only) and who. */
+  let killcam: {
+    plan: KillcamPlan | null;
+    startAt: number;
+    killerId: number;
+    weapon: string;
+  } | null = null;
+  addEventListener('keydown', (e) => {
+    // Space skips the replay (back to the death view until respawn).
+    if (e.code === 'Space' && killcam?.plan && performance.now() >= killcam.startAt)
+      killcam.plan = null;
+  });
   const remoteShots = new Map<number, number>();
   // Test hook for Playwright: where remote players are drawn. Harmless in production.
   (window as unknown as { __sentinelRemotes?: () => number[][] }).__sentinelRemotes = () =>
@@ -481,6 +498,26 @@ export async function startGame(
       }
     }
     remotePlayers.retain(present);
+    // Killcam recording: everyone in this snapshot, plus our own soldier (the killer's view
+    // should show us).
+    if (own) {
+      const m = own.sim.move;
+      killcamRec.record(snap.serverTick, [
+        ...snap.entities,
+        {
+          id: myId,
+          team: myTeam(),
+          alive: own.respawnTicks === 0,
+          crouching: m.crouching,
+          grounded: m.grounded,
+          position: m.position,
+          yaw: predictor.state.move.yaw, // own look is not in the snapshot: ours
+          pitch: predictor.state.move.pitch,
+          weapon: 255,
+          shotCount: 0,
+        },
+      ]);
+    } else killcamRec.record(snap.serverTick, snap.entities);
   };
 
   const onEvents = (events: GameEvent[]) => {
@@ -520,7 +557,15 @@ export async function startGame(
           headshot: ev.headshot,
         };
         hud.killFeed = [...hud.killFeed.slice(-4), entry];
-        if (ev.victim === myId && ev.killer !== myId) hud.killedBy = nameOf(ev.killer);
+        if (ev.victim === myId && ev.killer !== myId) {
+          hud.killedBy = nameOf(ev.killer);
+          killcam = {
+            plan: settings().killcam ? killcamRec.plan(ev.killer, latestServerTick) : null,
+            startAt: performance.now() + DEATH_PAUSE_MS,
+            killerId: ev.killer,
+            weapon: killSourceName(ev.weapon),
+          };
+        }
         if (ev.victim === myId) streak = 0;
         if (ev.killer !== ev.victim && !firstBloodTaken) {
           firstBloodTaken = true;
@@ -694,6 +739,62 @@ export async function startGame(
 
   const aimDir = new THREE.Vector3();
   /** Crosshair turns red over a visible enemy; teammates get name tags. */
+  /**
+   * After our death: 0.5 s on the death view, then the killcam replay from the killer's eyes
+   * (if we saw enough of them), else the camera turns toward the killer. Returns true while
+   * the replay is drawing the players (the live remote update is skipped then).
+   */
+  function updateKillcam(frame: number): boolean {
+    if (killcam && hud.alive) killcam = null; // respawned
+    let replaying = false;
+    if (killcam) {
+      const now = performance.now();
+      const plan = killcam.plan;
+      const tick = plan ? plan.startTick + ((now - killcam.startAt) / 1000) * TICK_RATE : 0;
+      if (plan && tick > plan.endTick) killcam.plan = null;
+      if (plan && killcam.plan && now >= killcam.startAt) {
+        const poses = plan.posesAt(tick);
+        const k = poses.get(plan.killerId);
+        if (k) {
+          camera.position.set(
+            k.position[0],
+            k.position[1] + eyeHeightFor(k.crouching),
+            k.position[2],
+          );
+          camera.rotation.set(k.pitch, k.yaw, 0);
+        }
+        for (const [id, pose] of poses) remotePlayers.update(id, pose, frame);
+        remotePlayers.hide(plan.killerId); // we are looking out of their eyes
+        replaying = true;
+      } else {
+        // Death cam: turn toward the killer (where we last saw them).
+        const target = remotePoses.get(killcam.killerId)?.position;
+        if (target) {
+          const dx = target[0] - camera.position.x;
+          const dy = target[1] + 1.4 - camera.position.y;
+          const dz = target[2] - camera.position.z;
+          const yaw = Math.atan2(-dx, -dz);
+          const pitch = Math.atan2(dy, Math.hypot(dx, dz));
+          let dYaw = yaw - input.look.yaw;
+          dYaw -= Math.round(dYaw / (2 * Math.PI)) * 2 * Math.PI;
+          const k = Math.min(1, frame * 5);
+          input.look = {
+            yaw: input.look.yaw + dYaw * k,
+            pitch: input.look.pitch + (pitch - input.look.pitch) * k,
+          };
+          camera.rotation.set(input.look.pitch, input.look.yaw, 0);
+        }
+      }
+    }
+    const banner =
+      replaying && killcam ? { killer: nameOf(killcam.killerId), weapon: killcam.weapon } : null;
+    if ((banner === null) !== (hud.killcam === null)) {
+      hud.killcam = banner;
+      hudDirty = true;
+    }
+    return replaying;
+  }
+
   function updateAimAndTags(): void {
     camera.getWorldDirection(aimDir);
     const eye: [number, number, number] = [camera.position.x, camera.position.y, camera.position.z];
@@ -800,6 +901,7 @@ export async function startGame(
       input.look.yaw + w.recoilYaw * RAD_PER_UNIT,
       0,
     );
+    const replaying = updateKillcam(frame);
     syncLoadout();
     applyGraphics();
     const spec = simCtx.loadout[w.slot];
@@ -835,7 +937,7 @@ export async function startGame(
     );
 
     // Remote players: drawn in the past, between two snapshots we already have.
-    if (serverNow !== null) {
+    if (serverNow !== null && !replaying) {
       const renderTick = serverNow - interpDelay.ticks;
       for (const [id, buf] of remoteBuffers) {
         const pose = buf.sample(renderTick);
@@ -845,7 +947,7 @@ export async function startGame(
       }
       grenadeView.update(renderTick, performance.now());
     }
-    updateAimAndTags();
+    if (!replaying) updateAimAndTags();
     feedback.update(camera, frame);
     effects.update(frame);
     renderer.render(scene, camera);

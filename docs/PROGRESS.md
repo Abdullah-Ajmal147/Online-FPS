@@ -373,4 +373,15 @@ Open issues: name tags of players standing together overlap (seen in a primer sc
 Learned: points must be built during warm-up too (`GameMode.sync`), not only in the live
 tick — otherwise the first MatchInfo has no nodes and the HUD stays empty.
 
+## Owner feature list (after the phases)
+
+Done before: third weapon, grenades, second map. Now:
+
+- Killcam: after a death, 0.5 s on the death view, then up to 2 s before the kill (+0.3 s
+  after) replayed from the killer's eyes, with letterbox bars, killer and weapon; Space skips;
+  ends at respawn (fits the 3 s). Client-only, built from snapshots already received: no
+  protocol change and nothing new revealed. Server-side visibility means we only have the
+  killer's movement while we could see or hear them; with under 0.75 s of it, the camera just
+  turns toward the killer instead. Setting: Settings → Game → Killcam.
+
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
