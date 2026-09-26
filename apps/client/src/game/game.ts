@@ -49,7 +49,7 @@ import { buildMapMeshes } from '../map.ts';
 import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
-import type { Settings } from '../settings.ts';
+import type { GraphicsPreset, Settings } from '../settings.ts';
 import { ensureGuest, refreshProfile } from '../profile.ts';
 import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
 import { Effects } from './effects.ts';
@@ -83,7 +83,6 @@ export async function startGame(
     antialias: true,
     forceWebGL: !(await webgpuAvailable()),
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   await renderer.init();
@@ -99,10 +98,29 @@ export async function startGame(
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
   sun.position.set(20, 40, 15);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35, far: 100 });
   scene.add(sun);
+
+  // Shadows are set once, before the first frame: three's WebGPU shadow node does not survive
+  // having its shadow map switched off/on or resized later (null depth texture crash).
+  const startQuality = GRAPHICS[settings().graphics];
+  sun.castShadow = startQuality.shadowMapSize > 0;
+  if (sun.castShadow)
+    sun.shadow.mapSize.set(startQuality.shadowMapSize, startQuality.shadowMapSize);
+
+  /** Resolution (preset pixel-ratio cap × render scale), applied live when the menu changes. */
+  let appliedGraphics = '';
+  function applyGraphics(): void {
+    const { graphics, renderScale } = settings();
+    const key = `${graphics}|${renderScale}`;
+    if (key === appliedGraphics) return;
+    appliedGraphics = key;
+    const q = GRAPHICS[graphics];
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio) * renderScale);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+  applyGraphics();
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.02, 250);
   camera.rotation.order = 'YXZ'; // yaw first, then pitch: no roll creeping in
@@ -677,6 +695,7 @@ export async function startGame(
       0,
     );
     syncLoadout();
+    applyGraphics();
     const spec = simCtx.loadout[w.slot];
     const ads = adsFraction(w, spec);
     // Aiming zooms in a little (a marksman scope a lot more).
@@ -849,4 +868,11 @@ const LIGHTING: Record<
     sunIntensity: 2.2,
     sunPosition: [35, 14, -20],
   },
+};
+
+/** Per preset: shadow map size (0 = no shadows) and the highest device pixel ratio used. */
+const GRAPHICS: Record<GraphicsPreset, { shadowMapSize: number; maxPixelRatio: number }> = {
+  low: { shadowMapSize: 0, maxPixelRatio: 1 },
+  medium: { shadowMapSize: 1024, maxPixelRatio: 1.5 },
+  high: { shadowMapSize: 2048, maxPixelRatio: 2 },
 };

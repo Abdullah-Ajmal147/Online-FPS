@@ -35,6 +35,35 @@ test('menu shows controls and rebinding', async ({ page }) => {
   await expect(page.getByTestId('profile')).toContainText('Level 1');
 });
 
+test('graphics presets switch without breaking rendering', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.goto('/');
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  const fps = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus().fps);
+  for (const preset of ['low', 'high', 'medium']) {
+    await page.getByTestId('graphics').selectOption(preset);
+    await page.waitForTimeout(1500);
+    expect(await fps(), preset).toBeGreaterThan(0);
+  }
+  expect(errors).toEqual([]);
+});
+
+test('starting on the Low preset (no shadows) renders', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.addInitScript(() =>
+    localStorage.setItem('sentinel.settings.v1', JSON.stringify({ graphics: 'low' })),
+  );
+  await page.goto('/');
+  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  await expect(page.getByTestId('graphics')).toHaveValue('low');
+  await expect
+    .poll(() => page.evaluate(async () => (await import('/src/store.ts')).getStatus().fps))
+    .toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
+
 test('F3 toggles the network debug overlay', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('net-status')).toHaveText(/connected/);

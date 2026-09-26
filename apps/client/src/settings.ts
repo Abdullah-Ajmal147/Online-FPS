@@ -33,6 +33,9 @@ export const ACTION_LABELS: Record<Action, string> = {
   secondary: 'Sidearm',
 };
 
+export const GRAPHICS_PRESETS = ['low', 'medium', 'high'] as const;
+export type GraphicsPreset = (typeof GRAPHICS_PRESETS)[number];
+
 export interface Settings {
   /** Display name (the server sanitizes it; accounts come in Phase 4). */
   name: string;
@@ -44,6 +47,10 @@ export interface Settings {
   headBob: boolean;
   /** KeyboardEvent.code per action. */
   bindings: Record<Action, string>;
+  /** Graphics preset: low = no shadows, 1× pixels (integrated GPUs); high = sharp shadows. */
+  graphics: GraphicsPreset;
+  /** Fraction of the screen resolution rendered (0.5–1): lower is faster, blurrier. */
+  renderScale: number;
   /** Loadout weapon ids (applied at the next spawn). */
   primary: string;
   secondary: string;
@@ -55,6 +62,8 @@ export const DEFAULT_SETTINGS: Settings = {
   fov: 90,
   toggleSprint: false,
   headBob: false,
+  graphics: 'medium',
+  renderScale: 1,
   primary: 'kestrel-ar',
   secondary: 'wren-sp',
   // Crouch is C, not Ctrl: Ctrl+W closes the browser tab.
@@ -77,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export const LIMITS = {
   sensitivity: { min: 0.005, max: 0.5 },
   fov: { min: 70, max: 120 },
+  renderScale: { min: 0.5, max: 1 },
 } as const;
 
 const STORAGE_KEY = 'sentinel.settings.v1';
@@ -98,6 +108,15 @@ export function normalizeSettings(raw: unknown): Settings {
   const { sensitivity, fov } = LIMITS;
   const [primary, secondary] = resolveLoadout(r.primary, r.secondary);
   return {
+    graphics: GRAPHICS_PRESETS.includes(r.graphics as GraphicsPreset)
+      ? (r.graphics as GraphicsPreset)
+      : DEFAULT_SETTINGS.graphics,
+    renderScale: clamp(
+      r.renderScale,
+      LIMITS.renderScale.min,
+      LIMITS.renderScale.max,
+      DEFAULT_SETTINGS.renderScale,
+    ),
     primary: primary.id,
     secondary: secondary.id,
     sensitivity: clamp(

@@ -103,6 +103,32 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
           />
         </label>
         <label class="row">
+          <span>Graphics</span>
+          <select
+            value={settings.graphics}
+            data-testid="graphics"
+            onChange={(e) =>
+              set('graphics', (e.target as HTMLSelectElement).value as Settings['graphics'])
+            }
+          >
+            <option value="low">Low (fastest, no shadows)</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <p class="menu-hint">Shadow quality changes after a page reload; resolution right away.</p>
+        <label class="row">
+          <span>Render scale: {Math.round(settings.renderScale * 100)}%</span>
+          <input
+            type="range"
+            min={LIMITS.renderScale.min}
+            max={LIMITS.renderScale.max}
+            step="0.05"
+            value={settings.renderScale}
+            onInput={(e) => set('renderScale', Number((e.target as HTMLInputElement).value))}
+          />
+        </label>
+        <label class="row">
           <span>Toggle sprint (instead of hold)</span>
           <input
             type="checkbox"

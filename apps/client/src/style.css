@@ -134,6 +134,15 @@ body {
   width: 80px;
 }
 
+.row select {
+  padding: 4px 8px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #161b22;
+  color: #e6edf3;
+  font: inherit;
+}
+
 .key {
   min-width: 110px;
   padding: 4px 10px;

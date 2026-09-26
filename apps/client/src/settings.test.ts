@@ -8,6 +8,18 @@ describe('settings', () => {
     expect(normalizeSettings({ sensitivity: 'fast', fov: Number.NaN })).toEqual(DEFAULT_SETTINGS);
   });
 
+  it('keeps a valid graphics preset and render scale, rejects junk', () => {
+    expect(normalizeSettings({ graphics: 'low', renderScale: 0.75 })).toMatchObject({
+      graphics: 'low',
+      renderScale: 0.75,
+    });
+    expect(normalizeSettings({ graphics: 'ultra', renderScale: 3 })).toMatchObject({
+      graphics: DEFAULT_SETTINGS.graphics,
+      renderScale: 1,
+    });
+    expect(normalizeSettings({ renderScale: 0.1 }).renderScale).toBe(0.5);
+  });
+
   it('clamps out-of-range numbers', () => {
     const s = normalizeSettings({ sensitivity: 50, fov: 10 });
     expect(s.sensitivity).toBe(0.5);
