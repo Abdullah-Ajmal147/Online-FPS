@@ -28,6 +28,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm size
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium

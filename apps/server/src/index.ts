@@ -35,7 +35,20 @@ const server = new Server({
     // Production: serve the built client from this same port (one container = the whole game).
     const clientDir = process.env.SENTINEL_CLIENT_DIR;
     if (clientDir && existsSync(clientDir)) {
-      app.use(express.static(clientDir, { maxAge: '1h', index: 'index.html' }));
+      // Vite's /assets/* names carry a content hash: cache them for a year (repeat visits load
+      // instantly). index.html must never be cached, or players keep an old build after a
+      // deploy and loop on the protocol/content-version reload.
+      app.use(
+        express.static(clientDir, {
+          index: 'index.html',
+          setHeaders: (res, path) => {
+            res.setHeader(
+              'Cache-Control',
+              /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache',
+            );
+          },
+        }),
+      );
       log.info('serving client', { dir: clientDir });
     }
   },
