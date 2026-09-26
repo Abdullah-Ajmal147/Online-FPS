@@ -1,6 +1,6 @@
 # Progress
 
-**Current phase:** 5 — Content pipeline (Phases 3–4: everything that doesn't need the owner's accounts is done)
+**Current phase:** 7 — Security + operations (Phases 3–6: everything that doesn't need the owner's accounts or hardware is done)
 
 ## Phase 0 — Setup
 
@@ -245,5 +245,83 @@ What we learned:
   their own server port.
 - An edit script that silently failed once left a documented feature unimplemented; edit
   scripts now exit loudly on any mismatch.
+
+## Phase 6 — Progression + social
+
+Status: **done locally 2026-09-26**.
+
+- 1–2. Unlock table as data (`progression.json`): account levels unlock weapons and perks,
+  weapon levels (kills with that weapon) unlock attachments. The game server reads each
+  player's unlocks from the API (signed `GET /access`) and enforces them; the menu shows locks.
+- 3. Daily and weekly challenges (data), picked from the date; progress only from the game
+     server's signed match stats; bonus XP once per challenge.
+- 4. Party invites: a link with a server-issued invite token joins your match on your team
+     (a party can lead the other team by at most 3 humans). No ready-up lobby yet.
+- 5. Recent players (per browser) and friends by public player code (API shows name, level,
+     day last played).
+- 6. Results screen: this match's XP line by line, completed challenges, level-up.
+- 7. Text chat (Enter / T for team), server-side profanity filter (normalisation, look-alike
+     letters, spacing tricks, allow-list), rate limits, mute. Names are filtered too.
+
+Exit tests:
+
+- [x] Three people join a party by link and land on the same team (e2e)
+- [x] Challenge progress only moves from server-reported stats (a forged result is rejected)
+- [x] Unlock table is data; changing it needs no code change
+
+## Phase 7 — Security + operations
+
+Status: **in progress**.
+
+Done:
+
+- 1. Message audit (NETCODE.md table): size, rate and value checks for every client message;
+     2 KB WebSocket cap.
+- 2. Anti-wallhack (ADR 0009): enemies a player can't see or hear are not in their snapshots.
+- 3. Stat anomaly flags per match (accuracy, headshot rate, reaction time, snap aim,
+     K/D vs level), in the signed match result.
+- 7. Load test (`apps/server/scripts/load.ts`): a match costs ~0.5 ms/tick, ~1 MB, 67 KB/s out;
+     one process holds ~15 matches, so 50 need several processes (Redis presence; hosting
+     decision).
+- 8. Backups (`apps/api/scripts/backup.mjs`), restore drill as a test, `docs/RUNBOOK.md`.
+
+Next: match logs (14 days), report button + admin page (ban / shadow-ban), shadow-ban pool.
+
+Exit tests:
+
+- [~] 50 bot matches at once, per-match cost recorded — measured locally; the target server
+  type is the owner's choice
+- [x] A modified client with speed hack and 2× fire-rate gains nothing (tests)
+- [x] A wallhack test client receives no hidden enemy positions (tests)
+- [x] Restore-from-backup drill (automated test; repeat once on the real server)
+
+## Front end redesign + story (owner feedback, 2026-09-26)
+
+Owner: "the first page is bulky, everything on the same page; make it look like a real game,
+not made by an AI agent; add a story; the first page (start game) still has an issue."
+
+Found by testing the first page as a player:
+
+- The menu was one 2,300 px column (profile, challenges, invite, friends, Play, loadout,
+  settings, controls). The Play button sat mid-page and the friend-code row collided with it.
+- You were already spawned in a live match while reading the menu (idle target for bots,
+  holding a team slot). The in-game HUD showed through behind the menu.
+- DEPLOY clicked in the first second or two (engine still loading) did nothing.
+- After spawning you kept looking wherever you last looked (one team faced a wall).
+
+Now:
+
+- Main menu with separate screens: Play (mode, next site briefing, season, today's orders),
+  Loadout, Career, Squad, Intel (story), Settings (Game / Graphics / Controls). A slow
+  flyover of the map runs behind it. Its own look: condensed display type from system fonts
+  (nothing to download or license), signal amber, faction colours, clipped corners.
+- Nothing joins until DEPLOY; a deploy screen shows the site briefing and your faction. Esc is
+  a pause menu (RESUME / LEAVE MATCH); the match keeps running meanwhile. In-game HUD
+  restyled to match.
+- Story (`docs/STORY.md`, `lore.json`, map briefings): 2071, the Relay after the Blackout
+  Winter; Aegis Directive vs Ember Syndicate; Season 0 "Static".
+- Fixes: spawn faces the spawn direction; an early DEPLOY is remembered; guest creation
+  race; no backdrop blur (expensive on weak GPUs). Checked in headless Chrome and in the
+  owner's Chrome (menu, screens, DEPLOY → connected and spawned with bots).
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
