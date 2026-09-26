@@ -336,6 +336,9 @@ Status: **in progress**.
 
 Done:
 
+- 1. (part) Logo mark as favicon, link-preview card (`og.png`, source in `tools/brand/`),
+     Open Graph / Twitter tags; `SITE_URL` at build time makes the image URL absolute. Final
+     name, trademark and domain checks are the owner's.
 - 3. Domination (protocol v12): nodes A, B, C on Relay Yard and Saltline Depot (content data:
      radius 4 m, 5 s to capture, faster with more teammates, contested = frozen; 1 point per
      held node per second + 1 per kill, 200 to win). Picked on the Play screen; the server

@@ -1,0 +1,108 @@
+<!doctype html>
+<!-- Source of apps/client/public/og.png (link previews). Regenerate: node tools/brand/render.mjs -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: #0a0d0c;
+        color: #e6ece8;
+        font-family: 'Bahnschrift', 'DIN Alternate', 'Arial Narrow', sans-serif;
+        position: relative;
+      }
+      .grid {
+        position: absolute;
+        inset: 0;
+        background:
+          repeating-linear-gradient(0deg, transparent 0 59px, rgba(240, 180, 41, 0.05) 59px 60px),
+          repeating-linear-gradient(90deg, transparent 0 59px, rgba(240, 180, 41, 0.05) 59px 60px);
+      }
+      .aegis,
+      .ember {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 18px;
+      }
+      .aegis {
+        left: 0;
+        background: #3d8bff;
+      }
+      .ember {
+        right: 0;
+        background: #ff7a2f;
+      }
+      .wrap {
+        position: absolute;
+        left: 100px;
+        right: 100px;
+        top: 200px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 36px;
+      }
+      .mark {
+        width: 104px;
+        height: 104px;
+        flex: none;
+      }
+      h1 {
+        margin: 0;
+        font-size: 84px;
+        letter-spacing: 0.1em;
+        white-space: nowrap;
+        line-height: 1;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      h1 b {
+        color: #f0b429;
+        font-weight: 700;
+        margin-left: 0.3em;
+      }
+      p {
+        margin: 0;
+        padding-top: 64px;
+        font-size: 34px;
+        letter-spacing: 0.08em;
+        color: #b9c4bf;
+        text-transform: uppercase;
+      }
+      p span {
+        color: #f0b429;
+      }
+      .foot {
+        position: absolute;
+        left: 100px;
+        bottom: 60px;
+        font: 22px monospace;
+        color: #86938d;
+        letter-spacing: 0.1em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid"></div>
+    <div class="aegis"></div>
+    <div class="ember"></div>
+    <div class="wrap">
+      <div class="head">
+        <svg class="mark" viewBox="0 0 64 64">
+          <polygon points="32,1 63,18 63,46 32,63 1,46 1,18" fill="#f0b429" />
+          <polygon points="32,11 54,23 54,41 32,53 10,41 10,23" fill="#0a0d0c" />
+          <polygon points="32,17 48,26 48,38 32,47 16,38 16,26" fill="#f0b429" />
+          <rect x="25" y="25" width="14" height="14" fill="#0a0d0c" />
+        </svg>
+        <h1>Sentinel<b>Strike</b></h1>
+      </div>
+      <p>6v6 in your browser <span>/</span> no download <span>/</span> free</p>
+    </div>
+    <div class="foot">AEGIS DIRECTIVE vs EMBER SYNDICATE · SEASON 0 — STATIC</div>
+  </body>
+</html>
