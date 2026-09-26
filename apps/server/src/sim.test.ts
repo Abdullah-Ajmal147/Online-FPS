@@ -24,6 +24,8 @@ import {
   MAX_REWIND_TICKS,
   MatchSim,
   REGEN_DELAY_TICKS,
+  PVS_HOLD_TICKS,
+  PVS_RECHECK_TICKS,
   RESPAWN_TICKS,
   governViewTick,
   type SimPlayer,
@@ -298,6 +300,8 @@ describe('MatchSim: loadouts', () => {
     const sim = newSim(arena);
     const smg = sim.addPlayer({ loadout: resolveLoadout('vireo-smg', 'wren-sp') });
     const other = sim.addPlayer();
+    place(smg, [0, 0, 10]); // in view of each other (the arena's spawns are behind a wall)
+    place(other, [0, 0, 0]);
     expect(smg.ctx.loadout[0].def.id).toBe('vireo-smg');
     expect(smg.sim.weapon.ammo[0].ammo).toBe(weapons['vireo-smg']!.magazine);
     expect(sim.snapshotFor(smg.id).own?.loadout).toEqual({
@@ -619,6 +623,83 @@ describe('MatchSim: map rotation', () => {
     aimIn(sim, shooter, pitch);
     const shots = feed(sim, shooter, 2, AIM_FIRE, { pitch });
     expect(shots.some((s) => s.hit?.victim === target.id)).toBe(true);
+  });
+});
+
+describe('MatchSim: anti-wallhack (Phase 7 exit test)', () => {
+  /** Viewer at z = −26 behind the arena's cover wall (x −2..2, z −20.5..−19.5). */
+  function behindWall() {
+    const sim = newSim(arena);
+    const viewer = sim.addPlayer({ team: 0 });
+    const enemy = sim.addPlayer({ team: 1 });
+    const mate = sim.addPlayer({ team: 0 });
+    place(viewer, [0, 0, -26]);
+    place(enemy, [0, 0, -14]); // 12 m away, on the other side of the wall
+    place(mate, [0, 0, -14]);
+    return { sim, viewer, enemy, mate };
+  }
+  const sees = (sim: MatchSim, viewer: SimPlayer, other: SimPlayer) =>
+    sim.snapshotFor(viewer.id).entities.some((e) => e.id === other.id);
+
+  it('a hidden enemy is not in the snapshot at all; a teammate always is', () => {
+    const { sim, viewer, enemy, mate } = behindWall();
+    expect(sees(sim, viewer, enemy)).toBe(false);
+    expect(sees(sim, viewer, mate)).toBe(true);
+  });
+
+  it('the enemy appears once they step out from behind the wall', () => {
+    const { sim, viewer, enemy } = behindWall();
+    expect(sees(sim, viewer, enemy)).toBe(false);
+    for (let i = 0; i < PVS_RECHECK_TICKS; i++) sim.step();
+    place(enemy, [6, 0, -14]);
+    expect(sees(sim, viewer, enemy)).toBe(true);
+  });
+
+  it('close enemies (footsteps) and recent gunfire are sent through walls', () => {
+    const { sim, viewer, enemy } = behindWall();
+    place(enemy, [0, 0, -19]); // 7 m, other side of the wall
+    expect(sees(sim, viewer, enemy)).toBe(true);
+    const far = behindWall();
+    far.enemy.lastShotTick = far.sim.tick;
+    expect(sees(far.sim, far.viewer, far.enemy)).toBe(true);
+  });
+
+  it('a visible enemy stays sent for a moment after ducking behind cover (no flicker)', () => {
+    const { sim, viewer, enemy } = behindWall();
+    place(enemy, [6, 0, -14]);
+    expect(sees(sim, viewer, enemy)).toBe(true);
+    place(enemy, [0, 0, -14]);
+    expect(sees(sim, viewer, enemy)).toBe(true); // hold
+    for (let i = 0; i < PVS_HOLD_TICKS + 1; i++) sim.step();
+    place(enemy, [0, 0, -14]);
+    expect(sees(sim, viewer, enemy)).toBe(false);
+  });
+
+  it('an enemy running out of cover is sent a little early (peek look-ahead)', () => {
+    const { sim, viewer, enemy } = behindWall();
+    place(enemy, [2.5, 0, -14]); // just hidden: the line to them grazes the wall's end
+    expect(sees(sim, viewer, enemy)).toBe(false);
+    for (let i = 0; i < PVS_RECHECK_TICKS; i++) sim.step();
+    place(enemy, [2.5, 0, -14]);
+    enemy.sim = { ...enemy.sim, move: { ...enemy.sim.move, velocity: [7.5, 0, 0] } };
+    expect(sees(sim, viewer, enemy)).toBe(true);
+  });
+
+  it('stays cheap: a full match of snapshots within budget', () => {
+    const sim = newSim(maps['relay-yard']!);
+    for (let i = 0; i < MAX_PLAYERS_PER_MATCH; i++) sim.addPlayer();
+    // One second of play: a snapshot for every player every 2 ticks (only snapshots timed).
+    let perSecond = 0;
+    for (let n = 0; n < 30; n++) {
+      sim.step();
+      sim.step();
+      const start = performance.now();
+      for (const p of sim.players.values()) sim.snapshotFor(p.id);
+      perSecond += performance.now() - start;
+    }
+    console.log(`anti-wallhack snapshots: ${perSecond.toFixed(1)} ms per second of play`);
+    // Worst case (everyone hidden at spawns): measured ~45–65 ms, i.e. ~5% of one core.
+    expect(perSecond).toBeLessThan(100);
   });
 });
 

@@ -81,6 +81,20 @@ export function governViewTick(g: ViewTickGovernor, claimed: number): number {
   return v;
 }
 
+/** Anti-wallhack (PVS): enemies this close are always sent (you'd hear their steps). */
+export const PVS_HEAR_METRES = 8;
+/** Gunfire is heard this far for this long. */
+export const PVS_SHOT_HEARD_METRES = 60;
+export const PVS_SHOT_HEARD_TICKS = Math.round(0.5 * TICK_RATE);
+/** Look-ahead for peeks, and how long a visible enemy stays sent. */
+export const PVS_LEAD_S = 0.25;
+export const PVS_HOLD_TICKS = Math.round(0.5 * TICK_RATE);
+/**
+ * A hidden enemy is checked again after this many ticks (0.1 s). Safe because the look-ahead
+ * (PVS_LEAD_S, 0.25 s) covers more movement than this delay.
+ */
+export const PVS_RECHECK_TICKS = 6;
+
 /** Spawn protection: 1.5 s, or until you fire (Phase 3). */
 export const SPAWN_PROTECTION_TICKS = Math.round(1.5 * TICK_RATE);
 /** One second of hitbox history per player. */
@@ -142,6 +156,12 @@ export interface SimPlayer {
   fragKills: number;
   weaponKills: Map<string, number>;
   history: HistoryEntry[];
+  /** Last tick this player fired (gunfire is audible, so it counts as visible nearby). */
+  lastShotTick: number;
+  /** Anti-wallhack hysteresis: enemy id → keep sending them to this player until this tick. */
+  sendUntil: Map<number, number>;
+  /** …and don't re-check a hidden enemy before this tick. */
+  hiddenUntil: Map<number, number>;
   /** View tick after anti-backtrack governing (see governViewTick). */
   viewTick: number;
   viewGovernor: ViewTickGovernor;
@@ -174,6 +194,8 @@ export class MatchSim {
    * aren't skewed by shots at targets that just died. Never set in real matches.
    */
   noDeath = false;
+  /** Anti-wallhack visibility filter for snapshots (tests may switch it off). */
+  pvs = true;
   /** Default loadout context; each player has their own (SimPlayer.ctx). */
   private ctx: SimContext;
   private readonly specs = new Map<string, WeaponSpec>();
@@ -305,6 +327,9 @@ export class MatchSim {
       respawnTicks: 0,
       lastDamageTick: -Infinity,
       shotCount: 0,
+      lastShotTick: -Infinity,
+      sendUntil: new Map(),
+      hiddenUntil: new Map(),
       frags: equipment.frag.perLife,
       smokes: equipment.smoke.perLife,
       throwArmed: false,
@@ -356,6 +381,7 @@ export class MatchSim {
       if (r.shot) {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
+        p.lastShotTick = this.tick;
         shots.push({ shooter: p, shot: r.shot, viewTick: p.viewTick });
       }
       if (p.sim.move.position[1] < this.map.killY) this.kill(p, null, NO_WEAPON, false);
@@ -378,9 +404,12 @@ export class MatchSim {
     for (const p of this.players.values()) {
       if (p.id === id) continue;
       const m = p.sim.move;
-      // An enemy fully hidden by smoke is not sent at all: a client that just stops drawing
-      // the cloud must not learn where they are (review M1). Clients drop missing players.
-      if (myEye && me && p.team !== me.team && this.hiddenBySmoke(myEye, p)) continue;
+      // Anti-wallhack (Phase 7): an enemy is only sent if this player could see or hear them.
+      // An enemy fully hidden by smoke is never sent (a client that just stops drawing the
+      // cloud must not learn where they are). Clients drop players missing from a snapshot.
+      if (myEye && me && p.team !== me.team) {
+        if (this.hiddenBySmoke(myEye, p) || !this.shouldSend(me, myEye, p)) continue;
+      }
       entities.push({
         id: p.id,
         team: p.team,
@@ -735,6 +764,53 @@ export class MatchSim {
     }
   }
 
+  /**
+   * Potentially visible set, per viewer and enemy: send the enemy if they are close (heard),
+   * fired recently within earshot, or if any of a few lines of sight is clear of the map:
+   * eye → head / chest / where they'll be in PVS_LEAD_S, and from where the viewer will be.
+   * The lead covers a peek around a corner arriving before the snapshot does. Once sent, an
+   * enemy stays sent for PVS_HOLD_TICKS, so edges don't flicker. Disable with `pvs = false`.
+   */
+  private shouldSend(viewer: SimPlayer, eye: Vec3, p: SimPlayer): boolean {
+    if (!this.pvs) return true;
+    if (this.tick <= (viewer.sendUntil.get(p.id) ?? -1)) return true;
+    // A "hidden" answer is reused for a few ticks (snapshots go out every 2): the lead and the
+    // hold already cover that much movement, and it halves the ray casts.
+    if (this.tick < (viewer.hiddenUntil.get(p.id) ?? -1)) return false;
+    const m = p.sim.move;
+    const dx = m.position[0] - eye[0];
+    const dz = m.position[2] - eye[2];
+    const dist = Math.hypot(dx, dz);
+    let visible =
+      dist < PVS_HEAR_METRES ||
+      (this.tick - p.lastShotTick < PVS_SHOT_HEARD_TICKS && dist < PVS_SHOT_HEARD_METRES);
+    if (!visible) {
+      const h = capsuleHeight(this.tuning, m.crouching);
+      const v = m.velocity;
+      const vv = viewer.sim.move.velocity;
+      const head: Vec3 = [m.position[0], m.position[1] + h * 0.9, m.position[2]];
+      const chest: Vec3 = [m.position[0], m.position[1] + h * 0.55, m.position[2]];
+      const ahead: Vec3 = [
+        chest[0] + v[0] * PVS_LEAD_S,
+        chest[1] + v[1] * PVS_LEAD_S,
+        chest[2] + v[2] * PVS_LEAD_S,
+      ];
+      const eyeAhead: Vec3 = [
+        eye[0] + vv[0] * PVS_LEAD_S,
+        eye[1] + vv[1] * PVS_LEAD_S,
+        eye[2] + vv[2] * PVS_LEAD_S,
+      ];
+      visible =
+        this.clearLine(eye, head) ||
+        this.clearLine(eye, chest) ||
+        this.clearLine(eye, ahead) ||
+        this.clearLine(eyeAhead, chest);
+    }
+    if (visible) viewer.sendUntil.set(p.id, this.tick + PVS_HOLD_TICKS);
+    else viewer.hiddenUntil.set(p.id, this.tick + PVS_RECHECK_TICKS);
+    return visible;
+  }
+
   /** Head and chest both behind smoke, as seen from `eye`. */
   private hiddenBySmoke(eye: Vec3, p: SimPlayer): boolean {
     if (!this.grenades.hasClouds) return false;
@@ -747,21 +823,29 @@ export class MatchSim {
 
   /** Map-only line check (smoke doesn't stop a blast). */
   private clearLine(from: Vec3, to: Vec3): boolean {
-    const d: Vec3 = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
-    const len = Math.hypot(d[0], d[1], d[2]);
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const dz = to[2] - from[2];
+    const len = Math.hypot(dx, dy, dz);
     if (len < 1e-6) return true;
+    // One reused Ray: this runs hundreds of times per snapshot (anti-wallhack), no garbage.
+    const ray = (this.lineRay ??= new this.rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }));
+    ray.origin.x = from[0];
+    ray.origin.y = from[1];
+    ray.origin.z = from[2];
+    ray.dir.x = dx / len;
+    ray.dir.y = dy / len;
+    ray.dir.z = dz / len;
     return (
       this.ctx.movement.world.castRay(
-        new this.rapier.Ray(
-          { x: from[0], y: from[1], z: from[2] },
-          { x: d[0] / len, y: d[1] / len, z: d[2] / len },
-        ),
+        ray,
         len,
         true,
         this.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
       ) === null
     );
   }
+  private lineRay: InstanceType<Rapier['Ray']> | null = null;
 
   // --- Hitbox history ----------------------------------------------------------------------
 
