@@ -78,8 +78,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 10 (Phase 6: chat, player codes)', () => {
-    expect(PROTOCOL_VERSION).toBe(10);
+  it('is 11 (Phase 6: invite token in Hello)', () => {
+    expect(PROTOCOL_VERSION).toBe(11);
   });
 });
 
@@ -91,6 +91,7 @@ describe('Hello', () => {
       playerId: 7,
       team: 1,
       mapId: 'greybox',
+      inviteToken: 'Zq3-_x9AbC0k',
     };
     expect(decodeHello(encodeHello(msg))).toEqual(msg);
   });

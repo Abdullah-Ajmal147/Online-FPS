@@ -306,13 +306,13 @@ describe('player codes (friends)', () => {
     const a = app();
     await post(a, result('dddddddd-0000-4000-8000-000000000001'));
     const me = (await (await a.request(`/profiles/${GUEST}`)).json()) as { code: string };
-    expect(me.code).toMatch(/^[0-9a-f]{10}$/);
+    expect(me.code).toMatch(/^[0-9a-f]{16}$/);
     const card = await a.request(`/players/${me.code}`);
     expect(card.status).toBe(200);
     const body = (await card.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ code: me.code, name: 'Ayesha', level: 2 });
     expect(JSON.stringify(body)).not.toContain(GUEST);
-    expect((await a.request('/players/0000000000')).status).toBe(404);
+    expect((await a.request('/players/0000000000000000')).status).toBe(404);
     expect((await a.request('/players/not-a-code')).status).toBe(400);
   });
 
@@ -328,7 +328,19 @@ describe('player codes (friends)', () => {
       wins INTEGER NOT NULL DEFAULT 0, kills INTEGER NOT NULL DEFAULT 0,
       deaths INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`);
     old.close();
+    const seed = new DatabaseSync(path);
+    seed
+      .prepare('INSERT INTO profiles (guest_id, name, xp, updated_at) VALUES (?, ?, ?, ?)')
+      .run(OTHER, 'Old Timer', 900, Date.UTC(2026, 0, 2, 15, 30));
+    seed.close();
     const a = createApp(new Store(path), SECRET);
+    // An old player who hasn't played since gets a code at startup and can be found by it,
+    // with "last played" rounded to the day.
+    const code = ((await (await a.request(`/profiles/${OTHER}`)).json()) as { code: string }).code;
+    const card = (await (await a.request(`/players/${code}`)).json()) as { lastPlayed: number };
+    expect(card.lastPlayed).toBe(Date.UTC(2026, 0, 2));
     expect((await post(a, result('dddddddd-0000-4000-8000-000000000002'))).status).toBe(200);
+    const again = createApp(new Store(path), SECRET); // restart: backfill is idempotent
+    expect((await again.request(`/players/${code}`)).status).toBe(200);
   });
 });

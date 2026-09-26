@@ -542,3 +542,34 @@ describe('chat filter', () => {
     expect([...cleanChat('a'.repeat(500))]).toHaveLength(CHAT_MAX_LENGTH);
   });
 });
+
+describe('chat filter: review bypasses', () => {
+  it.each([
+    ['fuuck', '*****'],
+    ['shiit', '*****'],
+    ['asss', '****'],
+    ['f u c k off', '* * * * off'],
+    ['k y s', '* * *'],
+    ['ｆｕｃｋ', '****'],
+    ['fսck', '****'], // Armenian/Cyrillic look-alike
+    ['phuck', '*****'],
+    ['f.u.c.k', '*******'],
+  ])('hides %s', (input, expected) => {
+    expect(cleanChat(input)).toBe(expected);
+  });
+
+  it.each(['Scunthorpe', 'shiitake', 'retardant', 'as', 'night', 'Niger', 'class assassin'])(
+    'leaves %s alone',
+    (word) => {
+      expect(cleanChat(word)).toBe(word);
+    },
+  );
+
+  it('strips invisible and direction-changing characters, and blank-looking lines', () => {
+    expect(cleanChat('f⁦uck')).toBe('****');
+    expect(cleanChat('a﻿b')).toBe('ab');
+    expect(cleanChat('ㅤ')).toBe('');
+    expect(cleanChat('⠀⠀')).toBe('');
+    expect(cleanChat('hi\u{E0041}')).toBe('hi');
+  });
+});

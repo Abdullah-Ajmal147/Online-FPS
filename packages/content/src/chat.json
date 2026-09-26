@@ -12,5 +12,17 @@
     "dickhead",
     "wank"
   ],
-  "words": ["ass", "asshole", "fag", "dick", "cock", "twat", "piss", "bastard", "kys"]
+  "words": ["ass", "asshole", "fag", "dick", "cock", "twat", "piss", "bastard", "kys"],
+  "allow": [
+    "scunthorpe",
+    "penistone",
+    "shiitake",
+    "retardant",
+    "cockpit",
+    "cocktail",
+    "dickens",
+    "assassin",
+    "passion",
+    "bassist"
+  ]
 }

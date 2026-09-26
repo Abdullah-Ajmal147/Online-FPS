@@ -65,5 +65,5 @@ export function resolveUnlockAll(env: Record<string, string | undefined>): boole
  * secret, so it can be shown to other players without revealing the id itself.
  */
 export function publicCode(secret: string, guestId: string): string {
-  return createHmac('sha256', secret).update(`code:v1:${guestId}`).digest('hex').slice(0, 10);
+  return createHmac('sha256', secret).update(`code:v1:${guestId}`).digest('hex').slice(0, 16); // 64 bits: no collisions at any realistic scale
 }

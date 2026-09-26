@@ -19,7 +19,13 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: 'http://localhost:5173' },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /timing\.spec/ },
+    // Small pages: headless Chrome draws the 3D scene in software, and at 1280×720 a dozen
+    // parallel pages saturate the machine (joins stall). 800×450 is plenty for these checks.
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], viewport: { width: 800, height: 450 } },
+      testIgnore: /timing\.spec/,
+    },
     {
       name: 'timing',
       use: { ...devices['Desktop Chrome'] },

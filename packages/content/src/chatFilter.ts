@@ -1,13 +1,53 @@
 import chatJson from './chat.json' with { type: 'json' };
 
 /**
- * Chat profanity filter (data: chat.json). `substrings` are hidden wherever they appear inside
- * a word; `words` only as whole words (so "class" or "assassin" stay readable). Common letter
- * swaps (f*ck → 0/o, 1/i, 3/e, 4/a, 5/s, @, $) are undone before matching. The server filters
- * every line; the client never decides what others see.
+ * Chat profanity filter (data: chat.json), run by the server on every line.
+ * - `substrings` are hidden inside any word, `words` only as whole words, `allow` (prefixes)
+ *   are never hidden ("Scunthorpe", "shiitake").
+ * - Words are normalised first: Unicode NFKC (fullwidth → ASCII), look-alike letters from
+ *   other scripts, common swaps (0→o, 1→i, 3→e, 4→a, 5→s, $, @, ph→f …), letters only.
+ * - Stretched spellings match: every letter of a blocked stem may repeat ("fuuuck").
+ * - Spaced-out letters are joined and checked too ("f u c k").
+ * - Invisible, bidi and other control characters are removed from every line.
  */
-const blocked = chatJson as { substrings: string[]; words: string[] };
+const data = chatJson as { substrings: string[]; words: string[]; allow: string[] };
 
+/** Look-alike letters (Cyrillic, Greek, Armenian) → Latin. */
+const CONFUSABLE: Record<string, string> = {
+  а: 'a',
+  в: 'b',
+  е: 'e',
+  к: 'k',
+  м: 'm',
+  н: 'h',
+  о: 'o',
+  р: 'p',
+  с: 'c',
+  т: 't',
+  у: 'y',
+  х: 'x',
+  і: 'i',
+  ј: 'j',
+  ѕ: 's',
+  ԁ: 'd',
+  ɡ: 'g',
+  α: 'a',
+  β: 'b',
+  ε: 'e',
+  ι: 'i',
+  κ: 'k',
+  ν: 'v',
+  ο: 'o',
+  ρ: 'p',
+  τ: 't',
+  υ: 'u',
+  χ: 'x',
+  ս: 'u',
+  օ: 'o',
+  ց: 'g',
+  հ: 'h',
+  ո: 'n',
+};
 const LEET: Record<string, string> = {
   '0': 'o',
   '1': 'i',
@@ -15,47 +55,95 @@ const LEET: Record<string, string> = {
   '4': 'a',
   '5': 's',
   '7': 't',
+  '8': 'b',
+  '9': 'g',
   '@': 'a',
   $: 's',
   '!': 'i',
+  '|': 'l',
+  '(': 'c',
+  '+': 't',
 };
 
-function normalize(word: string): string {
+function normalizeWord(word: string): string {
   let out = '';
-  for (const ch of word.toLowerCase()) out += LEET[ch] ?? ch;
-  // "fuuuck" → "fuck": collapse letters repeated 3+ times.
-  return out.replace(/(.)\1{2,}/g, '$1');
+  for (const ch of word.normalize('NFKC').toLowerCase()) out += CONFUSABLE[ch] ?? LEET[ch] ?? ch;
+  return out.replace(/ph/g, 'f').replace(/[^a-z]/g, '');
 }
 
-function isBlocked(word: string): boolean {
-  const n = normalize(word);
-  const letters = n.replace(/[^a-z]/g, '');
-  if (blocked.words.includes(n) || blocked.words.includes(letters)) return true;
-  return blocked.substrings.some((s) => n.includes(s) || letters.includes(s));
+/** "fuck" → /f+u+c+k+/, "ass" → /a+s{2,}/: each letter may repeat, doubled ones stay double. */
+function stemPattern(stem: string, whole: boolean): RegExp {
+  let body = '';
+  for (let i = 0; i < stem.length;) {
+    let j = i;
+    while (stem[j] === stem[i]) j++;
+    body += `${stem[i]}{${j - i},}`;
+    i = j;
+  }
+  return new RegExp(whole ? `^${body}$` : body);
+}
+
+const substringPatterns = data.substrings.map((s) => stemPattern(s, false));
+const wordPatterns = data.words.map((w) => stemPattern(w, true));
+
+export function isBlockedWord(word: string): boolean {
+  const n = normalizeWord(word);
+  if (!n || data.allow.some((a) => n.startsWith(a))) return false;
+  return wordPatterns.some((p) => p.test(n)) || substringPatterns.some((p) => p.test(n));
 }
 
 /** Longest chat line in characters. */
 export const CHAT_MAX_LENGTH = 120;
 
+/** Invisible or text-reordering characters: control, format (bidi, zero-width), fillers. */
+// The class deliberately lists combining characters (variation selectors) to remove them.
+/* eslint-disable no-misleading-character-class */
+const INVISIBLE =
+  /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0\u2800\ufe00-\ufe0f\u{e0000}-\u{e007f}]/gu;
+/* eslint-enable no-misleading-character-class */
+
+const stars = (s: string) => '*'.repeat(Math.min(8, [...s].length));
+
+/** Split a token into leading punctuation, the word, trailing punctuation ($ @ count as letters). */
+function parts(token: string): [string, string, string] {
+  const m = /^([^\p{L}\p{N}$@]*)(.*?)([^\p{L}\p{N}$@]*)$/u.exec(token)!;
+  return [m[1]!, m[2]!, m[3]!];
+}
+
 /**
- * Clean a chat line: no control characters, single spaces, at most CHAT_MAX_LENGTH characters,
- * blocked words replaced by asterisks. Returns '' if nothing is left to send.
+ * Clean a chat line: invisible characters removed, single spaces, at most CHAT_MAX_LENGTH
+ * characters, blocked words replaced by asterisks. Returns '' if nothing visible is left.
  */
 export function cleanChat(raw: string): string {
-  // Control and invisible/bidi characters out (they can hide or reorder text).
-  // eslint-disable-next-line no-control-regex
-  const text = [...raw.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e]/g, '')]
-    .slice(0, CHAT_MAX_LENGTH * 2)
-    .join('')
+  const text = raw
+    .slice(0, CHAT_MAX_LENGTH * 4)
+    .normalize('NFKC')
+    .replace(INVISIBLE, '')
+    .replace(/\u034f/g, '') // combining grapheme joiner (invisible; not allowed in a class)
     .replace(/\s+/g, ' ')
     .trim();
-  const words = text.split(' ').map((w) => {
-    // Keep punctuation around the word ("fuck," → "****,"); $ and @ count as letters.
-    const m = /^([^\p{L}\p{N}$@]*)(.*?)([^\p{L}\p{N}$@]*)$/u.exec(w)!;
-    const core = m[2]!;
-    return core && isBlocked(core)
-      ? `${m[1]}${'*'.repeat(Math.min(8, [...core].length))}${m[3]}`
-      : w;
+  if (!/[\p{L}\p{N}\p{P}\p{S}]/u.test(text)) return '';
+  const tokens = text.split(' ');
+  const out = tokens.map((t) => {
+    const [pre, core, post] = parts(t);
+    return core && isBlockedWord(core) ? `${pre}${stars(core)}${post}` : t;
   });
-  return [...words.join(' ')].slice(0, CHAT_MAX_LENGTH).join('');
+  // Spaced-out letters ("f u c k"): join runs of one-letter words and check them together.
+  for (let i = 0; i < tokens.length;) {
+    let j = i;
+    while (j < tokens.length && [...parts(tokens[j]!)[1]].length === 1) j++;
+    if (
+      j - i >= 2 &&
+      isBlockedWord(
+        tokens
+          .slice(i, j)
+          .map((t) => parts(t)[1])
+          .join(''),
+      )
+    ) {
+      for (let k = i; k < j; k++) out[k] = '*';
+    }
+    i = Math.max(j, i + 1);
+  }
+  return [...out.join(' ')].slice(0, CHAT_MAX_LENGTH).join('');
 }

@@ -71,6 +71,9 @@ export interface AppOptions {
 export function createApp(store: Store, secret: string, opts: AppOptions = {}): Hono {
   const app = new Hono();
   const now = opts.now ?? Date.now;
+  // Every profile gets its current public code (rows from before codes existed, or from an
+  // older code format), so friends can always find them.
+  store.backfillCodes((guestId) => publicCode(secret, guestId));
   app.use('*', cors());
   app.use('*', async (_c, next) => {
     counters.requests.inc();
@@ -205,14 +208,16 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       return c.json({ error: 'too many requests' }, 429);
     }
     const code = c.req.param('code');
-    if (!/^[0-9a-f]{10}$/.test(code)) return c.json({ error: 'bad code' }, 400);
+    if (!/^[0-9a-f]{16}$/.test(code)) return c.json({ error: 'bad code' }, 400);
     const row = store.byCode(code);
     if (!row) return c.json({ error: 'not found' }, 404);
+    // Last played rounded to the day: friends see "played today", not a minute-by-minute log.
+    const day = 86_400_000;
     return c.json({
       code,
       name: row.name,
       level: levelFor(row.xp).level,
-      lastPlayed: row.updated_at,
+      lastPlayed: Math.floor(row.updated_at / day) * day,
     });
   });
 

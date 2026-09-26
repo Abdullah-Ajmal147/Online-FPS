@@ -83,7 +83,6 @@ export class Connection {
       }
       room ??= await client.joinOrCreate('match', options);
       this.room = room;
-      setStatus({ invite: inviteUrl(room.roomId, room.sessionId) });
 
       room.onMessage(MessageType.Hello, (payload: Uint8Array) => {
         const hello = decodeHello(payload);
@@ -94,6 +93,7 @@ export class Connection {
         }
         setStatus({
           net: { state: 'connected', text: `connected, protocol v${hello.protocolVersion}` },
+          invite: hello.inviteToken ? inviteUrl(room.roomId, hello.inviteToken) : null,
         });
         handlers.onHello(hello);
       });
@@ -186,10 +186,10 @@ export function inviteFromUrl(): { room: string; with: string } | null {
   return ok(room) && ok(withId) ? { room, with: withId } : null;
 }
 
-/** A link that brings a friend into this match, on this player's team. */
-export function inviteUrl(roomId: string, sessionId: string): string {
+/** A link that brings a friend into this match, on this player's team (server-issued token). */
+export function inviteUrl(roomId: string, token: string): string {
   const url = new URL(location.href);
   url.searchParams.set('room', roomId);
-  url.searchParams.set('with', sessionId);
+  url.searchParams.set('with', token);
   return url.toString();
 }

@@ -55,6 +55,8 @@ export interface Hello {
   team: number;
   /** Map the server runs (id in packages/content maps); the client loads the same one. */
   mapId: string;
+  /** Party invite token for this seat (goes in the invite link; revoked when you leave). */
+  inviteToken: string;
 }
 
 export function encodeHello(msg: Hello): Uint8Array {
@@ -64,6 +66,7 @@ export function encodeHello(msg: Hello): Uint8Array {
     .u8(msg.playerId)
     .u8(msg.team)
     .string(msg.mapId)
+    .string(msg.inviteToken)
     .finish();
 }
 
@@ -75,6 +78,7 @@ export function decodeHello(bytes: Uint8Array): Hello {
     playerId: r.u8(),
     team: r.u8(),
     mapId: r.string(),
+    inviteToken: r.string(),
   };
 }
 
@@ -418,6 +422,8 @@ export function decodeSetLoadout(bytes: Uint8Array): SetLoadout {
 
 /** Longest chat line, in characters (the server trims, the client limits the input). */
 export const CHAT_MAX_CHARS = 120;
+/** Largest ChatSend accepted before decoding: flag + length + up to 4 UTF-8 bytes a char. */
+export const CHAT_SEND_MAX_BYTES = 3 + CHAT_MAX_CHARS * 4;
 
 export interface ChatSend {
   /** Only to your own team. */
@@ -456,7 +462,9 @@ export function encodeChat(m: ChatLine): Uint8Array {
 
 export function decodeChat(bytes: Uint8Array): ChatLine {
   const r = new BinaryReader(bytes);
-  return { from: r.u8(), team: r.u8() === 1, text: r.string() };
+  const line = { from: r.u8(), team: r.u8() === 1, text: r.string() };
+  if (r.remaining !== 0) throw new RangeError('trailing bytes in Chat');
+  return line;
 }
 
 // ---------------------------------------------------------------------------

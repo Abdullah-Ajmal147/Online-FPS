@@ -345,13 +345,13 @@ function Social() {
 
 function FriendByCode({ onAdd }: { onAdd: (code: string) => void }) {
   const [code, setCode] = useState('');
-  const valid = /^[0-9a-f]{10}$/.test(code);
+  const valid = /^[0-9a-f]{16}$/.test(code);
   return (
     <div class="invite-row">
       <input
         type="text"
         placeholder="Friend's player code"
-        maxLength={10}
+        maxLength={16}
         value={code}
         data-testid="friend-code"
         onInput={(e) => setCode((e.target as HTMLInputElement).value.trim().toLowerCase())}

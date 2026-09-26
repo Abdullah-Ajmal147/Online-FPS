@@ -64,7 +64,7 @@ export function friends(): string[] {
 }
 
 export function addFriend(code: string): void {
-  if (!/^[0-9a-f]{10}$/.test(code) || friends().includes(code)) return;
+  if (!/^[0-9a-f]{16}$/.test(code) || friends().includes(code)) return;
   save(FRIENDS, [...friends(), code].slice(0, 100));
 }
 

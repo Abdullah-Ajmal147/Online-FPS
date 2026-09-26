@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
 import { RateLimiter, resolveApiSecret, verifyGuestToken, publicCode } from '@sentinel/auth';
 import {
@@ -19,6 +20,7 @@ import {
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
   decodeInputCmd,
+  CHAT_SEND_MAX_BYTES,
   decodeChatSend,
   decodeSetLoadout,
   encodeChat,
@@ -41,6 +43,7 @@ import { FakeLag, presetFromEnv } from './fakeLag.ts';
 import { Match, type MatchSummary } from './match.ts';
 import { TeamDeathmatch } from './mode.ts';
 import { mapRotationFromEnv } from './mapRotation.ts';
+import { partyTeamFor } from './party.ts';
 import { sanitizeName } from './names.ts';
 import { isProtocolCompatible } from './protocol-check.ts';
 import { MatchSim } from './sim.ts';
@@ -70,6 +73,10 @@ interface Seat {
   guestId: string | null;
   /** The player's unlocks (refreshed at each new match). */
   access: Access;
+  /** Random party invite token (in Hello; friends join with it). */
+  inviteToken: string;
+  /** Chat rate-limit key: the guest profile, else the IP (a reconnect doesn't reset it). */
+  chatKey: string;
 }
 
 /**
@@ -184,7 +191,7 @@ export class MatchRoom extends Room {
       const now = performance.now();
       if (!seat || now - seat.lastLoadoutMs < MIN_LOADOUT_INTERVAL_MS) return;
       seat.lastLoadoutMs = now;
-      this.inbound(client, () => {
+      this.inboundReliable(client, () => {
         try {
           const msg = decodeSetLoadout(bytes);
           const known =
@@ -205,7 +212,13 @@ export class MatchRoom extends Room {
     this.onMessageBytes(MessageType.ChatSend, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
       if (!seat) return;
-      this.inbound(client, () => {
+      // Size and rate checks before any decoding (cheap rejection of floods).
+      if (bytes.length > CHAT_SEND_MAX_BYTES) {
+        if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+        return;
+      }
+      if (!chatLimit.take(seat.chatKey)) return;
+      this.inboundReliable(client, () => {
         let msg;
         try {
           msg = decodeChatSend(bytes);
@@ -213,7 +226,6 @@ export class MatchRoom extends Room {
           if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
           return;
         }
-        if (!chatLimit.take(client.sessionId)) return;
         const text = cleanChat(msg.text);
         const from = this.sim.players.get(seat.playerId);
         if (!text || !from) return;
@@ -248,7 +260,7 @@ export class MatchRoom extends Room {
     _client: Client,
     options: unknown,
     context: AuthContext,
-  ): Promise<{ guestId: string | null; access: Access }> {
+  ): Promise<{ guestId: string | null; access: Access; ip: string | null }> {
     if (!isProtocolCompatible(options)) {
       counters.rejectedJoins.inc();
       throw new ServerError(RELOAD_REQUIRED_CODE, RELOAD_REQUIRED);
@@ -260,7 +272,11 @@ export class MatchRoom extends Room {
     const token = (options as { token?: unknown }).token;
     const guestId = verifyGuestToken(token, API_SECRET);
     // Unlocks come from the API (server-reported progress), never from the client.
-    return { guestId, access: (await MatchRoom.fetchAccess(guestId)) ?? NEW_PLAYER };
+    return {
+      guestId,
+      access: (await MatchRoom.fetchAccess(guestId)) ?? NEW_PLAYER,
+      ip: context.ip ?? null,
+    };
   }
 
   override onJoin(
@@ -280,7 +296,8 @@ export class MatchRoom extends Room {
     const team =
       this.partyTeam(options?.with) ?? (this.bots ? this.bots.teamForHuman() : undefined);
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
-    const auth = client.auth as { guestId?: string | null; access?: Access } | undefined;
+    const auth = client.auth as
+      { guestId?: string | null; access?: Access; ip?: string | null } | undefined;
     const guestId = this.uniqueGuest(auth?.guestId ?? null);
     const access = auth?.access ?? NEW_PLAYER;
     const player = this.sim.addPlayer({
@@ -306,6 +323,8 @@ export class MatchRoom extends Room {
       lastLoadoutMs: -Infinity,
       guestId,
       access,
+      inviteToken: randomBytes(9).toString('base64url'),
+      chatKey: guestId ?? `ip:${auth?.ip ?? client.sessionId}`,
     });
     counters.joins.inc();
     log.info('player joined', {
@@ -323,21 +342,25 @@ export class MatchRoom extends Room {
         playerId: player.id,
         team: player.team,
         mapId: this.mapId,
+        inviteToken: this.seats.get(client.sessionId)?.inviteToken ?? '',
       }),
     );
     this.sendMatchInfo();
   }
 
-  /** The team of the player who shared an invite, if they're here and it has room for one more. */
-  private partyTeam(sessionId: unknown): number | undefined {
-    if (typeof sessionId !== 'string') return undefined;
-    const seat = this.seats.get(sessionId);
+  /**
+   * The team of the player whose invite token this is, if they're still here, their team has
+   * room, and joining keeps teams fair: a party may put its team at most MAX_PARTY_LEAD
+   * humans ahead of the other (so a leaked link can't stack one side).
+   */
+  private partyTeam(token: unknown): number | undefined {
+    if (typeof token !== 'string' || token.length > 32) return undefined;
+    const seat = [...this.seats.values()].find((s) => s.inviteToken === token);
     const host = seat && this.sim.players.get(seat.playerId);
     if (!host) return undefined;
-    const perTeam = modes['team-deathmatch']!.playersPerTeam;
-    let humans = 0;
-    for (const p of this.sim.players.values()) if (!p.bot && p.team === host.team) humans++;
-    return humans < perTeam ? host.team : undefined;
+    const humans: [number, number] = [0, 0];
+    for (const p of this.sim.players.values()) if (!p.bot) humans[p.team as 0 | 1]++;
+    return partyTeamFor(humans, host.team, modes['team-deathmatch']!.playersPerTeam);
   }
 
   /** Re-read every player's unlocks from the API (async; applies to later loadout changes). */
@@ -380,6 +403,7 @@ export class MatchRoom extends Room {
         playerId,
         team,
         mapId: this.mapId,
+        inviteToken: this.seats.get(client.sessionId)?.inviteToken ?? '',
       }),
     );
   }
@@ -505,6 +529,12 @@ export class MatchRoom extends Room {
   /** Fast-path message from a client, through fake lag when it's on. */
   private inbound(client: Client, handle: () => void): void {
     if (this.lag) this.lag.pass(`${client.sessionId}:in`, handle, true);
+    else handle();
+  }
+
+  /** Delayed by fake lag but never dropped (chat, loadouts: a real WebSocket never drops). */
+  private inboundReliable(client: Client, handle: () => void): void {
+    if (this.lag) this.lag.pass(`${client.sessionId}:in`, handle, false);
     else handle();
   }
 

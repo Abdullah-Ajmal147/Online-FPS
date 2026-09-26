@@ -29,6 +29,10 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
   await expect.poll(async () => (await match())?.phase, { timeout: 70_000 }).toBe('ended');
   const results = page.getByTestId('results');
   await expect(results).toBeVisible();
+  // Still on the first map while the results show (it rotates when they close).
+  const mapName = () =>
+    page.evaluate(async () => (await import('/src/store.ts')).getStatus().mapName);
+  expect(await mapName()).toBe('Relay Yard');
   await expect(results).toContainText(/Victory|Defeat|Draw/);
   const ended = await match();
   expect(ended!.players.reduce((n, p) => n + p.kills, 0)).toBeGreaterThan(0);
@@ -46,9 +50,6 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
   await expect(xp).toContainText('Total');
 
   // After the results, a new match starts on the next map in the rotation, and we can move.
-  const mapName = () =>
-    page.evaluate(async () => (await import('/src/store.ts')).getStatus().mapName);
-  expect(await mapName()).toBe('Relay Yard');
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).not.toBe('ended');
   await expect.poll(mapName, { timeout: 10_000 }).toBe('Saltline Depot');
   // Move once the new match is live (warm-up is short here, then the countdown freezes us).

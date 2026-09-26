@@ -56,12 +56,20 @@ export class Store {
         summary TEXT NOT NULL
       );
     `);
-    // Added later (Phase 6): the public player code. Existing databases get the column here.
-    const columns = this.db.prepare('PRAGMA table_info(profiles)').all() as { name: string }[];
-    if (!columns.some((c) => c.name === 'code')) {
-      this.db.exec('ALTER TABLE profiles ADD COLUMN code TEXT');
+    // Added later (Phase 6): the public player code. Existing databases get the column here,
+    // inside one write transaction (two processes starting at once can't both add it).
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const columns = this.db.prepare('PRAGMA table_info(profiles)').all() as { name: string }[];
+      if (!columns.some((c) => c.name === 'code')) {
+        this.db.exec('ALTER TABLE profiles ADD COLUMN code TEXT');
+      }
+      this.db.exec('DROP INDEX IF EXISTS profiles_code');
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
     }
-    this.db.exec('CREATE INDEX IF NOT EXISTS profiles_code ON profiles (code)');
   }
 
   /** Records a match once. Returns false if this match id was already recorded (replay). */
@@ -162,6 +170,27 @@ export class Store {
       .prepare('SELECT weapon_id, kills FROM weapon_kills WHERE guest_id = ?')
       .all(guestId) as { weapon_id: string; kills: number }[];
     return Object.fromEntries(rows.map((r) => [r.weapon_id, r.kills]));
+  }
+
+  /** Give every profile its current code (see createApp), then enforce uniqueness. */
+  backfillCodes(codeOf: (guestId: string) => string): void {
+    const rows = this.db.prepare('SELECT guest_id, code FROM profiles').all() as {
+      guest_id: string;
+      code: string | null;
+    }[];
+    const update = this.db.prepare('UPDATE profiles SET code = ? WHERE guest_id = ?');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const r of rows) {
+        const code = codeOf(r.guest_id);
+        if (r.code !== code) update.run(code, r.guest_id);
+      }
+      this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS profiles_code_unique ON profiles (code)');
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   /** Public lookup by player code: name, XP and when they last played (no guest id). */
