@@ -41,6 +41,7 @@ COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/scripts ./apps/api/scripts
 COPY --from=build /app/apps/client/dist ./apps/client/dist
 COPY --from=build /app/package.json ./package.json
 ENV SENTINEL_CLIENT_DIR=/app/apps/client/dist
