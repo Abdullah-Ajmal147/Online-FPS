@@ -19,6 +19,8 @@ export interface Profile {
   challenges: ChallengeView[];
   /** XP breakdown of the last counted match (results screen). */
   lastMatch: LastMatch | null;
+  /** Public player code (friends add each other with it). */
+  code: string;
 }
 
 export interface ChallengeView {

@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { MAX_PLAYERS_PER_MATCH, SNAPSHOT_RATE, type Vec3 } from '@sentinel/shared';
 import {
   NO_WEAPON,
+  decodeChat,
+  decodeChatSend,
+  encodeChat,
+  encodeChatSend,
   decodeSetLoadout,
   encodeSetLoadout,
   decodeEvents,
@@ -74,8 +78,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 9 (Phase 5: attachments and perks in loadouts)', () => {
-    expect(PROTOCOL_VERSION).toBe(9);
+  it('is 10 (Phase 6: chat, player codes)', () => {
+    expect(PROTOCOL_VERSION).toBe(10);
   });
 });
 
@@ -231,6 +235,22 @@ describe('SetLoadout', () => {
   });
 });
 
+describe('Chat', () => {
+  it('round-trips send and broadcast, including non-ASCII text', () => {
+    const send = { team: true, text: 'gg — nice shot 👍' };
+    expect(decodeChatSend(encodeChatSend(send))).toEqual(send);
+    const line = { from: 7, team: false, text: 'مرحبا' };
+    expect(decodeChat(encodeChat(line))).toEqual(line);
+  });
+
+  it('rejects trailing bytes in ChatSend', () => {
+    const bytes = encodeChatSend({ team: false, text: 'hi' });
+    const longer = new Uint8Array(bytes.length + 1);
+    longer.set(bytes);
+    expect(() => decodeChatSend(longer)).toThrow(RangeError);
+  });
+});
+
 describe('SnapshotAck and Ping', () => {
   it('round-trip', () => {
     expect(decodeSnapshotAck(encodeSnapshotAck(77))).toBe(77);
@@ -249,8 +269,8 @@ describe('MatchInfo', () => {
       winner: 255,
       mvp: 0,
       players: [
-        { id: 1, team: 0, bot: false, kills: 12, deaths: 4, name: 'Ayesha' },
-        { id: 2, team: 1, bot: true, kills: 9, deaths: 7, name: 'Bot Heron' },
+        { id: 1, team: 0, bot: false, kills: 12, deaths: 4, name: 'Ayesha', code: 'a1b2c3d4e5' },
+        { id: 2, team: 1, bot: true, kills: 9, deaths: 7, name: 'Bot Heron', code: '' },
       ],
     };
     expect(decodeMatchInfo(encodeMatchInfo(info))).toEqual(info);

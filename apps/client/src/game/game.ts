@@ -15,6 +15,7 @@ import {
   DRAW,
   MatchPhase,
   type GameEvent,
+  type ChatLine,
   type MatchInfo,
   type Snapshot,
 } from '@sentinel/protocol';
@@ -53,7 +54,8 @@ import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
 import { loadoutChoice, type GraphicsPreset, type Settings } from '../settings.ts';
 import { ensureGuest, refreshProfile } from '../profile.ts';
-import { setStatus, type CombatHud, type KillFeedEntry, getStatus } from '../store.ts';
+import { isMuted, rememberRecentPlayers } from '../social.ts';
+import { setStatus, type CombatHud, type KillFeedEntry, getStatus, chatBridge } from '../store.ts';
 import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
@@ -247,11 +249,32 @@ export async function startGame(
   let frozen = false;
   let lastPhase: number = MatchPhase.Warmup;
 
+  const codes = new Map<number, string>();
+  let chatKey = 0;
+  const onChat = (line: ChatLine) => {
+    const code = codes.get(line.from);
+    const muteKey = code ? code : `id:${line.from}`;
+    if (isMuted(muteKey)) return;
+    const entry = {
+      key: chatKey++,
+      name: nameOf(line.from),
+      team: line.from === myId ? myTeam() : (teamOf.get(line.from) ?? 0),
+      teamOnly: line.team,
+      text: line.text,
+      at: performance.now(),
+      muteKey,
+    };
+    setStatus({ chat: [...getStatus().chat.slice(-29), entry] });
+  };
+  chatBridge.send = (team, text) => conn.sendChat(team, text);
+  chatBridge.opened = () => input.releaseAll();
+
   const PHASES = ['warmup', 'countdown', 'live', 'ended'] as const;
   const onMatchInfo = (info: MatchInfo) => {
     for (const p of info.players) {
       names.set(p.id, p.name);
       teamOf.set(p.id, p.team);
+      codes.set(p.id, p.code);
     }
     const wasEnded = frozen && lastPhase === MatchPhase.Ended;
     frozen = info.phase === MatchPhase.Countdown || info.phase === MatchPhase.Ended;
@@ -262,6 +285,8 @@ export async function startGame(
     }
     // Match just ended: the server reports it to the API; show the new XP shortly after.
     if (info.phase === MatchPhase.Ended && lastPhase !== MatchPhase.Ended && !wasEnded) {
+      // Humans you just played with (the menu's "Recent players"; add them as friends there).
+      rememberRecentPlayers(info.players.filter((p) => !p.bot && p.id !== myId && p.code));
       // Twice: the report may still be on its way at the first try.
       setTimeout(() => void refreshProfile(), 1500);
       setTimeout(() => void refreshProfile(), 5000);
@@ -539,6 +564,7 @@ export async function startGame(
       onSnapshot,
       onEvents,
       onMatchInfo,
+      onChat,
       onDisconnect,
     },
     {

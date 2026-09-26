@@ -119,6 +119,7 @@ export class Match {
       kills: p.kills,
       deaths: p.deaths,
       name: p.name,
+      code: p.code,
     }));
     return {
       phase: this.phase,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useStatus } from './Hud.tsx';
-import { accessOf } from '../profile.ts';
+import { accessOf, apiUrl } from '../profile.ts';
+import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
 import { LoadoutPicker } from './Loadout.tsx';
 import {
   ACTIONS,
@@ -51,6 +52,7 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
         <ProfileCard />
         <Challenges />
         <Invite />
+        <Social />
         <button class="play" data-testid="play" onClick={onPlay}>
           Click to play
         </button>
@@ -249,6 +251,121 @@ function Invite() {
           {copied ? 'Copied' : 'Copy link'}
         </button>
       </div>
+    </div>
+  );
+}
+
+interface PlayerCard {
+  code: string;
+  name: string;
+  level: number;
+  lastPlayed: number;
+}
+
+/** Recent players (this browser) and friends (by player code, looked up in the API). */
+function Social() {
+  const [recent, setRecent] = useState(recentPlayers());
+  const [friendCodes, setFriendCodes] = useState(friends());
+  const [cards, setCards] = useState<Record<string, PlayerCard>>({});
+  const myCode = useStatus().profile?.code;
+
+  useEffect(() => {
+    setRecent(recentPlayers());
+    for (const code of friendCodes) {
+      if (cards[code]) continue;
+      void fetch(`${apiUrl()}/players/${code}`)
+        .then((r) => (r.ok ? (r.json() as Promise<PlayerCard>) : null))
+        .then((c) => c && setCards((all) => ({ ...all, [code]: c })))
+        .catch(() => undefined);
+    }
+  }, [friendCodes]);
+
+  const add = (code: string) => {
+    addFriend(code);
+    setFriendCodes(friends());
+  };
+  if (!recent.length && !friendCodes.length && !myCode) return null;
+  return (
+    <div class="social" data-testid="social">
+      {myCode && (
+        <p class="menu-hint">
+          Your player code: <b data-testid="my-code">{myCode}</b>
+        </p>
+      )}
+      {friendCodes.length > 0 && (
+        <>
+          <div class="challenges-h">Friends</div>
+          {friendCodes.map((code) => {
+            const c = cards[code];
+            return (
+              <div class="social-row" key={code} data-testid={`friend-${code}`}>
+                <span>
+                  {c ? `${c.name} · level ${c.level}` : code}
+                  {c && <small> · last played {new Date(c.lastPlayed).toLocaleDateString()}</small>}
+                </span>
+                <button
+                  class="link"
+                  onClick={() => {
+                    removeFriend(code);
+                    setFriendCodes(friends());
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            );
+          })}
+        </>
+      )}
+      {recent.length > 0 && (
+        <>
+          <div class="challenges-h">Recent players</div>
+          {recent.slice(0, 8).map((p) => (
+            <div class="social-row" key={p.code}>
+              <span>{p.name}</span>
+              {friendCodes.includes(p.code) ? (
+                <small>Friend</small>
+              ) : (
+                <button
+                  class="link"
+                  data-testid={`add-friend-${p.code}`}
+                  onClick={() => add(p.code)}
+                >
+                  Add friend
+                </button>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+      <FriendByCode onAdd={add} />
+    </div>
+  );
+}
+
+function FriendByCode({ onAdd }: { onAdd: (code: string) => void }) {
+  const [code, setCode] = useState('');
+  const valid = /^[0-9a-f]{10}$/.test(code);
+  return (
+    <div class="invite-row">
+      <input
+        type="text"
+        placeholder="Friend's player code"
+        maxLength={10}
+        value={code}
+        data-testid="friend-code"
+        onInput={(e) => setCode((e.target as HTMLInputElement).value.trim().toLowerCase())}
+      />
+      <button
+        class="key"
+        disabled={!valid}
+        onClick={() => {
+          onAdd(code);
+          setCode('');
+        }}
+      >
+        Add friend
+      </button>
     </div>
   );
 }

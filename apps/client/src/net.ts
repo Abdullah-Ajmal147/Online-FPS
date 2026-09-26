@@ -4,14 +4,17 @@ import {
   MessageType,
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
+  decodeChat,
   decodeEvents,
   decodeHello,
   decodeMatchInfo,
   decodePing,
   decodeSnapshot,
+  encodeChatSend,
   encodeInputCmd,
   encodePing,
   encodeSetLoadout,
+  type ChatLine,
   type GameEvent,
   type Hello,
   type MatchInfo,
@@ -41,6 +44,7 @@ export interface NetHandlers {
   onSnapshot(snapshot: Snapshot, arrivalMs: number): void;
   onEvents(events: GameEvent[]): void;
   onMatchInfo(info: MatchInfo): void;
+  onChat(line: ChatLine): void;
   onDisconnect(): void;
 }
 
@@ -113,6 +117,13 @@ export class Connection {
         }
       });
 
+      room.onMessage(MessageType.Chat, (payload: Uint8Array) => {
+        try {
+          handlers.onChat(decodeChat(payload));
+        } catch (err) {
+          console.warn('[net] dropped malformed chat:', err);
+        }
+      });
       room.onMessage(MessageType.MatchInfo, (payload: Uint8Array) => {
         try {
           handlers.onMatchInfo(decodeMatchInfo(payload));
@@ -154,6 +165,10 @@ export class Connection {
 
   sendInput(cmd: InputCmd): void {
     this.room?.sendBytes(MessageType.InputCmd, encodeInputCmd(cmd));
+  }
+
+  sendChat(team: boolean, text: string): void {
+    this.room?.sendBytes(MessageType.ChatSend, encodeChatSend({ team, text }));
   }
 
   /** Loadout for our next spawn (weapon catalog indices); the server validates it. */

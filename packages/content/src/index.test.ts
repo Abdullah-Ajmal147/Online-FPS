@@ -13,7 +13,9 @@ import {
   MAP_ROTATION,
   equipment,
   killSourceName,
+  CHAT_MAX_LENGTH,
   MAX_ATTACHMENTS,
+  cleanChat,
   activeChallenges,
   challengeData,
   challengeProgress,
@@ -516,5 +518,27 @@ describe('challenges (data)', () => {
     expect(challengeProgress(find('d-wins-2'), m)).toBe(1);
     expect(challengeProgress(find('d-matches-3'), m)).toBe(1);
     expect(challengeProgress(find('d-headshots-5'), m)).toBe(3);
+  });
+});
+
+describe('chat filter', () => {
+  it('hides blocked words, including common letter swaps and stretched spellings', () => {
+    expect(cleanChat('what the fuck')).toBe('what the ****');
+    expect(cleanChat('b1tch this sh1t')).toBe('***** this ****');
+    expect(cleanChat('fuuuuck')).toBe('*******');
+    expect(cleanChat('you ass')).toBe('you ***');
+    expect(cleanChat('shit, fuck!')).toBe('****, ****!');
+    expect(cleanChat('$hit')).toBe('****');
+  });
+
+  it('leaves innocent words alone', () => {
+    expect(cleanChat('nice class, the assassin passed')).toBe('nice class, the assassin passed');
+    expect(cleanChat('gg wp')).toBe('gg wp');
+  });
+
+  it('trims, collapses spaces, strips control characters, caps the length', () => {
+    expect(cleanChat('  hi \n\u0007 there  ')).toBe('hi there');
+    expect(cleanChat('   ')).toBe('');
+    expect([...cleanChat('a'.repeat(500))]).toHaveLength(CHAT_MAX_LENGTH);
   });
 });

@@ -56,6 +56,12 @@ export class Store {
         summary TEXT NOT NULL
       );
     `);
+    // Added later (Phase 6): the public player code. Existing databases get the column here.
+    const columns = this.db.prepare('PRAGMA table_info(profiles)').all() as { name: string }[];
+    if (!columns.some((c) => c.name === 'code')) {
+      this.db.exec('ALTER TABLE profiles ADD COLUMN code TEXT');
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS profiles_code ON profiles (code)');
   }
 
   /** Records a match once. Returns false if this match id was already recorded (replay). */
@@ -74,6 +80,7 @@ export class Store {
     guestId: string,
     name: string,
     r: {
+      code?: string;
       xp: number;
       win: boolean;
       kills: number;
@@ -90,10 +97,11 @@ export class Store {
     }
     this.db
       .prepare(
-        `INSERT INTO profiles (guest_id, name, xp, matches, wins, kills, deaths, updated_at)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+        `INSERT INTO profiles (guest_id, name, xp, matches, wins, kills, deaths, updated_at, code)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
          ON CONFLICT(guest_id) DO UPDATE SET
            name = excluded.name,
+           code = excluded.code,
            xp = xp + excluded.xp,
            matches = matches + 1,
            wins = wins + excluded.wins,
@@ -101,7 +109,7 @@ export class Store {
            deaths = deaths + excluded.deaths,
            updated_at = excluded.updated_at`,
       )
-      .run(guestId, name, r.xp, r.win ? 1 : 0, r.kills, r.deaths, Date.now());
+      .run(guestId, name, r.xp, r.win ? 1 : 0, r.kills, r.deaths, Date.now(), r.code ?? null);
   }
 
   /** Adds progress; true if this completed the challenge (only ever once per period). */
@@ -154,6 +162,14 @@ export class Store {
       .prepare('SELECT weapon_id, kills FROM weapon_kills WHERE guest_id = ?')
       .all(guestId) as { weapon_id: string; kills: number }[];
     return Object.fromEntries(rows.map((r) => [r.weapon_id, r.kills]));
+  }
+
+  /** Public lookup by player code: name, XP and when they last played (no guest id). */
+  byCode(code: string): { name: string; xp: number; updated_at: number } | null {
+    return (
+      (this.db.prepare('SELECT name, xp, updated_at FROM profiles WHERE code = ?').get(code) as
+        { name: string; xp: number; updated_at: number } | undefined) ?? null
+    );
   }
 
   profile(guestId: string): ProfileRow | null {

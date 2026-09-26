@@ -942,3 +942,73 @@ body.aim-enemy .crosshair-lines i {
   color: #8b949e;
   font-size: 12px;
 }
+
+.chat {
+  position: absolute;
+  z-index: 20; /* above the menu, so names can be clicked (mute) while it is open */
+  left: 16px;
+  bottom: 90px;
+  width: min(420px, calc(100% - 32px));
+  font-size: 13px;
+  pointer-events: auto;
+}
+
+.chat-line {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(13 17 23 / 55%);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.chat-team {
+  color: #8b949e;
+}
+
+.chat-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-name:disabled {
+  cursor: default;
+}
+
+.chat-name.team-0 {
+  color: #58a6ff;
+}
+
+.chat-name.team-1 {
+  color: #ff9a5c;
+}
+
+.chat-input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px 8px;
+  border: 1px solid #58a6ff;
+  border-radius: 6px;
+  background: rgb(13 17 23 / 90%);
+  color: #e6edf3;
+  font: inherit;
+}
+
+.social {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.social-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.social-row small {
+  color: #8b949e;
+}

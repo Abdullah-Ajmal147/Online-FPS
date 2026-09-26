@@ -34,6 +34,10 @@ export const MessageType = {
   MatchInfo: 8,
   /** Client → server: loadout for the next spawn (weapon catalog indices). Never dropped. */
   SetLoadout: 9,
+  /** Client → server: a chat line. */
+  ChatSend: 10,
+  /** Server → client: a chat line (filtered by the server). */
+  Chat: 11,
 } as const;
 
 export type { SequencedInput, OwnState };
@@ -409,6 +413,53 @@ export function decodeSetLoadout(bytes: Uint8Array): SetLoadout {
 }
 
 // ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+/** Longest chat line, in characters (the server trims, the client limits the input). */
+export const CHAT_MAX_CHARS = 120;
+
+export interface ChatSend {
+  /** Only to your own team. */
+  team: boolean;
+  text: string;
+}
+
+export function encodeChatSend(m: ChatSend): Uint8Array {
+  return new BinaryWriter(8 + m.text.length * 3)
+    .u8(m.team ? 1 : 0)
+    .string(m.text)
+    .finish();
+}
+
+export function decodeChatSend(bytes: Uint8Array): ChatSend {
+  const r = new BinaryReader(bytes);
+  const msg = { team: r.u8() === 1, text: r.string() };
+  if (r.remaining !== 0) throw new RangeError('trailing bytes in ChatSend');
+  return msg;
+}
+
+export interface ChatLine {
+  /** Entity id of the sender. */
+  from: number;
+  team: boolean;
+  text: string;
+}
+
+export function encodeChat(m: ChatLine): Uint8Array {
+  return new BinaryWriter(8 + m.text.length * 3)
+    .u8(m.from)
+    .u8(m.team ? 1 : 0)
+    .string(m.text)
+    .finish();
+}
+
+export function decodeChat(bytes: Uint8Array): ChatLine {
+  const r = new BinaryReader(bytes);
+  return { from: r.u8(), team: r.u8() === 1, text: r.string() };
+}
+
+// ---------------------------------------------------------------------------
 // Events (kills, hits, damage) — reliable, low rate
 // ---------------------------------------------------------------------------
 
@@ -548,6 +599,8 @@ export interface ScoreboardRow {
   kills: number;
   deaths: number;
   name: string;
+  /** Public player code ('' for bots and players without a verified guest profile). */
+  code: string;
 }
 
 export interface MatchInfo {
@@ -563,7 +616,7 @@ export interface MatchInfo {
 }
 
 export function encodeMatchInfo(m: MatchInfo): Uint8Array {
-  const w = new BinaryWriter(32 + m.players.length * 24);
+  const w = new BinaryWriter(32 + m.players.length * 36);
   w.u8(m.phase)
     .u16(Math.min(0xffff, Math.max(0, Math.ceil(m.secondsLeft))))
     .u16(m.scoreLimit);
@@ -574,7 +627,8 @@ export function encodeMatchInfo(m: MatchInfo): Uint8Array {
       .u8(p.bot ? 1 : 0)
       .u16(p.kills)
       .u16(p.deaths)
-      .string(p.name);
+      .string(p.name)
+      .string(p.code);
   }
   return w.finish();
 }
@@ -598,6 +652,7 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
       kills: r.u16(),
       deaths: r.u16(),
       name: r.string(),
+      code: r.string(),
     });
   }
   return {

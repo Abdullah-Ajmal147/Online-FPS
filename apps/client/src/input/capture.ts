@@ -117,7 +117,8 @@ export class InputCapture {
     }
   }
 
-  private releaseAll(): void {
+  /** Let go of every held key/button (focus lost, chat opened). */
+  releaseAll(): void {
     this.held.clear();
     this.sprintLatched = false;
     this.mouseButtons = 0;

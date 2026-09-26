@@ -32,6 +32,7 @@ import { weaponFiles } from './weapons/catalog.gen.ts';
 export * from './schemas.ts';
 export * from './progression.ts';
 export * from './challenges.ts';
+export * from './chatFilter.ts';
 
 /** All content is validated at load time; a bad file fails fast on both client and server. */
 export const modes: Record<string, Mode> = {

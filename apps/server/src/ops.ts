@@ -16,6 +16,7 @@ export const counters = {
     'sentinel_rejected_joins_total',
     'Joins refused (version or rate limit)',
   ),
+  chat: metrics.counter('sentinel_chat_lines_total', 'Chat lines sent (after filtering)'),
 };
 
 /** Live rooms register here so gauges can count players at scrape time. */

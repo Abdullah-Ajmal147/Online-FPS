@@ -20,6 +20,28 @@ export interface NetStats {
   remotePlayers: number;
 }
 
+export interface ChatEntry {
+  key: number;
+  name: string;
+  /** Sender's team (0/1), for the name colour. */
+  team: number;
+  /** Sent to the sender's team only. */
+  teamOnly: boolean;
+  text: string;
+  at: number;
+  /** What muting this sender stores: their player code, or `id:<n>` for this session only. */
+  muteKey: string;
+}
+
+/**
+ * The chat UI talks to the running game through this (main.ts wires it once the game starts).
+ */
+export const chatBridge: { send: (team: boolean, text: string) => void; opened: () => void } = {
+  send: () => undefined,
+  /** Called when the chat box opens: stop any held movement keys. */
+  opened: (): void => undefined,
+};
+
 export interface KillFeedEntry {
   key: number;
   killer: string;
@@ -93,6 +115,8 @@ export interface ClientStatus {
   xpBaseline: string | null;
   /** Party invite link for the current match (null until connected). */
   invite: string | null;
+  /** Recent chat lines, oldest first (muted players already left out). */
+  chat: ChatEntry[];
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -110,6 +134,7 @@ let status: ClientStatus = {
   profile: null,
   xpBaseline: null,
   invite: null,
+  chat: [],
 };
 const listeners = new Set<Listener>();
 

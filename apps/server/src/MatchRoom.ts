@@ -1,5 +1,5 @@
 import { Room, ServerError, type AuthContext, type Client } from '@colyseus/core';
-import { RateLimiter, resolveApiSecret, verifyGuestToken } from '@sentinel/auth';
+import { RateLimiter, resolveApiSecret, verifyGuestToken, publicCode } from '@sentinel/auth';
 import {
   defaultLoadout,
   maps,
@@ -8,6 +8,7 @@ import {
   NEW_PLAYER,
   attachmentCatalog,
   buildLoadout,
+  cleanChat,
   loadoutFromWire,
   perkCatalog,
   weaponCatalog,
@@ -18,7 +19,9 @@ import {
   PROTOCOL_VERSION,
   RELOAD_REQUIRED,
   decodeInputCmd,
+  decodeChatSend,
   decodeSetLoadout,
+  encodeChat,
   decodeSnapshotAck,
   encodeEvents,
   encodeHello,
@@ -74,6 +77,8 @@ interface Seat {
  * leaving room for many players behind one IP (schools, cafés, mobile carriers).
  */
 const joinLimit = new RateLimiter(20, 1);
+/** Chat per player: a burst of 4 lines, then one every 1.5 s. */
+const chatLimit = new RateLimiter(4, 1 / 1.5);
 const API_SECRET = resolveApiSecret(process.env);
 
 const envNumber = (name: string, fallback: number) => {
@@ -195,6 +200,33 @@ export class MatchRoom extends Room {
       });
     });
 
+    // Chat: rate-limited per player, cleaned and filtered here (never trusted from the client),
+    // then sent to everyone, or to the sender's team only.
+    this.onMessageBytes(MessageType.ChatSend, (client: Client, bytes: Uint8Array) => {
+      const seat = this.seats.get(client.sessionId);
+      if (!seat) return;
+      this.inbound(client, () => {
+        let msg;
+        try {
+          msg = decodeChatSend(bytes);
+        } catch {
+          if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+          return;
+        }
+        if (!chatLimit.take(client.sessionId)) return;
+        const text = cleanChat(msg.text);
+        const from = this.sim.players.get(seat.playerId);
+        if (!text || !from) return;
+        counters.chat.inc();
+        const line = encodeChat({ from: from.id, team: msg.team, text });
+        for (const c of this.clients) {
+          const s = this.seats.get(c.sessionId);
+          const to = s && this.sim.players.get(s.playerId);
+          if (to && (!msg.team || to.team === from.team)) this.reliable(c, MessageType.Chat, line);
+        }
+      });
+    });
+
     // Standalone ack (normally the ack rides on InputCmd).
     this.onMessageBytes(MessageType.SnapshotAck, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
@@ -254,6 +286,7 @@ export class MatchRoom extends Room {
     const player = this.sim.addPlayer({
       name: sanitizeName(options?.name),
       guestId,
+      code: guestId ? publicCode(API_SECRET, guestId) : '',
       ...(team === undefined ? {} : { team }),
       loadout: buildLoadout(
         {

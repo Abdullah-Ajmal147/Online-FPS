@@ -99,6 +99,8 @@ export interface SimPlayer {
   name: string;
   /** Guest profile id for progression (humans; validated by the room). */
   guestId: string | null;
+  /** Public player code shown to others (friends); '' for bots and anonymous players. */
+  code: string;
   /** Server bot: its input comes from `botInput` (set by the bot controller each tick). */
   bot: boolean;
   botInput: TickInput | null;
@@ -267,6 +269,7 @@ export class MatchSim {
       bot?: boolean;
       team?: number;
       guestId?: string | null;
+      code?: string;
       /** A built loadout, or just [primary, secondary] (no attachments or perks). */
       loadout?: Loadout | readonly [Weapon, Weapon];
     } = {},
@@ -283,6 +286,7 @@ export class MatchSim {
       team,
       name: opts.name ?? `Player ${id}`,
       guestId: opts.guestId ?? null,
+      code: opts.code ?? '',
       bot: opts.bot ?? false,
       botInput: null,
       ctx,

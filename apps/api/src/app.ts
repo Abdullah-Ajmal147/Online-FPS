@@ -1,4 +1,4 @@
-import { issueGuestToken, RateLimiter, verifyService } from '@sentinel/auth';
+import { issueGuestToken, publicCode, RateLimiter, verifyService } from '@sentinel/auth';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
@@ -156,6 +156,7 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
         levelAfter: levelFor(before + xp).level,
       });
       store.addResult(p.guestId, p.name, {
+        code: publicCode(secret, p.guestId),
         xp,
         win: parsed.winner === p.team,
         kills: p.kills,
@@ -197,6 +198,24 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
     });
   });
 
+  /** Friends: a player's public card by code (name, level, last played). */
+  app.get('/players/:code', (c) => {
+    if (!readLimit.take(ipOf(c))) {
+      counters.rateLimited.inc();
+      return c.json({ error: 'too many requests' }, 429);
+    }
+    const code = c.req.param('code');
+    if (!/^[0-9a-f]{10}$/.test(code)) return c.json({ error: 'bad code' }, 400);
+    const row = store.byCode(code);
+    if (!row) return c.json({ error: 'not found' }, 404);
+    return c.json({
+      code,
+      name: row.name,
+      level: levelFor(row.xp).level,
+      lastPlayed: row.updated_at,
+    });
+  });
+
   /** Public profile: level, XP and totals (defaults for a new guest). */
   app.get('/profiles/:guestId', (c) => {
     if (!readLimit.take(ipOf(c))) {
@@ -227,6 +246,7 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
         progress: Math.min(ch.target, store.challengeProgress(guestId, ch)),
       })),
       lastMatch: store.lastMatch(guestId),
+      code: publicCode(secret, guestId),
     });
   });
 

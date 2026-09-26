@@ -300,3 +300,35 @@ describe('service request hardening (review)', () => {
     expect(limited).toBe(true);
   });
 });
+
+describe('player codes (friends)', () => {
+  it('a player who has played can be looked up by code; nothing reveals the guest id', async () => {
+    const a = app();
+    await post(a, result('dddddddd-0000-4000-8000-000000000001'));
+    const me = (await (await a.request(`/profiles/${GUEST}`)).json()) as { code: string };
+    expect(me.code).toMatch(/^[0-9a-f]{10}$/);
+    const card = await a.request(`/players/${me.code}`);
+    expect(card.status).toBe(200);
+    const body = (await card.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ code: me.code, name: 'Ayesha', level: 2 });
+    expect(JSON.stringify(body)).not.toContain(GUEST);
+    expect((await a.request('/players/0000000000')).status).toBe(404);
+    expect((await a.request('/players/not-a-code')).status).toBe(400);
+  });
+
+  it('adds the code column to a database made before it existed', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const path = join(mkdtempSync(join(tmpdir(), 'sentinel-')), 'old.db');
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE profiles (guest_id TEXT PRIMARY KEY, name TEXT NOT NULL,
+      xp INTEGER NOT NULL DEFAULT 0, matches INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0, kills INTEGER NOT NULL DEFAULT 0,
+      deaths INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`);
+    old.close();
+    const a = createApp(new Store(path), SECRET);
+    expect((await post(a, result('dddddddd-0000-4000-8000-000000000002'))).status).toBe(200);
+  });
+});

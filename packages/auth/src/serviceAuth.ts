@@ -59,3 +59,11 @@ export function verifyService(
 export function resolveUnlockAll(env: Record<string, string | undefined>): boolean {
   return env.SENTINEL_UNLOCK_ALL === '1';
 }
+
+/**
+ * A player's public code (friends, recent players): derived from the guest id with the server
+ * secret, so it can be shown to other players without revealing the id itself.
+ */
+export function publicCode(secret: string, guestId: string): string {
+  return createHmac('sha256', secret).update(`code:v1:${guestId}`).digest('hex').slice(0, 10);
+}
