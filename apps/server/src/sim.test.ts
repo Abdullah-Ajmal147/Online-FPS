@@ -5,6 +5,7 @@ import {
   movement,
   KILL_SOURCE_FRAG,
   equipment,
+  buildLoadout,
   resolveLoadout,
   weaponIndex,
   weapons,
@@ -299,23 +300,62 @@ describe('MatchSim: loadouts', () => {
     const other = sim.addPlayer();
     expect(smg.ctx.loadout[0].def.id).toBe('vireo-smg');
     expect(smg.sim.weapon.ammo[0].ammo).toBe(weapons['vireo-smg']!.magazine);
-    expect(sim.snapshotFor(smg.id).own?.loadout).toEqual([
-      weaponIndex('vireo-smg'),
-      weaponIndex('wren-sp'),
-    ]);
+    expect(sim.snapshotFor(smg.id).own?.loadout).toEqual({
+      primary: weaponIndex('vireo-smg'),
+      secondary: weaponIndex('wren-sp'),
+      attachments: [],
+      perks: [],
+    });
     const seen = sim.snapshotFor(other.id).entities.find((e) => e.id === smg.id);
     expect(seen?.weapon).toBe(weaponIndex('vireo-smg'));
+  });
+
+  it('attachments and perks change the simulated weapon, and travel to the client', () => {
+    const sim = newSim(arena);
+    const p = sim.addPlayer({
+      loadout: buildLoadout({
+        primary: 'kestrel-ar',
+        attachments: ['extended-mag', 'fast-mag'], // second magazine attachment is dropped
+        perks: ['deep-pockets'],
+      }),
+    });
+    const mag = Math.round(weapons['kestrel-ar']!.magazine * 1.3);
+    expect(p.sim.weapon.ammo[0].ammo).toBe(mag);
+    expect(p.ctx.loadout[0].def.magazine).toBe(mag);
+    const own = sim.snapshotFor(p.id).own!;
+    expect(own.loadout.attachments).toHaveLength(1);
+    expect(own.loadout.perks).toHaveLength(1);
+  });
+
+  it('Flak Vest: a frag at your feet no longer kills from full health', () => {
+    const blast = (perks: string[]) => {
+      const sim = newSim(arena);
+      const owner = sim.addPlayer({ team: 0 });
+      const victim = sim.addPlayer({ team: 1, loadout: buildLoadout({ perks }) });
+      place(owner, [20, 0, 20]);
+      place(victim, [0, 0, 0]);
+      const g = sim.grenades.throw(equipment.frag, owner.id, [0, 1, 0], [0, -1, 0], [0, 0, 0])!;
+      g.velocity = [0, 0, 0];
+      g.position = [0, 0.1, 0.5];
+      g.fuseTicks = 1;
+      sim.step();
+      return victim;
+    };
+    expect(blast([]).alive).toBe(false);
+    const vested = blast(['flak-vest']);
+    expect(vested.alive).toBe(true);
+    expect(vested.health).toBeLessThan(MAX_HEALTH);
   });
 
   it('a new loadout applies only at the next spawn, never mid-life', () => {
     const sim = newSim(arena);
     const p = sim.addPlayer();
-    sim.setLoadout(p.id, resolveLoadout('halberd-mr', 'wren-sp'));
+    sim.setLoadout(p.id, buildLoadout({ primary: 'halberd-mr' }));
     sim.step();
     expect(p.ctx.loadout[0].def.id).toBe('kestrel-ar');
     sim.respawnAll();
     expect(p.ctx.loadout[0].def.id).toBe('halberd-mr');
-    expect(p.loadout[0]).toBe(weaponIndex('halberd-mr'));
+    expect(p.loadout.choice.primary).toBe('halberd-mr');
     expect(p.sim.weapon.ammo[0].ammo).toBe(weapons['halberd-mr']!.magazine);
   });
 

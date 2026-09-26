@@ -113,11 +113,15 @@ test('two players in two tabs see each other move', async ({ browser }) => {
 });
 
 test('the loadout saved in settings is the one the server spawns you with', async ({ page }) => {
+  test.setTimeout(60_000);
   // A player who picked the shotgun last time (settings live in localStorage). One page only:
   // closing a WebGL tab and opening another makes headless Chrome refuse the new context.
   await page.addInitScript(() => {
     if (!localStorage.getItem('sentinel.settings.v1')) {
-      localStorage.setItem('sentinel.settings.v1', JSON.stringify({ primary: 'thresher-12' }));
+      localStorage.setItem(
+        'sentinel.settings.v1',
+        JSON.stringify({ primary: 'thresher-12', attachments: ['extended-mag'] }),
+      );
     }
   });
   const weapon = () =>
@@ -125,11 +129,22 @@ test('the loadout saved in settings is the one the server spawns you with', asyn
   await page.goto('/');
   await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
   await expect.poll(weapon, { timeout: 15_000 }).toBe('Thresher 12');
+  // The extended magazine (6 × 1.3 → 8 shells) is simulated by the server and predicted here.
+  const ammo = () =>
+    page.evaluate(async () => (await import('/src/store.ts')).getStatus().combat?.ammo);
+  await expect.poll(ammo).toBe(8);
   await expect(page.getByTestId('weapon-thresher-12')).toHaveAttribute('aria-pressed', 'true');
 
   // Picking another weapon saves it for next time (and tells the server for the next spawn).
   await page.getByTestId('weapon-vireo-smg').click();
   await expect(page.getByTestId('weapon-vireo-smg')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByTestId('attachment-vertical-grip').click();
+  await page.getByTestId('perk-quick-hands').click();
+  await expect(page.getByTestId('perk-quick-hands')).toHaveAttribute('aria-pressed', 'true');
   const saved = await page.evaluate(() => localStorage.getItem('sentinel.settings.v1'));
-  expect(JSON.parse(saved!)).toMatchObject({ primary: 'vireo-smg' });
+  expect(JSON.parse(saved!)).toMatchObject({
+    primary: 'vireo-smg',
+    attachments: ['extended-mag', 'vertical-grip'],
+    perks: ['quick-hands'],
+  });
 });

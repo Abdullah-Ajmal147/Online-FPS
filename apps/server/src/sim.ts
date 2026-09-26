@@ -1,8 +1,13 @@
 import {
   KILL_SOURCE_FRAG,
+  buildLoadout,
+  defaultBuiltLoadout,
   equipment,
+  loadoutToWire,
+  weapons,
   weaponIndex,
   type GameMap,
+  type Loadout,
   type Movement,
   type Weapon,
 } from '@sentinel/content';
@@ -95,11 +100,11 @@ export interface SimPlayer {
   /** Server bot: its input comes from `botInput` (set by the bot controller each tick). */
   bot: boolean;
   botInput: TickInput | null;
-  /** This player's loadout (compiled weapons) and its catalog indices for the wire. */
+  /** This player's loadout: compiled weapons (ctx) and the validated choice (for the wire). */
   ctx: SimContext;
-  loadout: [number, number];
+  loadout: Loadout;
   /** Chosen in the menu mid-match: applied at the next spawn, never mid-life. */
-  pendingLoadout: readonly [Weapon, Weapon] | null;
+  pendingLoadout: Loadout | null;
   /** Tick this player joined (time played in a match counts from here). */
   joinedAtTick: number;
   /** Damage is ignored before this tick (spawn protection). */
@@ -214,21 +219,24 @@ export class MatchSim {
 
   /** Compiled weapons are shared between players (compiled once per weapon). */
   private spec(w: Weapon): WeaponSpec {
+    // Weapons changed by attachments/perks are compiled per loadout (cheap, only at spawn).
+    if (weapons[w.id] !== w) return compileWeapon(w);
     let s = this.specs.get(w.id);
     if (!s) this.specs.set(w.id, (s = compileWeapon(w)));
     return s;
   }
 
-  private contextFor(loadout: readonly [Weapon, Weapon]): SimContext {
-    return { movement: this.ctx.movement, loadout: [this.spec(loadout[0]), this.spec(loadout[1])] };
+  private contextFor(loadout: Loadout): SimContext {
+    const [a, b] = loadout.weapons;
+    return { movement: this.ctx.movement, loadout: [this.spec(a), this.spec(b)] };
   }
 
   /**
-   * Choose a loadout (already validated with resolveLoadout). It takes effect at the player's
+   * Choose a loadout (already validated with buildLoadout). It takes effect at the player's
    * next spawn, so a weapon can't be swapped mid-fight and the client's prediction only ever
    * changes loadout together with a respawn reset.
    */
-  setLoadout(id: number, loadout: readonly [Weapon, Weapon]): void {
+  setLoadout(id: number, loadout: Loadout): void {
     const p = this.players.get(id);
     if (p) p.pendingLoadout = loadout;
   }
@@ -250,7 +258,8 @@ export class MatchSim {
       bot?: boolean;
       team?: number;
       guestId?: string | null;
-      loadout?: readonly [Weapon, Weapon];
+      /** A built loadout, or just [primary, secondary] (no attachments or perks). */
+      loadout?: Loadout | readonly [Weapon, Weapon];
     } = {},
   ): SimPlayer {
     if (this.isFull) throw new Error('match is full');
@@ -258,7 +267,8 @@ export class MatchSim {
     while (this.players.has(id)) id++;
     const [a, b] = this.teamCounts();
     const team = opts.team ?? (a <= b ? 0 : 1);
-    const ctx = opts.loadout ? this.contextFor(opts.loadout) : this.ctx;
+    const loadout = asLoadout(opts.loadout);
+    const ctx = this.contextFor(loadout);
     const player: SimPlayer = {
       id,
       team,
@@ -267,7 +277,7 @@ export class MatchSim {
       bot: opts.bot ?? false,
       botInput: null,
       ctx,
-      loadout: [weaponIndex(ctx.loadout[0].def.id), weaponIndex(ctx.loadout[1].def.id)],
+      loadout,
       pendingLoadout: null,
       protectedUntil: this.tick + SPAWN_PROTECTION_TICKS,
       joinedAtTick: this.tick,
@@ -362,7 +372,7 @@ export class MatchSim {
         position: m.position,
         yaw: m.yaw,
         pitch: m.pitch,
-        weapon: p.loadout[p.sim.weapon.slot],
+        weapon: weaponIndex(p.ctx.loadout[p.sim.weapon.slot].def.id),
         shotCount: p.shotCount,
       });
     }
@@ -385,7 +395,7 @@ export class MatchSim {
               },
               weapon: me.sim.weapon,
             },
-            loadout: me.loadout,
+            loadout: loadoutToWire(me.loadout),
             health: me.health,
             lifeId: me.lifeId,
             respawnTicks: me.respawnTicks,
@@ -474,7 +484,7 @@ export class MatchSim {
       // pellet in the head is not a headshot).
       const zone: HitZone =
         z.head >= z.torso && z.head >= z.limbs ? 'head' : z.torso >= z.limbs ? 'torso' : 'limbs';
-      this.damage(victim, shooter, z.head + z.torso + z.limbs, zone, shooter.loadout[shot.slot]);
+      this.damage(victim, shooter, z.head + z.torso + z.limbs, zone, weaponIndex(weapon.id));
     }
   }
 
@@ -565,7 +575,7 @@ export class MatchSim {
   private respawn(p: SimPlayer): void {
     if (p.pendingLoadout) {
       p.ctx = this.contextFor(p.pendingLoadout);
-      p.loadout = [weaponIndex(p.pendingLoadout[0].id), weaponIndex(p.pendingLoadout[1].id)];
+      p.loadout = p.pendingLoadout;
       p.pendingLoadout = null;
     }
     p.sim = this.freshSim(p.team, p.ctx);
@@ -689,6 +699,7 @@ export class MatchSim {
       const t = Math.max(0, (dist - blast.innerRadius) / (blast.outerRadius - blast.innerRadius));
       let dmg = blast.maxDamage + (blast.minDamage - blast.maxDamage) * Math.min(1, t);
       if (self) dmg *= blast.selfMultiplier;
+      for (const perk of p.loadout.perks) dmg *= perk.explosiveDamageTaken; // Flak Vest
       const amount = Math.round(dmg);
       if (amount > 0) this.damage(p, owner, amount, 'torso', KILL_SOURCE_FRAG, d.position);
     }
@@ -797,4 +808,10 @@ export class MatchSim {
     }
     return createPlayerState(best.position, yawFromDegrees(best.yawDeg));
   }
+}
+
+function asLoadout(l: Loadout | readonly [Weapon, Weapon] | undefined): Loadout {
+  if (!l) return defaultBuiltLoadout;
+  if ('weapons' in l) return l;
+  return buildLoadout({ primary: l[0].id, secondary: l[1].id });
 }

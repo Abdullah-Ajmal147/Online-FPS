@@ -138,10 +138,10 @@ export function decodeInputCmd(bytes: Uint8Array): InputCmd {
 export interface OwnSnapshot {
   sim: OwnState;
   /**
-   * The loadout the server simulates us with, as weapon catalog indices [primary, secondary].
-   * The client predicts with exactly this; it changes only when we (re)spawn.
+   * The loadout the server simulates us with (catalog indices). The client builds the same
+   * weapons from it and predicts with exactly those; it changes only when we (re)spawn.
    */
-  loadout: [number, number];
+  loadout: LoadoutWire;
   health: number;
   /** Increments each time we (re)spawn; a change means "reset prediction to this state". */
   lifeId: number;
@@ -217,7 +217,7 @@ function writeOwn(w: BinaryWriter, own: OwnSnapshot): void {
   w.u8((m.grounded ? OWN_GROUNDED : 0) | (m.crouching ? OWN_CROUCHING : 0));
   w.u16(m.prevButtons);
   writeWeapon(w, own.sim.weapon);
-  w.u8(own.loadout[0]).u8(own.loadout[1]);
+  writeLoadout(w, own.loadout);
   w.u8(own.health)
     .u8(own.lifeId & 0xff)
     .u8(own.respawnTicks)
@@ -233,7 +233,7 @@ function readOwn(r: BinaryReader): OwnSnapshot {
   const flags = r.u8();
   const prevButtons = r.u16();
   const weapon = readWeapon(r);
-  const loadout: [number, number] = [r.u8(), r.u8()];
+  const loadout = readLoadout(r);
   return {
     loadout,
     sim: {
@@ -260,7 +260,7 @@ const clampI16 = (v: number) => Math.max(-0x8000, Math.min(0x7fff, v));
 
 /**
  * Layout: serverTick u32, lastProcessedSeq u32, inputQueueDepth u8, serverTickMicros u16,
- * hasOwn u8, [own: move 29 + weapon 18 + loadout 2 + health/lifeId/respawn 3 + grenades 2 = 54 bytes], entityCount u8,
+ * hasOwn u8, [own: move 29 + weapon 18 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 54 bytes], entityCount u8,
  * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, weapon, shots).
  * then projectileCount u8, projectiles × 8 bytes (id, kind|cloud, x/y/z i16).
  * Full snapshots, no delta compression (ADR 0004); 12 players stay under 10 KB/s.
@@ -355,18 +355,55 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
 // SetLoadout
 // ---------------------------------------------------------------------------
 
-export interface SetLoadout {
+/**
+ * A loadout as catalog indices (@sentinel/content: weaponCatalog, attachmentCatalog,
+ * perkCatalog). Layout: primary u8, secondary u8, n u8 + n attachments, m u8 + m perks.
+ */
+export interface LoadoutWire {
   primary: number;
   secondary: number;
+  attachments: number[];
+  perks: number[];
 }
 
+/** At most this many attachments / perks on the wire (content allows 3 of each). */
+export const MAX_LOADOUT_LIST = 3;
+
+function writeLoadout(w: BinaryWriter, l: LoadoutWire): void {
+  w.u8(l.primary).u8(l.secondary);
+  for (const list of [l.attachments, l.perks]) {
+    if (list.length > MAX_LOADOUT_LIST) throw new RangeError('loadout list too long');
+    w.u8(list.length);
+    for (const i of list) w.u8(i);
+  }
+}
+
+function readLoadout(r: BinaryReader): LoadoutWire {
+  const primary = r.u8();
+  const secondary = r.u8();
+  const lists: number[][] = [];
+  for (let k = 0; k < 2; k++) {
+    const n = r.u8();
+    if (n > MAX_LOADOUT_LIST) throw new RangeError('loadout list too long');
+    const list: number[] = [];
+    for (let i = 0; i < n; i++) list.push(r.u8());
+    lists.push(list);
+  }
+  return { primary, secondary, attachments: lists[0]!, perks: lists[1]! };
+}
+
+/** Client → server: the loadout for our next spawn. */
+export type SetLoadout = LoadoutWire;
+
 export function encodeSetLoadout(msg: SetLoadout): Uint8Array {
-  return new BinaryWriter(2).u8(msg.primary).u8(msg.secondary).finish();
+  const w = new BinaryWriter(10);
+  writeLoadout(w, msg);
+  return w.finish();
 }
 
 export function decodeSetLoadout(bytes: Uint8Array): SetLoadout {
   const r = new BinaryReader(bytes);
-  const msg = { primary: r.u8(), secondary: r.u8() };
+  const msg = readLoadout(r);
   if (r.remaining !== 0) throw new RangeError('trailing bytes in SetLoadout');
   return msg;
 }

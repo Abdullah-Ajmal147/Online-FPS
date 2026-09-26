@@ -28,6 +28,8 @@ export interface Difficulty {
   fireToleranceDeg: number;
   /** Frags per 5 s of mid-range fighting, on average (0 = never throws). */
   fragRate: number;
+  /** Primary weapons handed out to bots, cycled per team. */
+  primaries: readonly string[];
 }
 
 /**
@@ -44,6 +46,7 @@ export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
     recoilControl: 0.2,
     fireToleranceDeg: 4,
     fragRate: 0,
+    primaries: ['kestrel-ar'], // forgiving for new players
   },
   normal: {
     reactionMs: 480,
@@ -53,6 +56,7 @@ export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
     recoilControl: 0.4,
     fireToleranceDeg: 3,
     fragRate: 1,
+    primaries: ['kestrel-ar', 'vireo-smg', 'kestrel-ar', 'halberd-mr'],
   },
   hard: {
     reactionMs: 240,
@@ -62,6 +66,7 @@ export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
     recoilControl: 0.85,
     fireToleranceDeg: 1.5,
     fragRate: 1.5,
+    primaries: ['kestrel-ar', 'vireo-smg', 'halberd-mr', 'vireo-smg'],
   },
 };
 

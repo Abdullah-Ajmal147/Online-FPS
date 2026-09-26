@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CONTENT_HASH } from '@sentinel/content';
+import { CONTENT_HASH, type LoadoutChoice, type LoadoutWire } from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
@@ -54,17 +54,16 @@ export class Connection {
 
   async connect(
     handlers: NetHandlers,
-    join: { name: string; token: string | null; primary: string; secondary: string },
+    join: { name: string; token: string | null; loadout: LoadoutChoice },
   ): Promise<void> {
-    const { name, token, primary, secondary } = join;
+    const { name, token, loadout } = join;
     const client = new Client(serverUrl());
     try {
       const room = await client.joinOrCreate('match', {
         protocolVersion: PROTOCOL_VERSION,
         contentHash: CONTENT_HASH,
         name,
-        primary,
-        secondary,
+        ...loadout,
         ...(token ? { token } : {}),
       });
       this.room = room;
@@ -145,7 +144,7 @@ export class Connection {
   }
 
   /** Loadout for our next spawn (weapon catalog indices); the server validates it. */
-  sendLoadout(primary: number, secondary: number): void {
-    this.room?.sendBytes(MessageType.SetLoadout, encodeSetLoadout({ primary, secondary }));
+  sendLoadout(loadout: LoadoutWire): void {
+    this.room?.sendBytes(MessageType.SetLoadout, encodeSetLoadout(loadout));
   }
 }

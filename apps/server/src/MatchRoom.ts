@@ -5,7 +5,10 @@ import {
   maps,
   modes,
   movement,
-  resolveLoadout,
+  attachmentCatalog,
+  buildLoadout,
+  loadoutFromWire,
+  perkCatalog,
   weaponCatalog,
 } from '@sentinel/content';
 import {
@@ -161,7 +164,7 @@ export class MatchRoom extends Room {
     });
 
     // Loadout for the next spawn. Untrusted: indices must name a weapon (else it counts as a bad
-    // message), resolveLoadout drops wrong-slot weapons, and it only ever applies at a respawn.
+    // message), buildLoadout drops misfitting picks, and it only ever applies at a respawn.
     // At most a few changes per second; extra ones are ignored.
     this.onMessageBytes(MessageType.SetLoadout, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
@@ -171,10 +174,13 @@ export class MatchRoom extends Room {
       this.inbound(client, () => {
         try {
           const msg = decodeSetLoadout(bytes);
-          const primary = weaponCatalog[msg.primary];
-          const secondary = weaponCatalog[msg.secondary];
-          if (!primary || !secondary) throw new RangeError('unknown weapon index');
-          this.sim.setLoadout(seat.playerId, resolveLoadout(primary.id, secondary.id));
+          const known =
+            weaponCatalog[msg.primary] &&
+            weaponCatalog[msg.secondary] &&
+            msg.attachments.every((i) => attachmentCatalog[i]) &&
+            msg.perks.every((i) => perkCatalog[i]);
+          if (!known) throw new RangeError('unknown catalog index');
+          this.sim.setLoadout(seat.playerId, loadoutFromWire(msg));
         } catch {
           if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
         }
@@ -217,7 +223,13 @@ export class MatchRoom extends Room {
 
   override onJoin(
     client: Client,
-    options?: { name?: unknown; primary?: unknown; secondary?: unknown },
+    options?: {
+      name?: unknown;
+      primary?: unknown;
+      secondary?: unknown;
+      attachments?: unknown;
+      perks?: unknown;
+    },
   ): void {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
     const team = this.bots ? this.bots.teamForHuman() : undefined;
@@ -228,7 +240,12 @@ export class MatchRoom extends Room {
         (client.auth as { guestId?: string | null } | undefined)?.guestId ?? null,
       ),
       ...(team === undefined ? {} : { team }),
-      loadout: resolveLoadout(options?.primary, options?.secondary),
+      loadout: buildLoadout({
+        primary: options?.primary,
+        secondary: options?.secondary,
+        attachments: options?.attachments,
+        perks: options?.perks,
+      }),
     });
     this.seats.set(client.sessionId, {
       playerId: player.id,

@@ -47,6 +47,8 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
   expect(await mapName()).toBe('Relay Yard');
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).not.toBe('ended');
   await expect.poll(mapName, { timeout: 10_000 }).toBe('Saltline Depot');
+  // Move once the new match is live (warm-up is short here, then the countdown freezes us).
+  await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).toBe('live');
   const pos = () =>
     page.evaluate(async () => (await import('/src/store.ts')).getStatus().player!.position);
   const before = await pos();

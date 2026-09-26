@@ -5,7 +5,9 @@ import {
   maps,
   movement,
   weaponCatalog,
-  weaponIndex,
+  buildLoadout,
+  loadoutFromWire,
+  loadoutToWire,
   type GameMap,
   type Weapon,
 } from '@sentinel/content';
@@ -49,7 +51,7 @@ import { buildMapMeshes } from '../map.ts';
 import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
-import type { GraphicsPreset, Settings } from '../settings.ts';
+import { loadoutChoice, type GraphicsPreset, type Settings } from '../settings.ts';
 import { ensureGuest, refreshProfile } from '../profile.ts';
 import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
 import { Effects } from './effects.ts';
@@ -146,9 +148,9 @@ export async function startGame(
   let awaitingSpawn = false;
   let moveCtx!: MovementContext;
   let simCtx!: SimContext;
-  /** Our loadout as the server confirmed it (catalog indices); predicted with exactly this. */
+  /** Our loadout as the server confirmed it; we predict with exactly these weapons. */
   let loadout: readonly [Weapon, Weapon] = defaultLoadout;
-  let loadoutIdx: readonly number[] = [];
+  let loadoutKey = '';
   let predictor!: Predictor; // all assigned by loadMap() right below
   const effects = new Effects(scene);
   const grenadeView = new GrenadeView(scene);
@@ -361,17 +363,14 @@ export async function startGame(
         lifeId = own.lifeId;
         awaitingSpawn = false;
         const look = predictor.state.move;
-        const [pi, si] = own.loadout;
         let ctx: SimContext | undefined;
-        if (pi !== loadoutIdx[0] || si !== loadoutIdx[1]) {
-          const pw = weaponCatalog[pi];
-          const sw = weaponCatalog[si];
-          if (pw && sw) {
-            loadout = [pw, sw];
-            loadoutIdx = [pi, si];
-            ctx = simCtx = createSimContext(moveCtx, loadout);
-            viewmodel.setLoadout(pw, sw);
-          }
+        const key = JSON.stringify(own.loadout);
+        if (key !== loadoutKey) {
+          // Same content build as the server (content hash), so this is exactly its weapons.
+          loadoutKey = key;
+          loadout = loadoutFromWire(own.loadout).weapons;
+          ctx = simCtx = createSimContext(moveCtx, loadout);
+          viewmodel.setLoadout(loadout[0], loadout[1]);
         }
         predictor.reset(
           { move: { ...own.sim.move, yaw: look.yaw, pitch: look.pitch }, weapon: own.sim.weapon },
@@ -540,18 +539,17 @@ export async function startGame(
     {
       name: settings().name,
       token: guest?.token ?? null,
-      primary: settings().primary,
-      secondary: settings().secondary,
+      loadout: loadoutChoice(settings()),
     },
   );
-  let sentLoadout = `${settings().primary}|${settings().secondary}`;
+  let sentLoadout = JSON.stringify(loadoutChoice(settings()));
   /** Menu changed the loadout mid-match: tell the server (applies at our next spawn). */
   function syncLoadout(): void {
-    const { primary, secondary } = settings();
-    const key = `${primary}|${secondary}`;
+    const choice = loadoutChoice(settings());
+    const key = JSON.stringify(choice);
     if (key === sentLoadout || !conn.connected) return;
     sentLoadout = key;
-    conn.sendLoadout(weaponIndex(primary), weaponIndex(secondary));
+    conn.sendLoadout(loadoutToWire(buildLoadout(choice)));
   }
 
   // --- Shots ---

@@ -7,6 +7,7 @@ import {
   DEFAULT_SETTINGS,
   LIMITS,
   keyLabel,
+  loadoutChoice,
   rebind,
   type Action,
   type Settings,
@@ -54,9 +55,8 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
 
         <h2>Loadout</h2>
         <LoadoutPicker
-          primary={settings.primary}
-          secondary={settings.secondary}
-          onChange={(primary, secondary) => onSettings({ ...settings, primary, secondary })}
+          choice={loadoutChoice(settings)}
+          onChange={(choice) => onSettings({ ...settings, ...choice })}
         />
 
         <label class="row">

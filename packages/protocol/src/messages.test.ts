@@ -52,7 +52,7 @@ const own: OwnSnapshot = {
       bloom: 400,
     },
   },
-  loadout: [3, 4],
+  loadout: { primary: 3, secondary: 4, attachments: [0, 5, 9], perks: [2] },
   health: 64,
   lifeId: 3,
   respawnTicks: 0,
@@ -74,8 +74,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 8 (Phase 5: Hello again on map rotation)', () => {
-    expect(PROTOCOL_VERSION).toBe(8);
+  it('is 9 (Phase 5: attachments and perks in loadouts)', () => {
+    expect(PROTOCOL_VERSION).toBe(9);
   });
 });
 
@@ -213,14 +213,21 @@ describe('Events', () => {
 
 describe('SetLoadout', () => {
   it('round-trips weapon indices', () => {
-    expect(decodeSetLoadout(encodeSetLoadout({ primary: 3, secondary: 4 }))).toEqual({
-      primary: 3,
-      secondary: 4,
-    });
+    const msg = { primary: 3, secondary: 4, attachments: [1, 7], perks: [0, 2, 4] };
+    expect(decodeSetLoadout(encodeSetLoadout(msg))).toEqual(msg);
+    const empty = { primary: 0, secondary: 1, attachments: [], perks: [] };
+    expect(decodeSetLoadout(encodeSetLoadout(empty))).toEqual(empty);
   });
 
   it('rejects trailing bytes', () => {
-    expect(() => decodeSetLoadout(new Uint8Array([1, 2, 3]))).toThrow(RangeError);
+    expect(() => decodeSetLoadout(new Uint8Array([1, 2, 0, 0, 9]))).toThrow(RangeError);
+  });
+
+  it('rejects over-long attachment or perk lists', () => {
+    expect(() => decodeSetLoadout(new Uint8Array([1, 2, 4, 0, 1, 2, 3, 0]))).toThrow(RangeError);
+    expect(() =>
+      encodeSetLoadout({ primary: 0, secondary: 1, attachments: [], perks: [0, 1, 2, 3] }),
+    ).toThrow(RangeError);
   });
 });
 

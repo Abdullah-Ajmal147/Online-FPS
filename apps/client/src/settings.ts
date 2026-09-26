@@ -1,4 +1,4 @@
-import { resolveLoadout } from '@sentinel/content';
+import { buildLoadout, type LoadoutChoice } from '@sentinel/content';
 
 /** Player settings. Stored per browser (a convenience, not game state). */
 
@@ -54,6 +54,9 @@ export interface Settings {
   /** Loadout weapon ids (applied at the next spawn). */
   primary: string;
   secondary: string;
+  /** Primary weapon attachments and perks (ids; validated by buildLoadout). */
+  attachments: string[];
+  perks: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -66,6 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   renderScale: 1,
   primary: 'kestrel-ar',
   secondary: 'wren-sp',
+  attachments: [],
+  perks: [],
   // Crouch is C, not Ctrl: Ctrl+W closes the browser tab.
   bindings: {
     forward: 'KeyW',
@@ -106,7 +111,7 @@ export function normalizeSettings(raw: unknown): Settings {
     }
   }
   const { sensitivity, fov } = LIMITS;
-  const [primary, secondary] = resolveLoadout(r.primary, r.secondary);
+  const { choice } = buildLoadout(r);
   return {
     graphics: GRAPHICS_PRESETS.includes(r.graphics as GraphicsPreset)
       ? (r.graphics as GraphicsPreset)
@@ -117,8 +122,7 @@ export function normalizeSettings(raw: unknown): Settings {
       LIMITS.renderScale.max,
       DEFAULT_SETTINGS.renderScale,
     ),
-    primary: primary.id,
-    secondary: secondary.id,
+    ...choice,
     sensitivity: clamp(
       r.sensitivity,
       sensitivity.min,
@@ -171,4 +175,14 @@ export function keyLabel(code: string): string {
   const m = /^(Shift|Control|Alt|Meta)(Left|Right)$/.exec(code);
   if (m) return `${m[2]} ${m[1] === 'Control' ? 'Ctrl' : m[1]}`;
   return code;
+}
+
+/** The loadout part of the settings. */
+export function loadoutChoice(s: Settings): LoadoutChoice {
+  return {
+    primary: s.primary,
+    secondary: s.secondary,
+    attachments: s.attachments,
+    perks: s.perks,
+  };
 }
