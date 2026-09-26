@@ -25,11 +25,13 @@ import attachmentsJson from './attachments.json' with { type: 'json' };
 import perksJson from './perks.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
+import { challengeData } from './challenges.ts';
 import { hasAttachment, hasPerk, hasWeapon, progression, type Access } from './progression.ts';
 import { weaponFiles } from './weapons/catalog.gen.ts';
 
 export * from './schemas.ts';
 export * from './progression.ts';
+export * from './challenges.ts';
 
 /** All content is validated at load time; a bad file fails fast on both client and server. */
 export const modes: Record<string, Mode> = {
@@ -280,6 +282,7 @@ export function loadoutFromWire(w: LoadoutWire, access?: Access): Loadout {
 export const CONTENT_HASH: string = (() => {
   const text = JSON.stringify([
     progression,
+    challengeData,
     maps,
     weaponCatalog,
     equipment,

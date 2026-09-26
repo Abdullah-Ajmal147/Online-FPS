@@ -14,6 +14,9 @@ import {
   equipment,
   killSourceName,
   MAX_ATTACHMENTS,
+  activeChallenges,
+  challengeData,
+  challengeProgress,
   MAX_WEAPON_LEVEL,
   NEW_PLAYER,
   hasAttachment,
@@ -464,5 +467,54 @@ describe('progression (data)', () => {
     expect(xpForMatch({ team: 0, kills: 3, headshots: 1 }, 0)).toBe(150 + 300 + 25 + 250);
     expect(levelFor(0)).toEqual({ level: 1, xpIntoLevel: 0, xpForNext: 500 });
     expect(levelFor(500 + 750 + 10).level).toBe(3);
+  });
+});
+
+describe('challenges (data)', () => {
+  const day = 86_400_000;
+  const monday = Date.UTC(2026, 8, 21); // Monday 21 Sep 2026
+
+  it('only name real weapons, ids are unique', () => {
+    const all = [...challengeData.daily, ...challengeData.weekly];
+    expect(new Set(all.map((c) => c.id)).size).toBe(all.length);
+    for (const c of all) if (c.weapon) expect(weapons[c.weapon], c.id).toBeDefined();
+  });
+
+  it('are the same for everyone at a given time, change daily / weekly', () => {
+    const a = activeChallenges(monday + 3_600_000);
+    expect(activeChallenges(monday + 7_200_000)).toEqual(a);
+    expect(a.filter((c) => c.period === 'daily')).toHaveLength(challengeData.dailyCount);
+    expect(a.filter((c) => c.period === 'weekly')).toHaveLength(challengeData.weeklyCount);
+    const tomorrow = activeChallenges(monday + day + 1);
+    expect(tomorrow.filter((c) => c.period === 'daily').map((c) => c.id)).not.toEqual(
+      a.filter((c) => c.period === 'daily').map((c) => c.id),
+    );
+    // Same week until Monday.
+    const sunday = activeChallenges(monday + 6 * day + 1);
+    expect(sunday.filter((c) => c.period === 'weekly')).toEqual(
+      a.filter((c) => c.period === 'weekly'),
+    );
+    const nextMonday = activeChallenges(monday + 7 * day + 1);
+    expect(nextMonday.find((c) => c.period === 'weekly')!.periodId).toBe(
+      a.find((c) => c.period === 'weekly')!.periodId + 1,
+    );
+  });
+
+  it('progress counts the right stat from a match', () => {
+    const m = {
+      kills: 9,
+      headshots: 3,
+      fragKills: 1,
+      won: true,
+      weaponKills: { 'vireo-smg': 4 },
+    };
+    const find = (id: string) =>
+      [...challengeData.daily, ...challengeData.weekly].find((c) => c.id === id)!;
+    expect(challengeProgress(find('d-kills-15'), m)).toBe(9);
+    expect(challengeProgress(find('d-smg-10'), m)).toBe(4);
+    expect(challengeProgress(find('d-rifle-12'), m)).toBe(0);
+    expect(challengeProgress(find('d-wins-2'), m)).toBe(1);
+    expect(challengeProgress(find('d-matches-3'), m)).toBe(1);
+    expect(challengeProgress(find('d-headshots-5'), m)).toBe(3);
   });
 });

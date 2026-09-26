@@ -39,6 +39,17 @@ export class Store {
         kills INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (guest_id, weapon_id)
       );
+      CREATE TABLE IF NOT EXISTS challenge_progress (
+        guest_id TEXT NOT NULL,
+        challenge_id TEXT NOT NULL,
+        period_id INTEGER NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (guest_id, challenge_id, period_id)
+      );
+      CREATE TABLE IF NOT EXISTS last_match (
+        guest_id TEXT PRIMARY KEY,
+        data TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS matches (
         match_id TEXT PRIMARY KEY,
         received_at INTEGER NOT NULL,
@@ -91,6 +102,50 @@ export class Store {
            updated_at = excluded.updated_at`,
       )
       .run(guestId, name, r.xp, r.win ? 1 : 0, r.kills, r.deaths, Date.now());
+  }
+
+  /** Adds progress; true if this completed the challenge (only ever once per period). */
+  addChallengeProgress(
+    guestId: string,
+    ch: { id: string; periodId: number; target: number },
+    add: number,
+  ): boolean {
+    const before = this.challengeProgress(guestId, ch);
+    if (before >= ch.target) return false;
+    this.db
+      .prepare(
+        `INSERT INTO challenge_progress (guest_id, challenge_id, period_id, progress)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(guest_id, challenge_id, period_id)
+         DO UPDATE SET progress = progress + excluded.progress`,
+      )
+      .run(guestId, ch.id, ch.periodId, add);
+    return before + add >= ch.target;
+  }
+
+  challengeProgress(guestId: string, ch: { id: string; periodId: number }): number {
+    const row = this.db
+      .prepare(
+        'SELECT progress FROM challenge_progress WHERE guest_id = ? AND challenge_id = ? AND period_id = ?',
+      )
+      .get(guestId, ch.id, ch.periodId) as { progress: number } | undefined;
+    return row?.progress ?? 0;
+  }
+
+  /** The XP breakdown of a guest's last counted match (results screen). */
+  setLastMatch(guestId: string, data: unknown): void {
+    this.db
+      .prepare(
+        `INSERT INTO last_match (guest_id, data) VALUES (?, ?)
+         ON CONFLICT(guest_id) DO UPDATE SET data = excluded.data`,
+      )
+      .run(guestId, JSON.stringify(data));
+  }
+
+  lastMatch(guestId: string): unknown {
+    const row = this.db.prepare('SELECT data FROM last_match WHERE guest_id = ?').get(guestId) as
+      { data: string } | undefined;
+    return row ? (JSON.parse(row.data) as unknown) : null;
   }
 
   /** Kills per weapon id, all time. */

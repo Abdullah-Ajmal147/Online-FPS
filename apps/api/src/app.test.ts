@@ -208,3 +208,52 @@ describe('unlocks', () => {
     expect(body.unlockAll).toBe(true);
   });
 });
+
+describe('challenges', () => {
+  const MONDAY = Date.UTC(2026, 8, 21, 12); // pins which challenges are active
+  const pinned = () => createApp(new Store(':memory:'), SECRET, { now: () => MONDAY });
+  type Profile = {
+    xp: number;
+    challenges: { id: string; target: number; progress: number; xp: number; stat?: string }[];
+    lastMatch: {
+      lines: { label: string; xp: number }[];
+      challenges: { text: string; xp: number }[];
+      total: number;
+      levelBefore: number;
+      levelAfter: number;
+    } | null;
+  };
+  const profile = async (a: ReturnType<typeof app>) =>
+    (await (await a.request(`/profiles/${GUEST}`)).json()) as Profile;
+  const ids = ['aaaaaaaa-0000-4000-8000-00000000000', 'bbbbbbbb-0000-4000-8000-00000000000'];
+
+  it('progress moves only from signed results; a forged one changes nothing (Phase 6 exit test)', async () => {
+    const a = pinned();
+    const before = await profile(a);
+    expect(before.challenges.length).toBeGreaterThan(0);
+    expect(before.challenges.every((c) => c.progress === 0)).toBe(true);
+    // A modified client posts "its" stats: no valid signature → rejected, nothing moves.
+    const forged = await post(a, result(`${ids[0]}1`), 'not-the-server-secret');
+    expect(forged.status).toBe(401);
+    expect((await profile(a)).challenges.every((c) => c.progress === 0)).toBe(true);
+    // The real server's result moves progress.
+    expect((await post(a, result(`${ids[0]}2`))).status).toBe(200);
+    expect((await profile(a)).challenges.some((c) => c.progress > 0)).toBe(true);
+  });
+
+  it('a completed challenge pays its XP once, and the results breakdown adds up', async () => {
+    const a = pinned();
+    for (let i = 0; i < 6; i++) await post(a, result(`${ids[1]}${i}`));
+    const p = await profile(a);
+    const completed = p.challenges.filter((c) => c.progress >= c.target);
+    expect(completed.length).toBeGreaterThan(0);
+    const bonus = completed.reduce((n, c) => n + c.xp, 0);
+    // 6 matches × (150 + 700 kills + 50 headshots + 250 win) + each completed challenge once.
+    expect(p.xp).toBe(6 * 1150 + bonus);
+    const last = p.lastMatch!;
+    expect(last.total).toBe(
+      last.lines.reduce((n, l) => n + l.xp, 0) + last.challenges.reduce((n, c) => n + c.xp, 0),
+    );
+    expect(last.levelAfter).toBeGreaterThanOrEqual(last.levelBefore);
+  });
+});

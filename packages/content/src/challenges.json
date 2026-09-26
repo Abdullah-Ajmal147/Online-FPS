@@ -1,0 +1,74 @@
+{
+  "dailyCount": 3,
+  "weeklyCount": 2,
+  "daily": [
+    { "id": "d-kills-15", "text": "Get 15 kills", "stat": "kills", "target": 15, "xp": 400 },
+    {
+      "id": "d-headshots-5",
+      "text": "Get 5 headshot kills",
+      "stat": "headshots",
+      "target": 5,
+      "xp": 450
+    },
+    { "id": "d-wins-2", "text": "Win 2 matches", "stat": "wins", "target": 2, "xp": 500 },
+    { "id": "d-matches-3", "text": "Play 3 matches", "stat": "matches", "target": 3, "xp": 300 },
+    {
+      "id": "d-frag-2",
+      "text": "Get 2 frag grenade kills",
+      "stat": "fragKills",
+      "target": 2,
+      "xp": 450
+    },
+    {
+      "id": "d-smg-10",
+      "text": "Get 10 kills with the Vireo SMG",
+      "stat": "kills",
+      "weapon": "vireo-smg",
+      "target": 10,
+      "xp": 400
+    },
+    {
+      "id": "d-rifle-12",
+      "text": "Get 12 kills with the Kestrel AR",
+      "stat": "kills",
+      "weapon": "kestrel-ar",
+      "target": 12,
+      "xp": 400
+    },
+    {
+      "id": "d-sidearm-3",
+      "text": "Get 3 kills with the Wren SP",
+      "stat": "kills",
+      "weapon": "wren-sp",
+      "target": 3,
+      "xp": 350
+    }
+  ],
+  "weekly": [
+    { "id": "w-kills-150", "text": "Get 150 kills", "stat": "kills", "target": 150, "xp": 2500 },
+    { "id": "w-wins-10", "text": "Win 10 matches", "stat": "wins", "target": 10, "xp": 3000 },
+    {
+      "id": "w-headshots-40",
+      "text": "Get 40 headshot kills",
+      "stat": "headshots",
+      "target": 40,
+      "xp": 2500
+    },
+    {
+      "id": "w-marksman-30",
+      "text": "Get 30 kills with the Halberd MR",
+      "stat": "kills",
+      "weapon": "halberd-mr",
+      "target": 30,
+      "xp": 2500
+    },
+    {
+      "id": "w-shotgun-30",
+      "text": "Get 30 kills with the Thresher 12",
+      "stat": "kills",
+      "weapon": "thresher-12",
+      "target": 30,
+      "xp": 2500
+    }
+  ]
+}

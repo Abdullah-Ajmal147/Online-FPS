@@ -5,7 +5,8 @@ import { cors } from 'hono/cors';
 import { z } from 'zod';
 import type { Store } from './db.ts';
 import { counters, metrics } from './ops.ts';
-import { levelFor, xpForMatch } from './xp.ts';
+import { activeChallenges, challengeProgress } from '@sentinel/content';
+import { levelFor, xpBreakdown } from './xp.ts';
 
 const GUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -62,11 +63,14 @@ export interface AppOptions {
    * each profile, so the game server and the menu follow the same switch.
    */
   unlockAll?: boolean;
+  /** Clock (tests pin it to a date to know which challenges are active). */
+  now?: () => number;
 }
 
 /** The API app, separate from the Node listener so tests can call it directly. */
 export function createApp(store: Store, secret: string, opts: AppOptions = {}): Hono {
   const app = new Hono();
+  const now = opts.now ?? Date.now;
   app.use('*', cors());
   app.use('*', async (_c, next) => {
     counters.requests.inc();
@@ -122,7 +126,27 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       seen.add(p.guestId);
       // No XP for joining in the last seconds: at least 60 s, or a quarter of a short match.
       if (p.secondsPlayed < Math.min(60, parsed.durationSeconds / 4)) continue;
-      const xp = xpForMatch(p, parsed.winner);
+      const won = parsed.winner === p.team;
+      const lines = xpBreakdown(p, parsed.winner);
+      // Challenges move only here, from the server's signed stats.
+      const done: { text: string; xp: number }[] = [];
+      for (const ch of activeChallenges(now())) {
+        const add = challengeProgress(ch, { ...p, won });
+        if (add > 0 && store.addChallengeProgress(p.guestId, ch, add)) {
+          done.push({ text: ch.text, xp: ch.xp });
+        }
+      }
+      const xp = [...lines, ...done].reduce((n, l) => n + l.xp, 0);
+      const before = store.profile(p.guestId)?.xp ?? 0;
+      store.setLastMatch(p.guestId, {
+        matchId: parsed.matchId,
+        at: now(),
+        lines,
+        challenges: done,
+        total: xp,
+        levelBefore: levelFor(before).level,
+        levelAfter: levelFor(before + xp).level,
+      });
       store.addResult(p.guestId, p.name, {
         xp,
         win: parsed.winner === p.team,
@@ -176,6 +200,15 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       deaths: row?.deaths ?? 0,
       weaponKills: store.weaponKills(guestId),
       unlockAll: opts.unlockAll === true,
+      challenges: activeChallenges(now()).map((ch) => ({
+        id: ch.id,
+        text: ch.text,
+        period: ch.period,
+        target: ch.target,
+        xp: ch.xp,
+        progress: Math.min(ch.target, store.challengeProgress(guestId, ch)),
+      })),
+      lastMatch: store.lastMatch(guestId),
     });
   });
 

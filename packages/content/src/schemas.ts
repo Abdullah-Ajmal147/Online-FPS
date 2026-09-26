@@ -363,3 +363,29 @@ export const ProgressionSchema = z
     message: 'killsForLevel must increase',
   });
 export type Progression = z.infer<typeof ProgressionSchema>;
+
+// ---------------------------------------------------------------------------
+// Challenges: daily and weekly goals, progressed only from server-reported match stats.
+// ---------------------------------------------------------------------------
+
+export const ChallengeSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]+$/),
+  text: z.string().min(1),
+  stat: z.enum(['kills', 'headshots', 'wins', 'matches', 'fragKills']),
+  /** kills only: count kills with this weapon id. */
+  weapon: z.string().optional(),
+  target: z.number().int().positive(),
+  xp: z.number().int().nonnegative(),
+});
+export type Challenge = z.infer<typeof ChallengeSchema>;
+
+export const ChallengesSchema = z
+  .object({
+    dailyCount: z.number().int().min(0).max(10),
+    weeklyCount: z.number().int().min(0).max(10),
+    daily: z.array(ChallengeSchema),
+    weekly: z.array(ChallengeSchema),
+  })
+  .refine((c) => c.daily.length >= c.dailyCount && c.weekly.length >= c.weeklyCount, {
+    message: 'pools must hold at least dailyCount / weeklyCount challenges',
+  });
