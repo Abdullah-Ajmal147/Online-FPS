@@ -27,10 +27,12 @@ export default defineConfig(({ mode }) => ({
       'three/webgpu',
       'three/addons/geometries/ConvexGeometry.js',
       '@colyseus/sdk',
-      '@dimforge/rapier3d-compat',
+      // Dependencies of our packages, not of the client itself: named through the package that
+      // has them, or Vite can't find them here and reloads the page on first use instead.
+      '@sentinel/shared > @dimforge/rapier3d-compat',
       'preact',
       'preact/hooks',
-      'zod',
+      '@sentinel/content > zod',
     ],
   },
   build: { target: 'es2023', outDir: mode === 'crazygames' ? 'dist-crazygames' : 'dist' },
