@@ -148,3 +148,22 @@ test('the loadout saved in settings is the one the server spawns you with', asyn
     perks: ['quick-hands'],
   });
 });
+
+test('cold link to in a match in under 20 s (Phase 4 exit test)', async ({ page }) => {
+  const start = Date.now();
+  await page.goto('/?server=http://localhost:2568');
+  // In a match = the server's match info arrived and we have a live soldier from the server.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const s = (await import('/src/store.ts')).getStatus();
+          return s.net.state === 'connected' && s.match !== null && s.combat?.alive === true;
+        }),
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+  const seconds = (Date.now() - start) / 1000;
+  console.log(`cold link → in match: ${seconds.toFixed(1)} s`);
+  expect(seconds).toBeLessThan(20);
+});

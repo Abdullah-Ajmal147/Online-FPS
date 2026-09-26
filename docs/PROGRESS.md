@@ -1,6 +1,6 @@
 # Progress
 
-**Current phase:** 3 — Match loop + bots
+**Current phase:** 5 — Content pipeline (Phases 3–4: everything that doesn't need the owner's accounts is done)
 
 ## Phase 0 — Setup
 
@@ -127,7 +127,7 @@ Open issues carried forward:
 
 ## Phase 3 — Match loop + bots
 
-Status: in progress (owner delegated decisions; continuing without per-task stops).
+Status: **done locally 2026-09-26**; the remaining exit tests need hosting and outside playtesters.
 
 Tasks done:
 
@@ -184,5 +184,66 @@ agreed on hits, so not a netcode bug). Causes and fixes:
   ammo refilled per kill (a magazine per weapon).
 - New regression test: a hip-firing, crosshair-re-centring player gets kills against bots in a
   real match (`e2e/fun.spec.ts`).
+
+## Phase 4 — Online shell
+
+Status: **partly done** (lite version pulled into Phase 3, see above). Blocked on the owner:
+Supabase project (accounts, Postgres), Sentry and PostHog keys, a domain/hosting.
+
+Done: signed guest identity, API with server-signed match results (forged results rejected,
+tested), XP/levels from the server's result, rate limits on API and joins, menu with name,
+settings (sensitivity, FOV, keybinds, graphics), profile card.
+
+Exit tests:
+
+- [x] Cold link → in a match in < 20 s: 4.6 s locally (Playwright measures it on every run)
+- [x] A forged `POST /matches` from a client is rejected (API tests)
+- [ ] XP/level on another device after linking — needs Supabase accounts
+- [ ] Errors in Sentry, events in PostHog — needs the owner's keys
+
+## Phase 5 — Content pipeline
+
+Status: **in progress** (2026-09-26).
+
+Tasks done:
+
+- 2. Weapon catalog: Kestrel AR (rifle), Vireo SMG, Thresher 12 (shotgun, 8 pellets whose damage
+     adds up per victim), Halberd MR (marksman, 2.5× scope zoom), Wren SP (sidearm). Weapons are data:
+     a JSON file in `packages/content/src/weapons/` + `pnpm --filter @sentinel/content gen`
+     (a test fails if a file isn't registered). Content hash in the join handshake: a client built
+     from different content must reload.
+- 3–4. Attachments (10, five slots, up to 3) and perks (5, up to 3) as JSON stat modifiers; the
+  loadout editor in the menu; loadout applied at the next spawn; protocol v9.
+- 5. Frag and smoke grenades simulated on the server (ADR 0008): bounces, line-of-sight blast
+     damage, no team damage, self damage halved; smoke blocks bot vision and enemies fully behind
+     smoke are left out of snapshots. G / Q, one each per life. Bots lob frags (normal/hard).
+- 6. Second map **Saltline Depot** (dusk depot, central platform, flank warehouses,
+     point-symmetric). Maps have a lighting preset. Map rotation between matches
+     (`SENTINEL_MAP_ROTATION`), nav grids pre-built per room.
+- 7 (part). Download budget check (`pnpm size`, in CI): 5.2 MB / 1.9 MB gzipped today.
+  Hashed assets cached for a year, `index.html` never cached. A service worker was not added:
+  with immutable hashed assets it adds stale-version risk for little gain.
+- 8. Graphics presets Low / Medium / High + render scale (shadow quality applies at start:
+     three's WebGPU shadow node can't be toggled at runtime).
+- Netcode reviews after each change; all findings fixed (content drift, SetLoadout abuse,
+  grenade key held through respawn, smoke leaking positions, spawn steering by smoke, map
+  rotation version skew, nav build inside a tick, old-world rewinds).
+
+Exit tests:
+
+- [x] Adding a weapon needs only a JSON file (+ model, once there are models)
+- [x] First download < 15 MB; total < 50 MB; < 1,500 files (checked in CI)
+- [ ] 60 fps at Low on an integrated-GPU laptop on both maps — needs the owner's hardware
+- Task 1 (glTF asset pipeline) waits for the first real models; everything is greybox today.
+
+What we learned:
+
+- Headless Chrome sometimes never answers `navigator.gpu.requestAdapter()`; the client now gives
+  it 2 s, then uses WebGL 2. Closing a WebGL tab and opening another in the same browser
+  context can fail to get a context, so e2e tests avoid that pattern.
+- Parallel e2e tests on one server interfere (teams, grenades); tests that need isolation get
+  their own server port.
+- An edit script that silently failed once left a documented feature unimplemented; edit
+  scripts now exit loudly on any mismatch.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
