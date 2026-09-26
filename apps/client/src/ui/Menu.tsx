@@ -1,8 +1,8 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { useStatus } from './Hud.tsx';
+import { lore, maps } from '@sentinel/content';
 import { accessOf, apiUrl } from '../profile.ts';
 import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
-import { LoadoutPicker } from './Loadout.tsx';
 import {
   ACTIONS,
   ACTION_LABELS,
@@ -14,246 +14,302 @@ import {
   type Action,
   type Settings,
 } from '../settings.ts';
+import { useStatus } from './Hud.tsx';
+import { LoadoutPicker } from './Loadout.tsx';
 
 interface Props {
   settings: Settings;
   onSettings: (next: Settings) => void;
+  /** DEPLOY (main menu) or RESUME (in a match). */
   onPlay: () => void;
+  /** LEAVE MATCH (pause menu). */
+  onLeave: () => void;
 }
 
-/** Shown whenever the mouse is not captured: start screen, controls and settings. */
-export function Menu({ settings, onSettings, onPlay }: Props) {
-  const [waitingFor, setWaitingFor] = useState<Action | null>(null);
+type Screen = 'play' | 'loadout' | 'career' | 'squad' | 'intel' | 'settings';
 
-  useEffect(() => {
-    if (!waitingFor) return;
-    const onKey = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.code !== 'Escape') {
-        onSettings({ ...settings, bindings: rebind(settings.bindings, waitingFor, e.code) });
-      }
-      setWaitingFor(null);
-    };
-    window.addEventListener('keydown', onKey, { capture: true });
-    return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [waitingFor, settings, onSettings]);
+const SCREENS: { id: Screen; label: string }[] = [
+  { id: 'play', label: 'Play' },
+  { id: 'loadout', label: 'Loadout' },
+  { id: 'career', label: 'Career' },
+  { id: 'squad', label: 'Squad' },
+  { id: 'intel', label: 'Intel' },
+  { id: 'settings', label: 'Settings' },
+];
 
-  const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
-    onSettings({ ...settings, [key]: value });
+/**
+ * The menu, as a game front end: a left rail of screens over the live 3D backdrop. On first
+ * load it is the main menu (nothing joined until DEPLOY); during a match, Esc brings it back
+ * as the pause menu (RESUME / LEAVE MATCH), and the match keeps running meanwhile.
+ */
+export function Menu(props: Props) {
+  const status = useStatus();
+  const [screen, setScreen] = useState<Screen>('play');
+  const paused = status.inMatch;
 
   return (
-    <div class="menu" data-testid="menu">
-      <div class="menu-card">
-        <h1>Sentinel Strike</h1>
-        <p class="menu-sub">
-          Team Deathmatch · 6v6{useStatus().mapName ? ` · ${useStatus().mapName}` : ''}
-        </p>
-        <ProfileCard />
-        <Challenges />
-        <Invite />
-        <Social />
-        <button class="play" data-testid="play" onClick={onPlay}>
-          Click to play
-        </button>
-        <p class="menu-hint">Esc releases the mouse and brings this menu back.</p>
+    <div class={`menu${paused ? ' paused' : ''}`} data-testid="menu">
+      <div class="menu-grain" />
+      <header class="menu-top">
+        <Wordmark />
+        <PlayerChip />
+      </header>
 
-        <h2>Loadout</h2>
-        <LoadoutPicker
-          choice={loadoutChoice(settings)}
-          onChange={(choice) => onSettings({ ...settings, ...choice })}
-          access={accessOf(useStatus().profile)}
-        />
-
-        <label class="row">
-          <span>Your name</span>
-          <input
-            type="text"
-            maxLength={16}
-            placeholder="Player"
-            value={settings.name}
-            data-testid="name-input"
-            onChange={(e) => set('name', (e.target as HTMLInputElement).value)}
-          />
-        </label>
-        <p class="menu-hint">Takes effect next time you join a match.</p>
-
-        <h2>Settings</h2>
-        <label class="row">
-          <span>Mouse sensitivity (°/count)</span>
-          <input
-            type="number"
-            step="0.005"
-            min={LIMITS.sensitivity.min}
-            max={LIMITS.sensitivity.max}
-            value={settings.sensitivity}
-            onChange={(e) => {
-              const v = Number((e.target as HTMLInputElement).value);
-              if (Number.isFinite(v)) {
-                set(
-                  'sensitivity',
-                  Math.min(LIMITS.sensitivity.max, Math.max(LIMITS.sensitivity.min, v)),
-                );
-              }
-            }}
-          />
-        </label>
-        <label class="row">
-          <span>Field of view (horizontal): {settings.fov}°</span>
-          <input
-            type="range"
-            min={LIMITS.fov.min}
-            max={LIMITS.fov.max}
-            value={settings.fov}
-            onInput={(e) => set('fov', Number((e.target as HTMLInputElement).value))}
-          />
-        </label>
-        <label class="row">
-          <span>Graphics</span>
-          <select
-            value={settings.graphics}
-            data-testid="graphics"
-            onChange={(e) =>
-              set('graphics', (e.target as HTMLSelectElement).value as Settings['graphics'])
-            }
+      <nav class="menu-rail" aria-label="Menu">
+        {paused && <div class="rail-note">Paused · the match goes on</div>}
+        {SCREENS.map((s, i) => (
+          <button
+            key={s.id}
+            class={`rail-item${screen === s.id ? ' active' : ''}`}
+            data-testid={`nav-${s.id}`}
+            onClick={() => setScreen(s.id)}
           >
-            <option value="low">Low (fastest, no shadows)</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-        </label>
-        <p class="menu-hint">Shadow quality changes after a page reload; resolution right away.</p>
-        <label class="row">
-          <span>Render scale: {Math.round(settings.renderScale * 100)}%</span>
-          <input
-            type="range"
-            min={LIMITS.renderScale.min}
-            max={LIMITS.renderScale.max}
-            step="0.05"
-            value={settings.renderScale}
-            onInput={(e) => set('renderScale', Number((e.target as HTMLInputElement).value))}
-          />
-        </label>
-        <label class="row">
-          <span>Toggle sprint (instead of hold)</span>
-          <input
-            type="checkbox"
-            checked={settings.toggleSprint}
-            onChange={(e) => set('toggleSprint', (e.target as HTMLInputElement).checked)}
-          />
-        </label>
-        <label class="row">
-          <span>Head bob</span>
-          <input
-            type="checkbox"
-            checked={settings.headBob}
-            onChange={(e) => set('headBob', (e.target as HTMLInputElement).checked)}
-          />
-        </label>
-
-        <h2>Controls</h2>
-        <div class="bindings">
-          {ACTIONS.map((action) => (
-            <div class="row" key={action}>
-              <span>{ACTION_LABELS[action]}</span>
-              <button class="key" onClick={() => setWaitingFor(action)}>
-                {waitingFor === action ? 'press a key…' : keyLabel(settings.bindings[action])}
-              </button>
-            </div>
-          ))}
-        </div>
-        <p class="menu-hint">
-          Mouse: left fire, right aim, wheel swap. Slide: sprint, then crouch. F3: network stats.
-          <button class="link" onClick={() => onSettings(DEFAULT_SETTINGS)}>
-            Reset to defaults
+            <span class="rail-num">{String(i + 1).padStart(2, '0')}</span>
+            {s.id === 'play' && paused ? 'Match' : s.label}
           </button>
-        </p>
-      </div>
+        ))}
+        <div class="rail-spacer" />
+        <button class="deploy" data-testid="play" onClick={props.onPlay}>
+          <span>{paused ? 'Resume' : 'Deploy'}</span>
+          <small>
+            {paused
+              ? 'back to the fight'
+              : status.backend === 'starting'
+                ? 'loading…'
+                : 'join a match'}
+          </small>
+        </button>
+        {paused && (
+          <button class="rail-leave" data-testid="leave" onClick={props.onLeave}>
+            Leave match
+          </button>
+        )}
+      </nav>
+
+      <main class="menu-screen" key={screen}>
+        {screen === 'play' && <PlayScreen onGo={setScreen} />}
+        {screen === 'loadout' && (
+          <Screen title="Loadout" kicker="Applies the next time you spawn">
+            <LoadoutPicker
+              choice={loadoutChoice(props.settings)}
+              onChange={(choice) => props.onSettings({ ...props.settings, ...choice })}
+              access={accessOf(status.profile)}
+            />
+          </Screen>
+        )}
+        {screen === 'career' && <CareerScreen />}
+        {screen === 'squad' && <SquadScreen />}
+        {screen === 'intel' && <IntelScreen />}
+        {screen === 'settings' && (
+          <SettingsScreen settings={props.settings} onSettings={props.onSettings} />
+        )}
+      </main>
+
+      <footer class="menu-status">
+        <span class="status-dot" data-state={status.net.state} />
+        <span data-testid="net-status">{status.net.text}</span>
+        <span class="sep">/</span>
+        <span data-testid="render-backend">renderer: {status.backend}</span>
+        <span class="sep">/</span>
+        <span>{lore.season.name}</span>
+      </footer>
     </div>
   );
 }
 
-/** Level, XP bar and totals for this guest (hidden if the API is unreachable). */
-function ProfileCard() {
+function Wordmark() {
+  return (
+    <div class="wordmark" aria-label="Sentinel Strike">
+      <span class="wm-mark" aria-hidden="true" />
+      <span class="wm-text">
+        Sentinel<b>Strike</b>
+      </span>
+    </div>
+  );
+}
+
+/** Top-right: level, XP to next level. */
+function PlayerChip() {
   const p = useStatus().profile;
-  if (!p) return null;
+  if (!p) return <div class="chip-player muted">offline profile</div>;
   const pct = p.xpForNext ? Math.round((100 * p.xpIntoLevel) / p.xpForNext) : 100;
   return (
-    <div class="profile-card" data-testid="profile">
-      <div class="profile-level">
-        <span class="profile-level-label">
-          Level <b>{p.level}</b>
+    <div class="chip-player" data-testid="profile">
+      <span class="chip-level">
+        <small>Level</small> {p.level}
+      </span>
+      <span class="chip-xp">
+        <span class="bar">
+          <span style={{ width: `${pct}%` }} />
         </span>
-        <span>{p.xp.toLocaleString()} XP</span>
-      </div>
-      <div class="xp-bar">
-        <div class="xp-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <div class="profile-stats">
-        {p.matches} matches · {p.wins} wins · {p.kills} kills
-      </div>
+        <small>
+          {p.xpIntoLevel.toLocaleString()} / {p.xpForNext.toLocaleString()} XP
+        </small>
+      </span>
     </div>
   );
 }
 
-/** Today's and this week's challenges (progress comes from the server's match reports). */
-function Challenges() {
-  const list = useStatus().profile?.challenges;
-  if (!list?.length) return null;
+function Screen(props: { title: string; kicker?: string; children: ComponentChildren }) {
   return (
-    <div class="challenges" data-testid="challenges">
-      {(['daily', 'weekly'] as const).map((period) => (
-        <div key={period}>
-          <div class="challenges-h">{period === 'daily' ? 'Daily' : 'Weekly'} challenges</div>
-          {list
-            .filter((c) => c.period === period)
-            .map((c) => {
-              const done = c.progress >= c.target;
-              return (
-                <div class={`challenge${done ? ' done' : ''}`} key={c.id}>
-                  <div class="challenge-row">
-                    <span>{c.text}</span>
-                    <span>
-                      {done ? 'Done' : `${c.progress}/${c.target}`} · +{c.xp} XP
-                    </span>
-                  </div>
-                  <div class="xp-bar">
-                    <div
-                      class="xp-fill"
-                      style={{ width: `${Math.round((100 * c.progress) / c.target)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+    <section class="screen">
+      <div class="screen-head">
+        <h2>{props.title}</h2>
+        {props.kicker && <p>{props.kicker}</p>}
+      </div>
+      {props.children}
+    </section>
+  );
+}
+
+// --- Play ---------------------------------------------------------------------------------
+
+function PlayScreen({ onGo }: { onGo: (s: Screen) => void }) {
+  const status = useStatus();
+  const map = maps[status.mapId] ?? maps['relay-yard']!;
+  const invited = new URLSearchParams(location.search).has('with');
+  const m = status.match;
+  const daily = status.profile?.challenges.filter((c) => c.period === 'daily') ?? [];
+  const team = m ? lore.factions[m.myTeam] : undefined;
+  return (
+    <section class="screen play">
+      <div class="mode">
+        <div class="mode-tag">
+          {status.inMatch ? (m ? `Match · ${m.phase}` : 'Joining…') : 'Quick play'}
         </div>
-      ))}
+        <h1 class="mode-title">Team Deathmatch</h1>
+        <div class="mode-meta">6 v 6 · first to 75 · 10 min</div>
+        {invited && !status.inMatch && (
+          <div class="notice">A friend invited you: DEPLOY puts you on their team.</div>
+        )}
+        {team && (
+          <div class={`notice faction-${team.id}`}>
+            You fight for the <b>{team.name}</b>. {team.motto}
+          </div>
+        )}
+      </div>
+
+      <div class="map-card">
+        <div class="map-kicker">{status.inMatch ? 'Current site' : 'Next site'}</div>
+        <div class="map-name">{map.name}</div>
+        <div class="map-loc">{map.location}</div>
+        <p>{map.description}</p>
+      </div>
+
+      <div class="play-cols">
+        <div class="panel">
+          <div class="panel-h">{lore.season.name}</div>
+          <p>{lore.season.text}</p>
+          <button class="link" onClick={() => onGo('intel')}>
+            Read the briefing →
+          </button>
+        </div>
+        <div class="panel">
+          <div class="panel-h">Today's orders</div>
+          {daily.length === 0 && <p class="muted">Orders arrive when your profile loads.</p>}
+          {daily.map((c) => (
+            <Order key={c.id} text={c.text} progress={c.progress} target={c.target} xp={c.xp} />
+          ))}
+          {daily.length > 0 && (
+            <button class="link" onClick={() => onGo('career')}>
+              All challenges →
+            </button>
+          )}
+        </div>
+      </div>
+      <p class="controls-hint">
+        WASD move · Mouse aim/fire · Shift sprint · C crouch/slide · G frag · Q smoke · Enter chat ·
+        Esc pause
+      </p>
+    </section>
+  );
+}
+
+function Order(props: { text: string; progress: number; target: number; xp: number }) {
+  const done = props.progress >= props.target;
+  return (
+    <div class={`order${done ? ' done' : ''}`}>
+      <div class="order-row">
+        <span>{props.text}</span>
+        <span>{done ? 'Done' : `${props.progress}/${props.target}`}</span>
+      </div>
+      <div class="bar">
+        <span style={{ width: `${Math.round((100 * props.progress) / props.target)}%` }} />
+      </div>
+      <small>+{props.xp} XP</small>
     </div>
   );
 }
 
-/** Party invite: a link that puts friends into this match on your team. */
-function Invite() {
-  const link = useStatus().invite;
-  const [copied, setCopied] = useState(false);
-  if (!link) return null;
+// --- Career -------------------------------------------------------------------------------
+
+function CareerScreen() {
+  const p = useStatus().profile;
   return (
-    <div class="invite" data-testid="invite">
-      <span>Play with friends: send them this link (they join your team).</span>
-      <div class="invite-row">
-        <input type="text" readOnly value={link} data-testid="invite-link" />
-        <button
-          class="key"
-          onClick={() => {
-            void navigator.clipboard?.writeText(link).then(() => setCopied(true));
-          }}
-        >
-          {copied ? 'Copied' : 'Copy link'}
-        </button>
-      </div>
+    <Screen title="Career" kicker="Progress counts only from server-reported matches">
+      {!p && (
+        <p class="muted">Your profile is offline (the progression service isn't reachable).</p>
+      )}
+      {p && (
+        <div class="career">
+          <div class="career-level">
+            <div class="big-num">{p.level}</div>
+            <div>
+              <div class="panel-h">Level</div>
+              <div class="bar wide">
+                <span
+                  style={{
+                    width: `${p.xpForNext ? Math.round((100 * p.xpIntoLevel) / p.xpForNext) : 100}%`,
+                  }}
+                />
+              </div>
+              <small>
+                {p.xp.toLocaleString()} XP total · {p.xpForNext - p.xpIntoLevel} to next level
+              </small>
+            </div>
+          </div>
+          <div class="stat-row">
+            <Stat label="Matches" value={p.matches} />
+            <Stat label="Wins" value={p.wins} />
+            <Stat label="Eliminations" value={p.kills} />
+            <Stat label="K/D" value={(p.kills / Math.max(1, p.deaths)).toFixed(2)} />
+          </div>
+          <div class="challenges" data-testid="challenges">
+            {(['daily', 'weekly'] as const).map((period) => (
+              <div class="panel" key={period}>
+                <div class="panel-h">
+                  {period === 'daily' ? 'Daily challenges' : 'Weekly challenges'}
+                </div>
+                {p.challenges
+                  .filter((c) => c.period === period)
+                  .map((c) => (
+                    <Order
+                      key={c.id}
+                      text={c.text}
+                      progress={c.progress}
+                      target={c.target}
+                      xp={c.xp}
+                    />
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Screen>
+  );
+}
+
+function Stat(props: { label: string; value: string | number }) {
+  return (
+    <div class="stat">
+      <div class="stat-v">{props.value}</div>
+      <div class="stat-l">{props.label}</div>
     </div>
   );
 }
+
+// --- Squad --------------------------------------------------------------------------------
 
 interface PlayerCard {
   code: string;
@@ -262,12 +318,12 @@ interface PlayerCard {
   lastPlayed: number;
 }
 
-/** Recent players (this browser) and friends (by player code, looked up in the API). */
-function Social() {
+function SquadScreen() {
+  const status = useStatus();
   const [recent, setRecent] = useState(recentPlayers());
   const [friendCodes, setFriendCodes] = useState(friends());
   const [cards, setCards] = useState<Record<string, PlayerCard>>({});
-  const myCode = useStatus().profile?.code;
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setRecent(recentPlayers());
@@ -284,24 +340,49 @@ function Social() {
     addFriend(code);
     setFriendCodes(friends());
   };
-  if (!recent.length && !friendCodes.length && !myCode) return null;
   return (
-    <div class="social" data-testid="social">
-      {myCode && (
-        <p class="menu-hint">
-          Your player code: <b data-testid="my-code">{myCode}</b>
-        </p>
-      )}
-      {friendCodes.length > 0 && (
-        <>
-          <div class="challenges-h">Friends</div>
+    <Screen title="Squad" kicker="Play with friends: they join your match, on your team">
+      <div class="panel">
+        <div class="panel-h">Invite link</div>
+        {status.invite ? (
+          <div class="field-row" data-testid="invite">
+            <input type="text" readOnly value={status.invite} data-testid="invite-link" />
+            <button
+              class="btn"
+              onClick={() =>
+                void navigator.clipboard?.writeText(status.invite!).then(() => setCopied(true))
+              }
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        ) : (
+          <p class="muted">Deploy first: the link brings friends into your match.</p>
+        )}
+      </div>
+      <div class="play-cols">
+        <div class="panel">
+          <div class="panel-h">Friends</div>
+          {status.profile?.code && (
+            <p class="muted">
+              Your player code:{' '}
+              <b class="mono" data-testid="my-code">
+                {status.profile.code}
+              </b>
+            </p>
+          )}
+          {friendCodes.length === 0 && <p class="muted">No friends yet.</p>}
           {friendCodes.map((code) => {
             const c = cards[code];
             return (
-              <div class="social-row" key={code} data-testid={`friend-${code}`}>
+              <div class="list-row" key={code} data-testid={`friend-${code}`}>
                 <span>
-                  {c ? `${c.name} · level ${c.level}` : code}
-                  {c && <small> · last played {new Date(c.lastPlayed).toLocaleDateString()}</small>}
+                  {c ? c.name : <span class="mono">{code}</span>}
+                  {c && (
+                    <small>
+                      level {c.level} · played {new Date(c.lastPlayed).toLocaleDateString()}
+                    </small>
+                  )}
                 </span>
                 <button
                   class="link"
@@ -315,13 +396,13 @@ function Social() {
               </div>
             );
           })}
-        </>
-      )}
-      {recent.length > 0 && (
-        <>
-          <div class="challenges-h">Recent players</div>
-          {recent.slice(0, 8).map((p) => (
-            <div class="social-row" key={p.code}>
+          <FriendByCode onAdd={add} />
+        </div>
+        <div class="panel">
+          <div class="panel-h">Recent players</div>
+          {recent.length === 0 && <p class="muted">People you play with show up here.</p>}
+          {recent.slice(0, 10).map((p) => (
+            <div class="list-row" key={p.code}>
               <span>{p.name}</span>
               {friendCodes.includes(p.code) ? (
                 <small>Friend</small>
@@ -336,10 +417,9 @@ function Social() {
               )}
             </div>
           ))}
-        </>
-      )}
-      <FriendByCode onAdd={add} />
-    </div>
+        </div>
+      </div>
+    </Screen>
   );
 }
 
@@ -347,7 +427,7 @@ function FriendByCode({ onAdd }: { onAdd: (code: string) => void }) {
   const [code, setCode] = useState('');
   const valid = /^[0-9a-f]{16}$/.test(code);
   return (
-    <div class="invite-row">
+    <div class="field-row">
       <input
         type="text"
         placeholder="Friend's player code"
@@ -357,15 +437,209 @@ function FriendByCode({ onAdd }: { onAdd: (code: string) => void }) {
         onInput={(e) => setCode((e.target as HTMLInputElement).value.trim().toLowerCase())}
       />
       <button
-        class="key"
+        class="btn"
         disabled={!valid}
         onClick={() => {
           onAdd(code);
           setCode('');
         }}
       >
-        Add friend
+        Add
       </button>
     </div>
+  );
+}
+
+// --- Intel (story) ------------------------------------------------------------------------
+
+function IntelScreen() {
+  const sites = ['relay-yard', 'saltline-depot'].map((id) => maps[id]!).filter(Boolean);
+  return (
+    <Screen title="Intel" kicker="Briefing · Saltline coast">
+      <p class="lead">{lore.premise}</p>
+      <div class="factions">
+        {lore.factions.map((f) => (
+          <div class={`faction faction-${f.id}`} key={f.id}>
+            <div class="faction-name">{f.name}</div>
+            <div class="faction-motto">“{f.motto}”</div>
+            <p>{f.text}</p>
+          </div>
+        ))}
+      </div>
+      <div class="panel">
+        <div class="panel-h">{lore.season.name}</div>
+        <p>{lore.season.text}</p>
+      </div>
+      <div class="sites">
+        {sites.map((m) => (
+          <div class="site" key={m.id}>
+            <div class="map-name small">{m.name}</div>
+            <div class="map-loc">{m.location}</div>
+            <p>{m.description}</p>
+          </div>
+        ))}
+      </div>
+    </Screen>
+  );
+}
+
+// --- Settings -----------------------------------------------------------------------------
+
+function SettingsScreen({
+  settings,
+  onSettings,
+}: {
+  settings: Settings;
+  onSettings: (next: Settings) => void;
+}) {
+  const [tab, setTab] = useState<'game' | 'graphics' | 'controls'>('game');
+  const [waitingFor, setWaitingFor] = useState<Action | null>(null);
+  const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
+    onSettings({ ...settings, [key]: value });
+
+  useEffect(() => {
+    if (!waitingFor) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.code !== 'Escape') {
+        onSettings({ ...settings, bindings: rebind(settings.bindings, waitingFor, e.code) });
+      }
+      setWaitingFor(null);
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    return () => window.removeEventListener('keydown', onKey, { capture: true });
+  }, [waitingFor, settings, onSettings]);
+
+  return (
+    <Screen title="Settings">
+      <div class="tabs">
+        {(['game', 'graphics', 'controls'] as const).map((t) => (
+          <button
+            key={t}
+            class={`tab${tab === t ? ' active' : ''}`}
+            data-testid={`settings-${t}`}
+            onClick={() => setTab(t)}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'game' && (
+        <div class="form">
+          <label class="row">
+            <span>Callsign</span>
+            <input
+              type="text"
+              maxLength={16}
+              placeholder="Player"
+              value={settings.name}
+              data-testid="name-input"
+              onChange={(e) => set('name', (e.target as HTMLInputElement).value)}
+            />
+          </label>
+          <p class="hint">Shown to other players from your next match.</p>
+          <label class="row">
+            <span>Mouse sensitivity (°/count)</span>
+            <input
+              type="number"
+              step="0.005"
+              min={LIMITS.sensitivity.min}
+              max={LIMITS.sensitivity.max}
+              value={settings.sensitivity}
+              onChange={(e) => {
+                const v = Number((e.target as HTMLInputElement).value);
+                if (Number.isFinite(v)) {
+                  set(
+                    'sensitivity',
+                    Math.min(LIMITS.sensitivity.max, Math.max(LIMITS.sensitivity.min, v)),
+                  );
+                }
+              }}
+            />
+          </label>
+          <label class="row">
+            <span>Field of view: {settings.fov}°</span>
+            <input
+              type="range"
+              min={LIMITS.fov.min}
+              max={LIMITS.fov.max}
+              value={settings.fov}
+              onInput={(e) => set('fov', Number((e.target as HTMLInputElement).value))}
+            />
+          </label>
+          <label class="row">
+            <span>Toggle sprint (instead of hold)</span>
+            <input
+              type="checkbox"
+              checked={settings.toggleSprint}
+              onChange={(e) => set('toggleSprint', (e.target as HTMLInputElement).checked)}
+            />
+          </label>
+          <label class="row">
+            <span>Head bob</span>
+            <input
+              type="checkbox"
+              checked={settings.headBob}
+              onChange={(e) => set('headBob', (e.target as HTMLInputElement).checked)}
+            />
+          </label>
+        </div>
+      )}
+
+      {tab === 'graphics' && (
+        <div class="form">
+          <label class="row">
+            <span>Quality</span>
+            <select
+              value={settings.graphics}
+              data-testid="graphics"
+              onChange={(e) =>
+                set('graphics', (e.target as HTMLSelectElement).value as Settings['graphics'])
+              }
+            >
+              <option value="low">Low (fastest, no shadows)</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <p class="hint">Shadow quality changes after a reload; resolution right away.</p>
+          <label class="row">
+            <span>Render scale: {Math.round(settings.renderScale * 100)}%</span>
+            <input
+              type="range"
+              min={LIMITS.renderScale.min}
+              max={LIMITS.renderScale.max}
+              step="0.05"
+              value={settings.renderScale}
+              onInput={(e) => set('renderScale', Number((e.target as HTMLInputElement).value))}
+            />
+          </label>
+        </div>
+      )}
+
+      {tab === 'controls' && (
+        <div class="form">
+          <div class="bindings">
+            {ACTIONS.map((action) => (
+              <div class="row" key={action}>
+                <span>{ACTION_LABELS[action]}</span>
+                <button class="key" onClick={() => setWaitingFor(action)}>
+                  {waitingFor === action ? 'press a key…' : keyLabel(settings.bindings[action])}
+                </button>
+              </div>
+            ))}
+          </div>
+          <p class="hint">
+            Mouse: left fire, right aim, wheel swap. Slide: sprint, then crouch. T: team chat. F3:
+            network stats.{' '}
+            <button class="link" onClick={() => onSettings(DEFAULT_SETTINGS)}>
+              Reset to defaults
+            </button>
+          </p>
+        </div>
+      )}
+    </Screen>
   );
 }

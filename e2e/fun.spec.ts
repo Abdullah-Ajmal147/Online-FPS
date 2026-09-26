@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { deploy } from './helpers.ts';
 
 type Target = {
   id: number;
@@ -15,9 +16,7 @@ type Target = {
 test('a hip-firing player kills bots in a real match', async ({ page }) => {
   test.setTimeout(220_000);
   await page.setViewportSize({ width: 480, height: 270 });
-  await page.goto('/?server=http://localhost:2569');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
-  await page.addStyleTag({ content: '.menu{display:none!important}' });
+  await deploy(page, '/?server=http://localhost:2569');
   const status = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus());
   await expect.poll(async () => (await status()).match?.phase, { timeout: 30_000 }).toBe('live');
 

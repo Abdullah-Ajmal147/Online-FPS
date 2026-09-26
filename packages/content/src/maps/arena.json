@@ -1,20 +1,71 @@
 {
   "id": "arena",
   "name": "Test Arena",
+  "location": "Training ground",
+  "description": "An open test range the Directive uses to zero rifles.",
   "killY": -20,
   "geometry": [
-    { "kind": "box", "center": [0, -0.5, 0], "size": [60, 1, 60], "material": "floor" },
-    { "kind": "box", "center": [0, 2, -30.5], "size": [62, 4, 1], "material": "wall" },
-    { "kind": "box", "center": [0, 2, 30.5], "size": [62, 4, 1], "material": "wall" },
-    { "kind": "box", "center": [-30.5, 2, 0], "size": [1, 4, 60], "material": "wall" },
-    { "kind": "box", "center": [30.5, 2, 0], "size": [1, 4, 60], "material": "wall" },
-    { "kind": "box", "center": [-14, 1, 0], "size": [2, 2, 2] },
-    { "kind": "box", "center": [14, 1, 0], "size": [2, 2, 2] }
+    {
+      "kind": "box",
+      "center": [0, -0.5, 0],
+      "size": [60, 1, 60],
+      "material": "floor"
+    },
+    {
+      "kind": "box",
+      "center": [0, 2, -30.5],
+      "size": [62, 4, 1],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [0, 2, 30.5],
+      "size": [62, 4, 1],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-30.5, 2, 0],
+      "size": [1, 4, 60],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [30.5, 2, 0],
+      "size": [1, 4, 60],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14, 1, 0],
+      "size": [2, 2, 2]
+    },
+    {
+      "kind": "box",
+      "center": [14, 1, 0],
+      "size": [2, 2, 2]
+    }
   ],
   "spawns": [
-    { "team": 0, "position": [0, 0, 15], "yawDeg": 0 },
-    { "team": 0, "position": [-4, 0, 15], "yawDeg": 0 },
-    { "team": 1, "position": [0, 0, -15], "yawDeg": 180 },
-    { "team": 1, "position": [4, 0, -15], "yawDeg": 180 }
+    {
+      "team": 0,
+      "position": [0, 0, 15],
+      "yawDeg": 0
+    },
+    {
+      "team": 0,
+      "position": [-4, 0, 15],
+      "yawDeg": 0
+    },
+    {
+      "team": 1,
+      "position": [0, 0, -15],
+      "yawDeg": 180
+    },
+    {
+      "team": 1,
+      "position": [4, 0, -15],
+      "yawDeg": 180
+    }
   ]
 }

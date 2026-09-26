@@ -1,5 +1,6 @@
 import * as THREE from 'three/webgpu';
 import {
+  MAP_ROTATION,
   defaultLoadout,
   killSourceName,
   maps,
@@ -64,6 +65,10 @@ import { GrenadeView } from './grenadeView.ts';
 import { Viewmodel } from './viewmodel.ts';
 
 export interface Game {
+  /** Join a match (first DEPLOY). Resolves once the join was sent; safe to call twice. */
+  join(): Promise<void>;
+  /** Back to the main menu: leave the match with a clean page. */
+  leave(): void;
   requestPlay(): Promise<void>;
   backend: 'WebGPU' | 'WebGL 2';
 }
@@ -180,7 +185,7 @@ export async function startGame(
     effects.setSolids(mapMeshes);
     grenadeView.clear();
     applyLighting(map.lighting);
-    setStatus({ mapName: map.name });
+    setStatus({ mapName: map.name, mapId: map.id });
     moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
     simCtx = createSimContext(moveCtx, loadout);
     const body = createPlayerBody(moveCtx);
@@ -210,7 +215,8 @@ export async function startGame(
     sun.position.set(...l.sunPosition);
   }
 
-  loadMap('greybox'); // offline practice until the server tells us its map
+  // Main-menu backdrop until we join: the first map of the rotation, seen from above.
+  loadMap(MAP_ROTATION[0] ?? 'relay-yard');
   let prevState: SimState = predictor.state;
 
   const input = new InputCapture(
@@ -234,6 +240,7 @@ export async function startGame(
     killedBy: null,
     hitAt: -Infinity,
     hitKind: 'hit',
+    confirmedHits: 0,
     damage: [],
     killFeed: [],
     announcements: [],
@@ -390,8 +397,15 @@ export async function startGame(
         // (on respawn, replaying inputs the server hasn't applied yet).
         const joining = !spawnedFromServer;
         spawnedFromServer = true;
+        if (joining) setStatus({ spawned: true });
         lifeId = own.lifeId;
         awaitingSpawn = false;
+        // Face the way the spawn point faces (not wherever we were looking when we died).
+        const pos = own.sim.move.position;
+        const spawn = map.spawns.find(
+          (sp) => Math.hypot(sp.position[0] - pos[0], sp.position[2] - pos[2]) < 1.5,
+        );
+        if (spawn) input.look = { yaw: (spawn.yawDeg * Math.PI) / 180, pitch: 0 };
         const look = predictor.state.move;
         let ctx: SimContext | undefined;
         const key = JSON.stringify(own.loadout);
@@ -465,6 +479,7 @@ export async function startGame(
   const onEvents = (events: GameEvent[]) => {
     for (const ev of events) {
       if (ev.type === 'hit') {
+        hud.confirmedHits++;
         hud.hitAt = performance.now();
         hud.hitKind = ev.killed ? 'kill' : ev.zone === 'head' ? 'head' : 'hit';
         audio.hit(hud.hitKind as 'hit' | 'head' | 'kill');
@@ -540,6 +555,7 @@ export async function startGame(
   const onDisconnect = () => {
     // Back to offline practice: keep playing locally where we are.
     spawnedFromServer = false;
+    setStatus({ spawned: false });
     latestServerTick = 0;
     remoteBuffers.clear();
     remotePoses.clear();
@@ -550,29 +566,42 @@ export async function startGame(
     setStatus({ match: null });
   };
 
-  const guest = await ensureGuest(); // signed guest token (XP); the game works without it
-  void conn.connect(
-    {
-      onHello: (hello) => {
-        myId = hello.playerId;
-        myTeamCache = hello.team;
-        if (hello.mapId !== map.id) {
-          loadMap(hello.mapId);
-          prevState = predictor.state;
-        }
+  /**
+   * Nothing is joined until the player presses DEPLOY: a player reading the menu must not
+   * stand in a live match (or take a team's slot).
+   */
+  let joined = false;
+  let joining: Promise<void> | null = null;
+  const join = () =>
+    (joining ??= (async () => {
+      setStatus({ net: { state: 'connecting', text: 'connecting…' }, inMatch: true });
+      const guest = await ensureGuest(); // signed guest token (XP); the game works without it
+      joined = true;
+      await joinMatch(guest?.token ?? null);
+    })());
+  const joinMatch = (token: string | null) =>
+    conn.connect(
+      {
+        onHello: (hello) => {
+          myId = hello.playerId;
+          myTeamCache = hello.team;
+          if (hello.mapId !== map.id) {
+            loadMap(hello.mapId);
+            prevState = predictor.state;
+          }
+        },
+        onSnapshot,
+        onEvents,
+        onMatchInfo,
+        onChat,
+        onDisconnect,
       },
-      onSnapshot,
-      onEvents,
-      onMatchInfo,
-      onChat,
-      onDisconnect,
-    },
-    {
-      name: settings().name,
-      token: guest?.token ?? null,
-      loadout: loadoutChoice(settings()),
-    },
-  );
+      {
+        name: settings().name,
+        token,
+        loadout: loadoutChoice(settings()),
+      },
+    );
   let sentLoadout = JSON.stringify(loadoutChoice(settings()));
   let lastLoadoutSendMs = -Infinity;
   /**
@@ -689,10 +718,26 @@ export async function startGame(
   let lastSlot = 0;
   let lastReload = 0;
 
+  let orbit = 0;
   renderer.setAnimationLoop((time) => {
     timer.update(time);
     const frame = timer.getDelta();
     frames++;
+
+    if (!joined) {
+      // Main menu: a slow flyover of the map behind the menu. No input, no simulation.
+      orbit += frame * 0.045;
+      camera.position.set(
+        Math.sin(orbit) * 30,
+        17 + Math.sin(orbit * 0.7) * 2,
+        Math.cos(orbit) * 30,
+      );
+      camera.lookAt(0, 1, 0);
+      viewmodel.root.visible = false;
+      effects.update(frame);
+      renderer.render(scene, camera);
+      return;
+    }
 
     const serverNow = clock.now(performance.now());
     const viewTick = serverNow === null ? 0 : Math.max(0, serverNow - interpDelay.ticks);
@@ -852,6 +897,14 @@ export async function startGame(
 
   return {
     backend,
+    join,
+    leave: () => {
+      // A fresh page is the cleanest way out: no half-torn-down match state survives.
+      const url = new URL(location.href);
+      url.searchParams.delete('room');
+      url.searchParams.delete('with');
+      location.assign(url.toString());
+    },
     requestPlay: () => {
       audio.unlock();
       return input.requestLock();

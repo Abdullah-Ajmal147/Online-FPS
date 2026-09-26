@@ -86,6 +86,9 @@ export const MapSchema = z
     killY: z.number(),
     geometry: z.array(PrimitiveSchema).min(1),
     spawns: z.array(SpawnSchema).min(2),
+    /** Where it is, and a two-line briefing (menus, loading screen). */
+    location: z.string().default(''),
+    description: z.string().default(''),
     /** Sky, fog and sun preset the client draws the map with. */
     lighting: z.enum(['day', 'dusk']).default('day'),
   })
@@ -389,3 +392,24 @@ export const ChallengesSchema = z
   .refine((c) => c.daily.length >= c.dailyCount && c.weekly.length >= c.weeklyCount, {
     message: 'pools must hold at least dailyCount / weeklyCount challenges',
   });
+
+// ---------------------------------------------------------------------------
+// Story (menus, briefings). Original setting; see docs/STORY.md.
+// ---------------------------------------------------------------------------
+
+export const LoreSchema = z.object({
+  premise: z.string().min(1),
+  season: z.object({ name: z.string().min(1), text: z.string().min(1) }),
+  factions: z
+    .array(
+      z.object({
+        id: z.string(),
+        team: z.number().int().min(0).max(1),
+        name: z.string().min(1),
+        motto: z.string().min(1),
+        text: z.string().min(1),
+      }),
+    )
+    .length(2),
+});
+export type Lore = z.infer<typeof LoreSchema>;

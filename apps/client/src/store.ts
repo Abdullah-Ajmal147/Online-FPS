@@ -67,6 +67,8 @@ export interface CombatHud {
   /** performance.now() of the last confirmed hit, and what it was. */
   hitAt: number;
   hitKind: 'hit' | 'head' | 'kill' | 'predicted';
+  /** Hits the server confirmed this match (predicted markers not counted). */
+  confirmedHits: number;
   /** Damage directions (degrees, 0 = ahead, clockwise) with the time they arrived. */
   damage: { key: number; angle: number; at: number }[];
   killFeed: KillFeedEntry[];
@@ -99,7 +101,13 @@ export interface ClientStatus {
   backend: 'WebGPU' | 'WebGL 2' | 'starting';
   /** Name of the map being played (changes with the rotation). */
   mapName: string;
-  net: { state: 'connecting' | 'connected' | 'error'; text: string };
+  /** Id of that map (briefings). */
+  mapId: string;
+  /** DEPLOY pressed: we are in (or joining) a match. False on the main menu. */
+  inMatch: boolean;
+  /** The server has placed our soldier (first own snapshot of this match connection). */
+  spawned: boolean;
+  net: { state: 'idle' | 'connecting' | 'connected' | 'error'; text: string };
   /** True while the mouse is captured and the player is in control. */
   playing: boolean;
   /** Null until the local simulation has started. */
@@ -124,7 +132,10 @@ type Listener = (status: ClientStatus) => void;
 let status: ClientStatus = {
   backend: 'starting',
   mapName: '',
-  net: { state: 'connecting', text: 'connecting…' },
+  mapId: '',
+  inMatch: false,
+  spawned: false,
+  net: { state: 'idle', text: 'not in a match' },
   playing: false,
   player: null,
   netStats: null,

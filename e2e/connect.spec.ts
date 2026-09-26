@@ -1,20 +1,30 @@
 import { expect, test } from '@playwright/test';
+import { deploy, pause, status } from './helpers.ts';
 
-test('client renders and connects to the match room', async ({ page }) => {
+test('the main menu comes first; nothing is joined until DEPLOY', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
-
   await page.goto('/');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected, protocol v\d+/);
+  await expect(page.getByTestId('menu')).toBeVisible();
   await expect(page.getByTestId('render-backend')).toHaveText(/renderer: (WebGPU|WebGL 2)/);
+  await expect(page.getByTestId('net-status')).toHaveText('not in a match');
+  await page.waitForTimeout(1500);
+  expect((await status(page)).inMatch).toBe(false);
+
+  await page.getByTestId('play').click(); // DEPLOY
+  await expect.poll(async () => (await status(page)).net.text).toMatch(/connected, protocol v\d+/);
+  await expect.poll(async () => (await status(page)).combat?.alive, { timeout: 15_000 }).toBe(true);
+  // Pause (Esc in a real browser): the menu is back as a pause menu with RESUME and LEAVE.
+  await pause(page);
+  await expect(page.getByTestId('play')).toContainText('Resume');
+  await expect(page.getByTestId('leave')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
 test('holding W walks the player forward (-Z)', async ({ page }) => {
-  await page.goto('/');
-  const debug = page.getByTestId('player-debug');
-  await expect(debug).toBeVisible();
-  const zOf = async () => Number((await debug.textContent())!.match(/pos \S+ \S+ (\S+)/)![1]);
+  await deploy(page, '/');
+  await expect.poll(async () => (await status(page)).combat?.alive, { timeout: 15_000 }).toBe(true);
+  const zOf = async () => (await status(page)).player!.position[2];
   const z0 = await zOf();
 
   await page.keyboard.down('KeyW');
@@ -26,11 +36,16 @@ test('holding W walks the player forward (-Z)', async ({ page }) => {
   expect(z0 - (await zOf())).toBeGreaterThan(2.5);
 });
 
-test('menu shows controls and rebinding', async ({ page }) => {
+test('menu screens: play, settings with controls, career with challenges', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('menu')).toBeVisible();
-  await expect(page.getByTestId('play')).toBeVisible();
+  await expect(page.getByTestId('play')).toContainText('Deploy');
+  await page.getByTestId('nav-settings').click();
+  await page.getByTestId('settings-controls').click();
   await expect(page.getByText('Crouch / slide')).toBeVisible();
+  await page.getByTestId('nav-intel').click();
+  await expect(page.getByText('Aegis Directive')).toBeVisible();
+  await page.getByTestId('nav-career').click();
   // The guest profile (level/XP) loads from the API on page load.
   await expect(page.getByTestId('profile')).toContainText('Level 1');
   // Daily and weekly challenges, progress from zero.
@@ -41,8 +56,10 @@ test('menu shows controls and rebinding', async ({ page }) => {
 test('graphics presets switch without breaking rendering', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
-  await page.goto('/');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  await deploy(page, '/');
+  await pause(page);
+  await page.getByTestId('nav-settings').click();
+  await page.getByTestId('settings-graphics').click();
   const fps = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus().fps);
   for (const preset of ['low', 'high', 'medium']) {
     await page.getByTestId('graphics').selectOption(preset);
@@ -58,8 +75,10 @@ test('starting on the Low preset (no shadows) renders', async ({ page }) => {
   await page.addInitScript(() =>
     localStorage.setItem('sentinel.settings.v1', JSON.stringify({ graphics: 'low' })),
   );
-  await page.goto('/');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  await deploy(page, '/');
+  await pause(page);
+  await page.getByTestId('nav-settings').click();
+  await page.getByTestId('settings-graphics').click();
   await expect(page.getByTestId('graphics')).toHaveValue('low');
   await expect
     .poll(() => page.evaluate(async () => (await import('/src/store.ts')).getStatus().fps))
@@ -68,8 +87,7 @@ test('starting on the Low preset (no shadows) renders', async ({ page }) => {
 });
 
 test('F3 toggles the network debug overlay', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/);
+  await deploy(page, '/');
   await page.keyboard.press('F3');
   const overlay = page.getByTestId('debug-overlay');
   await expect(overlay).toBeVisible();
@@ -86,10 +104,7 @@ test('two players in two tabs see each other move', async ({ browser }) => {
   const a = await (await browser.newContext()).newPage();
   const b = await (await browser.newContext()).newPage();
   // Two pages rendering 3D in one headless browser is slow (software GL): allow time to join.
-  await Promise.all([a.goto('/'), b.goto('/')]);
-  for (const p of [a, b]) {
-    await expect(p.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
-  }
+  await Promise.all([deploy(a, '/'), deploy(b, '/')]);
   const remotes = (p: typeof a) =>
     p.evaluate(
       async () => (await import('/src/store.ts')).getStatus().netStats?.remotePlayers ?? 0,
@@ -128,14 +143,15 @@ test('the server enforces unlocks: a new player gets unlocked gear only', async 
     }
   });
   const status = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus());
-  await page.goto('/');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  await deploy(page, '/');
   // The server fell back to the rifle but kept the extended magazine (30 × 1.3 → 39 rounds).
   await expect
     .poll(async () => (await status()).combat?.weaponName, { timeout: 15_000 })
     .toBe('Kestrel AR');
   await expect.poll(async () => (await status()).combat?.ammo).toBe(39);
   // The menu shows the same thing: the shotgun is locked, the rifle is selected.
+  await pause(page);
+  await page.getByTestId('nav-loadout').click();
   await expect(page.getByTestId('weapon-thresher-12')).toBeDisabled();
   await expect(page.getByTestId('weapon-thresher-12')).toContainText('Unlocks at level 4');
   await expect(page.getByTestId('weapon-kestrel-ar')).toHaveAttribute('aria-pressed', 'true');

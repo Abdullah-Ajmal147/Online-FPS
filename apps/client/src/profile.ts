@@ -67,9 +67,19 @@ function readStored(): { guestId: string; token: string } | null {
 }
 
 /** Our guest token, asking the API for a new guest the first time. Null if the API is down. */
-export async function ensureGuest(): Promise<{ guestId: string; token: string } | null> {
+/** One request at a time: the menu (profile) and DEPLOY can both ask on page load. */
+let inFlight: Promise<{ guestId: string; token: string } | null> | null = null;
+
+export function ensureGuest(): Promise<{ guestId: string; token: string } | null> {
   cached ??= readStored();
-  if (cached) return cached;
+  if (cached) return Promise.resolve(cached);
+  inFlight ??= createGuest().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function createGuest(): Promise<{ guestId: string; token: string } | null> {
   try {
     const res = await fetch(`${apiUrl()}/guests`, { method: 'POST' });
     if (!res.ok) return null;

@@ -1,0 +1,23 @@
+{
+  "premise": "2071. Eleven years after the Blackout Winter took the satellites down, the only long-range signal left runs through the Relay: a chain of ground stations along the Saltline coast. Whoever holds the relays holds trade, power and the news everyone lives by.",
+  "season": {
+    "name": "Season 0 — Static",
+    "text": "Ember crews have started jamming the Relay from inside the stations. The Directive has pulled every squad to the coast. Every match is a skirmish for one relay site: hold it, and the signal is yours for another night."
+  },
+  "factions": [
+    {
+      "id": "aegis",
+      "team": 0,
+      "name": "Aegis Directive",
+      "motto": "Hold the line. Keep the signal.",
+      "text": "A security directive hired by the coast cities to guard the Relay. Drilled, well supplied, and paid in access fees that the inland towns can't afford. They keep the lights on — for whoever pays."
+    },
+    {
+      "id": "ember",
+      "team": 1,
+      "name": "Ember Syndicate",
+      "motto": "Burn bright. Take it back.",
+      "text": "Salvage crews from the inland scrap towns, shut out of the Relay by Directive tariffs. They strip stations for parts and jam the signal to force a new deal. They fight for the people left in the dark — and break what everyone needs."
+    }
+  ]
+}

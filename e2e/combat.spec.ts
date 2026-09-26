@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { deploy } from './helpers.ts';
 
 type Vec = [number, number, number];
 
 async function join(page: Page) {
   // Own server: two players only, so they always end up on opposite teams.
-  await page.goto('/?server=http://localhost:2571');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
+  await deploy(page, '/?server=http://localhost:2571');
 }
 
 const combat = (p: Page) =>
@@ -32,8 +32,6 @@ test('one player shoots another: the server registers hits and the victim takes 
 
   // A aims at B's torso (as A sees B) and fires with sights up until B is hurt or dead.
   let hurt = false;
-  // A server-confirmed hit marker seen at any point (a later predicted marker can replace it).
-  let confirmed = false;
   for (let attempt = 0; attempt < 40 && !hurt; attempt++) {
     const me = await ownPos(a);
     // Aim at the remote player standing where B says it is.
@@ -74,8 +72,6 @@ test('one player shoots another: the server registers hits and the victim takes 
     await a.waitForTimeout(400);
     const victim = await combat(b);
     hurt = !!victim && (victim.health < 100 || !victim.alive);
-    const kind = (await combat(a))?.hitKind;
-    if (kind === 'hit' || kind === 'head' || kind === 'kill') confirmed = true;
   }
   await a.evaluate(() =>
     (
@@ -86,11 +82,8 @@ test('one player shoots another: the server registers hits and the victim takes 
   expect(hurt).toBe(true);
   const shooterHud = await combat(a);
   expect(shooterHud!.ammo).toBeLessThan(30); // shots were fired (predicted + server-confirmed ammo)
-  // The shooter saw a server-confirmed hit marker (not just a predicted one): during the
-  // shooting, or once the last round trip lands.
-  if (!confirmed) {
-    await expect
-      .poll(async () => (await combat(a))!.hitKind, { timeout: 5_000 })
-      .toMatch(/^(hit|head|kill)$/);
-  }
+  // The shooter got server-confirmed hits (not just its own predicted markers).
+  await expect
+    .poll(async () => (await combat(a))!.confirmedHits, { timeout: 5_000 })
+    .toBeGreaterThan(0);
 });

@@ -1,12 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { deploy } from './helpers.ts';
 
 test('full match with bots: join, play a 45 s match, see results, next match starts', async ({
   page,
 }) => {
   test.setTimeout(150_000);
-  await page.goto('/?server=http://localhost:2568');
-  await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
-  await page.addStyleTag({ content: '.menu{display:none!important}' });
+  await deploy(page, '/?server=http://localhost:2568');
 
   // The match bar shows up and bots fill the match to 12.
   await expect(page.getByTestId('scorebar')).toBeVisible({ timeout: 10_000 });
@@ -34,6 +33,10 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
     page.evaluate(async () => (await import('/src/store.ts')).getStatus().mapName);
   expect(await mapName()).toBe('Relay Yard');
   await expect(results).toContainText(/Victory|Defeat|Draw/);
+  // The results screen shows this match's XP line by line (from the API), while it is up.
+  const xp = page.getByTestId('xp-panel');
+  await expect(xp).toContainText('Match played', { timeout: 6_000 });
+  await expect(xp).toContainText('Total');
   const ended = await match();
   expect(ended!.players.reduce((n, p) => n + p.kills, 0)).toBeGreaterThan(0);
 
@@ -44,10 +47,6 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
     .poll(async () => (await profile())?.xp ?? 0, { timeout: 10_000 })
     .toBeGreaterThanOrEqual(150);
   expect((await profile())!.matches).toBe(1);
-  // The results screen shows this match's XP line by line (from the API).
-  const xp = page.getByTestId('xp-panel');
-  await expect(xp).toContainText('Match played', { timeout: 10_000 });
-  await expect(xp).toContainText('Total');
 
   // After the results, a new match starts on the next map in the rotation, and we can move.
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).not.toBe('ended');

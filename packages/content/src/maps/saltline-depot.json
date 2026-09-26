@@ -1,6 +1,8 @@
 {
   "id": "saltline-depot",
   "name": "Saltline Depot",
+  "location": "Saltline freight depot, dusk",
+  "description": "A coastal depot where Syndicate crews ship salvaged relay cores out by sea. Container stacks, two flank warehouses and a raised loading deck in the middle.",
   "killY": -20,
   "lighting": "dusk",
   "geometry": [

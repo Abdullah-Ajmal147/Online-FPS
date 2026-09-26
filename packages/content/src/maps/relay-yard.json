@@ -1,6 +1,8 @@
 {
   "id": "relay-yard",
   "name": "Relay Yard",
+  "location": "Switching Yard 7, coast line",
+  "description": "The last relay hub still switching traffic between the coast cities. Three lanes run through cable spools and transformer blocks; whoever holds the central platform holds the uplink.",
   "killY": -20,
   "geometry": [
     {

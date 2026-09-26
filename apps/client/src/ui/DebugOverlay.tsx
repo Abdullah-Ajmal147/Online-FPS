@@ -35,6 +35,12 @@ export function DebugOverlay() {
   return (
     <div class="debug-overlay" data-testid="debug-overlay">
       <div class="debug-title">{n ? 'network' : 'offline practice'} · F3 to close</div>
+      {status.player && (
+        <div class="debug-row" data-testid="player-debug">
+          pos {status.player.position.map((v) => v.toFixed(2)).join(' ')} ·{' '}
+          {status.player.speed.toFixed(1)} m/s
+        </div>
+      )}
       {rows.map(([k, v]) => (
         <div class="debug-row" key={k}>
           <span>{k}</span>

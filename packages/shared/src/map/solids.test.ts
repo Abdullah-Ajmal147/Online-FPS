@@ -41,6 +41,8 @@ describe('expandMap', () => {
     id: 'tiny',
     name: 'Tiny',
     lighting: 'day',
+    location: '',
+    description: '',
     killY: -10,
     geometry,
     spawns: [],

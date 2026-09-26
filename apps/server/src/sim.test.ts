@@ -42,6 +42,8 @@ const arena: GameMap = {
   id: 'arena',
   name: 'Arena',
   lighting: 'day',
+  location: '',
+  description: '',
   killY: -20,
   geometry: [
     { kind: 'box', center: [0, -0.5, 0], size: [60, 1, 60], yawDeg: 0, material: 'floor' },

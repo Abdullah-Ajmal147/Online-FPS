@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { CHAT_MAX_CHARS } from '@sentinel/protocol';
 import { isMuted, toggleMute } from '../social.ts';
-import { chatBridge } from '../store.ts';
+import { chatBridge, getStatus } from '../store.ts';
 import { useStatus } from './Hud.tsx';
 
 const SHOW_MS = 12_000;
@@ -19,7 +19,7 @@ export function Chat() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (open || e.target instanceof HTMLInputElement || e.repeat) return;
+      if (open || !getStatus().inMatch || e.target instanceof HTMLInputElement || e.repeat) return;
       const mode = e.code === 'Enter' ? 'all' : e.code === 'KeyT' ? 'team' : null;
       if (!mode) return;
       e.preventDefault();

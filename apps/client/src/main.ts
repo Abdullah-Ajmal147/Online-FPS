@@ -2,11 +2,13 @@ import { h, render } from 'preact';
 import { startGame, type Game } from './game/game.ts';
 import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
-import { setStatus } from './store.ts';
+import { getStatus, setStatus } from './store.ts';
 import { App } from './ui/App.tsx';
 
 let settings: Settings = loadSettings();
 let game: Game | undefined;
+/** DEPLOY pressed before the game finished loading. */
+let wantToJoin = false;
 
 const ui = document.getElementById('ui')!;
 const rerender = () =>
@@ -18,7 +20,18 @@ const rerender = () =>
         saveSettings(next);
         rerender();
       },
-      onPlay: () => void game?.requestPlay(),
+      onPlay: () => {
+        // DEPLOY: join the match (first time), then capture the mouse. RESUME: just capture.
+        if (!game) {
+          // Still loading (3D engine, physics): remember the click and join when ready.
+          wantToJoin = true;
+          setStatus({ net: { state: 'connecting', text: 'loading…' } });
+          return;
+        }
+        void game.join();
+        void game.requestPlay();
+      },
+      onLeave: () => game?.leave(),
     }),
     ui,
   );
@@ -26,11 +39,15 @@ rerender();
 void refreshProfile(); // level/XP card in the menu
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
-canvas.addEventListener('click', () => void game?.requestPlay());
+// Clicking the game view resumes (only once a match is joined; the main menu needs DEPLOY).
+canvas.addEventListener('click', () => {
+  if (getStatus().inMatch) void game?.requestPlay();
+});
 
 startGame(canvas, () => settings)
   .then((g) => {
     game = g;
+    if (wantToJoin) void g.join(); // the mouse is captured on the next click (RESUME)
     setStatus({ backend: g.backend });
   })
   .catch((err: unknown) => {

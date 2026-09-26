@@ -1,5 +1,6 @@
 import {
   AttachmentSchema,
+  LoreSchema,
   EquipmentSchema,
   PerkSchema,
   MapSchema,
@@ -23,6 +24,7 @@ import saltlineDepotJson from './maps/saltline-depot.json' with { type: 'json' }
 import movementJson from './movement.json' with { type: 'json' };
 import attachmentsJson from './attachments.json' with { type: 'json' };
 import perksJson from './perks.json' with { type: 'json' };
+import loreJson from './lore.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
 import { challengeData } from './challenges.ts';
@@ -298,3 +300,6 @@ export const CONTENT_HASH: string = (() => {
   }
   return h.toString(16).padStart(8, '0');
 })();
+
+/** The setting: premise, season, factions (menus and briefings). */
+export const lore = LoreSchema.parse(loreJson);
