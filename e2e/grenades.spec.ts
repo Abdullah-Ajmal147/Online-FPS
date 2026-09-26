@@ -18,6 +18,7 @@ test('throwing a frag and a smoke: counts drop, the smoke cloud appears', async 
     await page.keyboard.down(key);
     await page.waitForTimeout(150);
     await page.keyboard.up(key);
+    await page.waitForTimeout(900); // throw cooldown (content: equipment cooldown 0.6 s)
   }
   await expect.poll(async () => (await status()).combat?.frags).toBe(0);
   await expect.poll(async () => (await status()).combat?.smokes).toBe(0);
