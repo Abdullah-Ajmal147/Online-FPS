@@ -1,0 +1,17 @@
+{
+  "id": "frag",
+  "name": "Frag grenade",
+  "kind": "frag",
+  "slot": "lethal",
+  "perLife": 1,
+  "throwSpeed": 17,
+  "fuseTime": 2.2,
+  "restitution": 0.35,
+  "explosion": {
+    "maxDamage": 130,
+    "minDamage": 20,
+    "innerRadius": 1.5,
+    "outerRadius": 6,
+    "selfMultiplier": 0.5
+  }
+}

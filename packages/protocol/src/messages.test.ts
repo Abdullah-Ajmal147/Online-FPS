@@ -206,6 +206,10 @@ describe('SetLoadout', () => {
       secondary: 4,
     });
   });
+
+  it('rejects trailing bytes', () => {
+    expect(() => decodeSetLoadout(new Uint8Array([1, 2, 3]))).toThrow(RangeError);
+  });
 });
 
 describe('SnapshotAck and Ping', () => {

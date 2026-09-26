@@ -31,8 +31,6 @@ import {
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
 export const MAX_HEALTH = 100;
-/** When pellets of one blast hit different zones, the event reports the best one. */
-const ZONE_RANK: Record<HitZone, number> = { limbs: 0, torso: 1, head: 2 };
 /** Respawn 3 s after death (Phase 2 task 6). */
 export const RESPAWN_TICKS = 3 * TICK_RATE;
 /** Health starts coming back 4 s after the last damage and refills in ~1.7 s (GAME_DESIGN). */
@@ -353,7 +351,7 @@ export class MatchSim {
     // A shotgun fires several pellets; their damage adds up per victim, so one blast is one
     // hit (one event, one kill) no matter how many pellets land.
     const cone = shot.spread + spec.pelletSpread;
-    const byVictim = new Map<SimPlayer, { damage: number; zone: HitZone; distance: number }>();
+    const byVictim = new Map<SimPlayer, Record<HitZone, number>>();
     for (let i = 0; i < spec.pellets; i++) {
       // Random spread inside the cone (server-only randomness; the client shows its own guess).
       const r = cone * Math.sqrt(this.random());
@@ -384,17 +382,18 @@ export class MatchSim {
       if (best) {
         const damage = damageAt(weapon.damage[best.zone], best.distance, weapon.falloff);
         result.hit = { victim: best.victim.id, zone: best.zone, damage, distance: best.distance };
-        const sum = byVictim.get(best.victim);
-        if (!sum) byVictim.set(best.victim, { damage, zone: best.zone, distance: best.distance });
-        else {
-          sum.damage += damage;
-          if (ZONE_RANK[best.zone] > ZONE_RANK[sum.zone]) sum.zone = best.zone;
-        }
+        let sum = byVictim.get(best.victim);
+        if (!sum) byVictim.set(best.victim, (sum = { head: 0, torso: 0, limbs: 0 }));
+        sum[best.zone] += damage;
       }
       this.lastShots.push(result);
     }
-    for (const [victim, hit] of byVictim) {
-      this.damage(victim, shooter, hit.damage, hit.zone, shooter.loadout[shot.slot]);
+    for (const [victim, z] of byVictim) {
+      // The zone that took most of the damage is the one reported (a blast with one stray
+      // pellet in the head is not a headshot).
+      const zone: HitZone =
+        z.head >= z.torso && z.head >= z.limbs ? 'head' : z.torso >= z.limbs ? 'torso' : 'limbs';
+      this.damage(victim, shooter, z.head + z.torso + z.limbs, zone, shooter.loadout[shot.slot]);
     }
   }
 

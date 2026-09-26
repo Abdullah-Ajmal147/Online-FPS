@@ -215,3 +215,50 @@ export const WeaponSchema = z
     message: 'damage must satisfy head >= torso >= limbs',
   });
 export type Weapon = z.infer<typeof WeaponSchema>;
+
+// ---------------------------------------------------------------------------
+// Equipment (thrown). Simulated only on the server: a bouncing projectile that explodes
+// (frag) or releases a vision-blocking cloud (smoke) when its fuse runs out.
+// ---------------------------------------------------------------------------
+
+export const EquipmentSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9-]+$/),
+    name: z.string().min(1),
+    kind: z.enum(['frag', 'smoke']),
+    /** Loadout slot: lethal (G) or tactical (Q). */
+    slot: z.enum(['lethal', 'tactical']),
+    /** Carried per life. */
+    perLife: z.number().int().min(0).max(5),
+    /** Launch speed along the view, m/s (plus a little upward lob). */
+    throwSpeed: z.number().positive().max(40),
+    /** Seconds from the throw until it goes off. */
+    fuseTime: z.number().positive().max(10),
+    /** Bounciness: fraction of speed kept off a surface (0–1). */
+    restitution: z.number().min(0).max(1),
+    explosion: z
+      .object({
+        /** Full damage within innerRadius, falling linearly to minDamage at outerRadius. */
+        maxDamage: z.number().int().positive().max(255),
+        minDamage: z.number().int().nonnegative().max(255),
+        innerRadius: z.number().nonnegative(),
+        outerRadius: z.number().positive().max(20),
+        /** Damage to the thrower (teammates take none). */
+        selfMultiplier: z.number().min(0).max(1),
+      })
+      .optional(),
+    smoke: z
+      .object({
+        radius: z.number().positive().max(15),
+        /** Seconds the cloud lasts once released. */
+        duration: z.number().positive().max(30),
+      })
+      .optional(),
+  })
+  .refine((e) => (e.kind === 'frag' ? !!e.explosion : !!e.smoke), {
+    message: 'frag needs `explosion`, smoke needs `smoke`',
+  })
+  .refine((e) => !e.explosion || e.explosion.outerRadius > e.explosion.innerRadius, {
+    message: 'explosion.outerRadius must be beyond innerRadius',
+  });
+export type Equipment = z.infer<typeof EquipmentSchema>;

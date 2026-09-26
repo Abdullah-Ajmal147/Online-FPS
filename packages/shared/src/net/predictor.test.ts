@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { defaultLoadout, maps, movement } from '@sentinel/content';
+import { defaultLoadout, maps, movement, resolveLoadout } from '@sentinel/content';
 import { Button } from '../input.ts';
 import { expandMap } from '../map/solids.ts';
 import { createMovementContext, createPlayerBody } from '../movement/context.ts';
@@ -57,6 +57,24 @@ describe('Predictor.reset', () => {
     for (let i = 25; i < 30; i++)
       expected = stepSim(expected, input(i), server.ctx, server.body).state;
     expect(p.state).toEqual(expected);
+  });
+
+  it('on respawn with a new loadout, replays in-flight inputs with the new weapons', () => {
+    const { ctx, body, spawn } = setup();
+    const p = new Predictor(spawn, ctx, body);
+    // Fire every tick: the replay must use the SMG's fire rate and magazine, not the rifle's.
+    const fire = (i: number) => ({ ...input(i), buttons: Button.Fire });
+    for (let i = 0; i < 30; i++) p.tick(fire(i));
+    const smg = createSimContext(ctx.movement, resolveLoadout('vireo-smg', 'wren-sp'));
+    const smgSpawn: SimState = { move: spawn.move, weapon: createWeaponState(smg.loadout) };
+    p.reset(smgSpawn, 20, smg);
+    let expected = smgSpawn;
+    for (let i = 20; i < 30; i++) expected = stepSim(expected, fire(i), smg, body).state;
+    expect(p.state).toEqual(expected);
+    // Later ticks keep predicting with the new loadout.
+    const next = p.tick(fire(30));
+    expect(p.state).toEqual(stepSim(expected, next.sent, smg, body).state);
+    expect(p.state.weapon.ammo[0].ammo).toBeLessThan(smg.loadout[0].def.magazine);
   });
 });
 

@@ -1,0 +1,11 @@
+{
+  "id": "smoke",
+  "name": "Smoke grenade",
+  "kind": "smoke",
+  "slot": "tactical",
+  "perLife": 1,
+  "throwSpeed": 15,
+  "fuseTime": 1.2,
+  "restitution": 0.3,
+  "smoke": { "radius": 4.5, "duration": 12 }
+}

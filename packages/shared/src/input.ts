@@ -12,6 +12,10 @@ export const Button = {
   Fire: 1 << 7,
   Aim: 1 << 8,
   Reload: 1 << 9,
+  /** Throw lethal equipment (frag) on press. */
+  Lethal: 1 << 10,
+  /** Throw tactical equipment (smoke) on press. */
+  Tactical: 1 << 11,
 } as const;
 
 /** Every defined button bit; anything else a client sends is ignored. */

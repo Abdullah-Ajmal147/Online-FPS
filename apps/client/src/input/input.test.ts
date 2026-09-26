@@ -14,7 +14,10 @@ describe('buttonsFromKeys', () => {
       Button.Forward | Button.Jump,
     );
     expect(buttonsFromKeys(new Set(['KeyA', 'KeyC']), B, false)).toBe(Button.Left | Button.Crouch);
-    expect(buttonsFromKeys(new Set(['KeyQ']), B, false)).toBe(0);
+    expect(buttonsFromKeys(new Set(['KeyP']), B, false)).toBe(0);
+    expect(buttonsFromKeys(new Set(['KeyG', 'KeyQ']), B, false)).toBe(
+      Button.Lethal | Button.Tactical,
+    );
   });
 
   it('sprint comes from the latch the caller tracks (hold or toggle)', () => {

@@ -315,7 +315,9 @@ export function encodeSetLoadout(msg: SetLoadout): Uint8Array {
 
 export function decodeSetLoadout(bytes: Uint8Array): SetLoadout {
   const r = new BinaryReader(bytes);
-  return { primary: r.u8(), secondary: r.u8() };
+  const msg = { primary: r.u8(), secondary: r.u8() };
+  if (r.remaining !== 0) throw new RangeError('trailing bytes in SetLoadout');
+  return msg;
 }
 
 // ---------------------------------------------------------------------------

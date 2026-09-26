@@ -1,4 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
+import { CONTENT_HASH } from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
@@ -60,6 +61,7 @@ export class Connection {
     try {
       const room = await client.joinOrCreate('match', {
         protocolVersion: PROTOCOL_VERSION,
+        contentHash: CONTENT_HASH,
         name,
         primary,
         secondary,

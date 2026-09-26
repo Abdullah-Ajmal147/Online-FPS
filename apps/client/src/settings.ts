@@ -11,6 +11,8 @@ export const ACTIONS = [
   'crouch',
   'sprint',
   'reload',
+  'lethal',
+  'tactical',
   'primary',
   'secondary',
 ] as const;
@@ -25,6 +27,8 @@ export const ACTION_LABELS: Record<Action, string> = {
   crouch: 'Crouch / slide',
   sprint: 'Sprint',
   reload: 'Reload',
+  lethal: 'Frag grenade',
+  tactical: 'Smoke grenade',
   primary: 'Primary weapon',
   secondary: 'Sidearm',
 };
@@ -63,6 +67,8 @@ export const DEFAULT_SETTINGS: Settings = {
     crouch: 'KeyC',
     sprint: 'ShiftLeft',
     reload: 'KeyR',
+    lethal: 'KeyG',
+    tactical: 'KeyQ',
     primary: 'Digit1',
     secondary: 'Digit2',
   },

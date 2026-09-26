@@ -8,6 +8,10 @@ import {
   maps,
   modes,
   movement,
+  EquipmentSchema,
+  KILL_SOURCE_FRAG,
+  equipment,
+  killSourceName,
   resolveLoadout,
   weaponCatalog,
   weaponIndex,
@@ -170,7 +174,7 @@ describe('weapons', () => {
     expect(new Set(weaponCatalog.map((w) => w.class))).toEqual(
       new Set(['rifle', 'smg', 'shotgun', 'marksman', 'sidearm']),
     );
-    expect(weaponCatalog.length).toBeLessThan(255); // u8 wire index, 255 = "no weapon"
+    expect(weaponCatalog.length).toBeLessThan(KILL_SOURCE_FRAG); // u8 wire codes stay distinct
   });
 
   it('gives each weapon a stable wire index sorted by id', () => {
@@ -194,6 +198,9 @@ describe('weapons', () => {
       'wren-sp',
     ]);
     expect(resolveLoadout(42, { x: 1 }).map((w) => w.id)).toEqual(['kestrel-ar', 'wren-sp']);
+    for (const junk of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+      expect(resolveLoadout(junk, junk).map((w) => w.id)).toEqual(['kestrel-ar', 'wren-sp']);
+    }
   });
 
   it('makes the shotgun a close-range one-shot only when most pellets land', () => {
@@ -209,5 +216,35 @@ describe('weapons', () => {
       expect(shots, w.id).toBeGreaterThanOrEqual(4);
       expect(shots, w.id).toBeLessThanOrEqual(7);
     }
+  });
+});
+
+describe('content hash', () => {
+  it('is an 8-digit hex fingerprint', async () => {
+    const { CONTENT_HASH } = await import('./index.ts');
+    expect(CONTENT_HASH).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
+
+describe('equipment', () => {
+  it('has a frag that kills up close but not from the edge of its radius', () => {
+    const e = equipment.frag.explosion!;
+    expect(e.maxDamage).toBeGreaterThanOrEqual(100);
+    expect(e.minDamage).toBeLessThan(50);
+    expect(equipment.frag.kind).toBe('frag');
+    expect(equipment.smoke.smoke?.duration).toBeGreaterThan(5);
+  });
+
+  it('rejects a frag without an explosion and a smoke without a cloud', () => {
+    expect(EquipmentSchema.safeParse({ ...equipment.frag, explosion: undefined }).success).toBe(
+      false,
+    );
+    expect(EquipmentSchema.safeParse({ ...equipment.smoke, smoke: undefined }).success).toBe(false);
+  });
+
+  it('names kill sources for the kill feed', () => {
+    expect(killSourceName(KILL_SOURCE_FRAG)).toBe('Frag grenade');
+    expect(killSourceName(weaponCatalog.findIndex((w) => w.id === 'vireo-smg'))).toBe('Vireo SMG');
+    expect(killSourceName(255)).toBe('');
   });
 });

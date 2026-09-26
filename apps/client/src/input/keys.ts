@@ -11,6 +11,8 @@ const ACTION_BUTTON: Partial<Record<Action, number>> = {
   crouch: Button.Crouch,
   sprint: Button.Sprint,
   reload: Button.Reload,
+  lethal: Button.Lethal,
+  tactical: Button.Tactical,
 };
 
 /**

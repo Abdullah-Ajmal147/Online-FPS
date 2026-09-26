@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { defaultLoadout, maps, movement } from '@sentinel/content';
+import { CONTENT_HASH, defaultLoadout, maps, movement } from '@sentinel/content';
 import {
   MessageType,
   PROTOCOL_VERSION,
@@ -105,7 +105,7 @@ export class Bot {
     rapier: Rapier;
   }): Promise<Bot> {
     const client = new Client(opts.url);
-    const options = { protocolVersion: PROTOCOL_VERSION };
+    const options = { protocolVersion: PROTOCOL_VERSION, contentHash: CONTENT_HASH };
     const room = opts.room
       ? await client.joinById(opts.room, options)
       : await client.joinOrCreate('match', options);

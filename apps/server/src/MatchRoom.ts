@@ -49,11 +49,15 @@ const MIN_PING_INTERVAL_MS = 400;
 /** Scoreboard/clock updates, on top of immediate updates when the phase changes. */
 const MATCH_INFO_EVERY_TICKS = TICK_RATE / 2;
 
+/** SetLoadout rate limit: menu clicks are slow; anything faster is noise or abuse. */
+const MIN_LOADOUT_INTERVAL_MS = 250;
+
 interface Seat {
   playerId: number;
   ackServerTick: number;
   badMessages: number;
   lastPingMs: number;
+  lastLoadoutMs: number;
 }
 
 /**
@@ -156,21 +160,25 @@ export class MatchRoom extends Room {
       this.inbound(client, () => this.outbound(client, MessageType.Pong, bytes));
     });
 
-    // Loadout for the next spawn. Untrusted: resolveLoadout drops unknown or wrong-slot
-    // weapons (they fall back to the default), and it only ever applies at a respawn.
+    // Loadout for the next spawn. Untrusted: indices must name a weapon (else it counts as a bad
+    // message), resolveLoadout drops wrong-slot weapons, and it only ever applies at a respawn.
+    // At most a few changes per second; extra ones are ignored.
     this.onMessageBytes(MessageType.SetLoadout, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
-      if (!seat) return;
-      try {
-        const msg = decodeSetLoadout(bytes);
-        const loadout = resolveLoadout(
-          weaponCatalog[msg.primary]?.id,
-          weaponCatalog[msg.secondary]?.id,
-        );
-        this.sim.setLoadout(seat.playerId, loadout);
-      } catch {
-        if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
-      }
+      const now = performance.now();
+      if (!seat || now - seat.lastLoadoutMs < MIN_LOADOUT_INTERVAL_MS) return;
+      seat.lastLoadoutMs = now;
+      this.inbound(client, () => {
+        try {
+          const msg = decodeSetLoadout(bytes);
+          const primary = weaponCatalog[msg.primary];
+          const secondary = weaponCatalog[msg.secondary];
+          if (!primary || !secondary) throw new RangeError('unknown weapon index');
+          this.sim.setLoadout(seat.playerId, resolveLoadout(primary.id, secondary.id));
+        } catch {
+          if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+        }
+      });
     });
 
     // Standalone ack (normally the ack rides on InputCmd).
@@ -227,6 +235,7 @@ export class MatchRoom extends Room {
       ackServerTick: 0,
       badMessages: 0,
       lastPingMs: -Infinity,
+      lastLoadoutMs: -Infinity,
     });
     counters.joins.inc();
     log.info('player joined', {
