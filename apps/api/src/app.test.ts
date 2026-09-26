@@ -344,3 +344,108 @@ describe('player codes (friends)', () => {
     expect((await again.request(`/players/${code}`)).status).toBe(200);
   });
 });
+
+describe('moderation (Phase 7)', () => {
+  const ADMIN = 'correct-horse-battery';
+  const auth = { authorization: `Basic ${Buffer.from(`admin:${ADMIN}`).toString('base64')}` };
+  const modApp = () => createApp(new Store(':memory:'), SECRET, { adminPassword: ADMIN });
+  const flagged = (matchId: string) => {
+    const r = result(matchId) as { players: Record<string, unknown>[]; log?: unknown };
+    r.players[0] = {
+      ...r.players[0],
+      flags: ['accuracy', 'snap-aim'],
+      aim: { shots: 90, hits: 85 },
+    };
+    r.log = { samples: [[1, [[1, 2.5, -3, 100]]]], kills: [[1, 1, 2, 1, 1, 2.5, -3, 4, 5]] };
+    return r;
+  };
+  const guestToken = async (a: ReturnType<typeof app>) =>
+    ((await (await a.request('/guests', { method: 'POST' })).json()) as { token: string }).token;
+  const codeOf = async (a: ReturnType<typeof app>, guest: string) =>
+    ((await (await a.request(`/profiles/${guest}`)).json()) as { code: string }).code;
+
+  it('the admin page is off without a password, and needs it when on', async () => {
+    expect((await app().request('/admin')).status).toBe(404);
+    const a = modApp();
+    expect((await a.request('/admin')).status).toBe(401);
+    expect((await a.request('/admin/api/queue')).status).toBe(401);
+    const wrong = { authorization: `Basic ${Buffer.from('admin:nope').toString('base64')}` };
+    expect((await a.request('/admin/api/queue', { headers: wrong })).status).toBe(401);
+    expect((await a.request('/admin', { headers: auth })).status).toBe(200);
+  });
+
+  it('flags and match logs from the server reach the admin queue and player file', async () => {
+    const a = modApp();
+    await post(a, flagged('ffffffff-0000-4000-8000-000000000001'));
+    const queue = (await (await a.request('/admin/api/queue', { headers: auth })).json()) as {
+      code: string;
+      flaggedMatches: number;
+    }[];
+    const code = await codeOf(a, GUEST);
+    expect(queue.find((q) => q.code === code)?.flaggedMatches).toBe(1);
+    const file = (await (
+      await a.request(`/admin/api/players/${code}`, { headers: auth })
+    ).json()) as {
+      flags: { flags: string[]; matchId: string }[];
+      profile: Record<string, unknown>;
+    };
+    expect(file.flags[0]!.flags).toEqual(['accuracy', 'snap-aim']);
+    expect(JSON.stringify(file)).not.toContain(GUEST); // guest ids never leave the API
+    const log = (await (
+      await a.request(`/admin/api/matches/${file.flags[0]!.matchId}/log?code=${code}`, {
+        headers: auth,
+      })
+    ).json()) as { log: { kills: unknown[] }; players: { focus: boolean; name: string }[] };
+    expect(log.log.kills).toHaveLength(1);
+    expect(log.players.find((p) => p.focus)?.name).toBe('Ayesha');
+  });
+
+  it('players report by code with their signed token; no self-reports; rate-limited', async () => {
+    const a = modApp();
+    await post(a, result('ffffffff-0000-4000-8000-000000000002'));
+    const target = await codeOf(a, GUEST);
+    const token = await guestToken(a);
+    const report = (body: object) =>
+      a.request('/reports', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await report({ token: 'forged', code: target, reason: 'cheating' })).status).toBe(401);
+    expect((await report({ token, code: target, reason: 'cheating' })).status).toBe(202);
+    expect((await report({ token, code: target, reason: 'dancing' })).status).toBe(400);
+    let limited = false;
+    for (let i = 0; i < 10; i++)
+      limited ||= (await report({ token, code: target, reason: 'abuse' })).status === 429;
+    expect(limited).toBe(true);
+    const queue = (await (await a.request('/admin/api/queue', { headers: auth })).json()) as {
+      code: string;
+      reports: number;
+    }[];
+    expect(queue.find((q) => q.code === target)!.reports).toBeGreaterThanOrEqual(2);
+  });
+
+  it('ban / shadow-ban reach the game server through /access', async () => {
+    const a = modApp();
+    await post(a, result('ffffffff-0000-4000-8000-000000000003'));
+    const code = await codeOf(a, GUEST);
+    const access = async () =>
+      (
+        (await (
+          await a.request(`/access/${GUEST}`, { headers: serviceHeaders(SECRET, 'access', GUEST) })
+        ).json()) as { status: string }
+      ).status;
+    expect(await access()).toBe('ok');
+    const set = (status: string) =>
+      a.request(`/admin/api/players/${code}/status`, {
+        method: 'POST',
+        headers: { ...auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    expect((await set('shadow')).status).toBe(200);
+    expect(await access()).toBe('shadow');
+    expect((await set('banned')).status).toBe(200);
+    expect(await access()).toBe('banned');
+    expect((await set('nonsense')).status).toBe(400);
+  });
+});

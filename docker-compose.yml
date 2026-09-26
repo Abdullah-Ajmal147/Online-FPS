@@ -37,6 +37,8 @@ services:
       SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?Set SENTINEL_API_SECRET to a random value of 32+ characters (see README)}
       SENTINEL_DB: /data/sentinel.db
       TRUST_PROXY: '1'
+      # Moderation page at https://<domain>/api/admin (off when empty; 12+ characters).
+      SENTINEL_ADMIN_PASSWORD: ${SENTINEL_ADMIN_PASSWORD:-}
     volumes:
       - sentinel-data:/data
     restart: unless-stopped

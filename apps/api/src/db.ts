@@ -50,6 +50,28 @@ export class Store {
         guest_id TEXT PRIMARY KEY,
         data TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS match_logs (
+        match_id TEXT PRIMARY KEY,
+        at INTEGER NOT NULL,
+        data TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS player_flags (
+        guest_id TEXT NOT NULL,
+        match_id TEXT NOT NULL,
+        flags TEXT NOT NULL,
+        aim TEXT NOT NULL,
+        at INTEGER NOT NULL,
+        PRIMARY KEY (guest_id, match_id)
+      );
+      CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reporter TEXT NOT NULL,
+        target_code TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        match_id TEXT,
+        at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS reports_target ON reports (target_code);
       CREATE TABLE IF NOT EXISTS matches (
         match_id TEXT PRIMARY KEY,
         received_at INTEGER NOT NULL,
@@ -63,6 +85,11 @@ export class Store {
       const columns = this.db.prepare('PRAGMA table_info(profiles)').all() as { name: string }[];
       if (!columns.some((c) => c.name === 'code')) {
         this.db.exec('ALTER TABLE profiles ADD COLUMN code TEXT');
+      }
+      // Moderation status (Phase 7): 'ok', 'shadow' (plays only with other shadow players),
+      // 'banned' (can't join).
+      if (!columns.some((c) => c.name === 'status')) {
+        this.db.exec("ALTER TABLE profiles ADD COLUMN status TEXT NOT NULL DEFAULT 'ok'");
       }
       this.db.exec('DROP INDEX IF EXISTS profiles_code');
       this.db.exec('COMMIT');
@@ -164,6 +191,144 @@ export class Store {
     return row ? (JSON.parse(row.data) as unknown) : null;
   }
 
+  // --- Moderation (Phase 7) ---------------------------------------------------------------
+
+  /** Match logs are kept for review for LOG_DAYS, then deleted. */
+  static readonly LOG_DAYS = 14;
+
+  saveMatchLog(matchId: string, at: number, log: unknown): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO match_logs (match_id, at, data) VALUES (?, ?, ?)')
+      .run(matchId, at, JSON.stringify(log));
+    this.db.prepare('DELETE FROM match_logs WHERE at < ?').run(at - Store.LOG_DAYS * 86_400_000);
+  }
+
+  /** The stored result of a match (players with guest ids, teams, stats). */
+  matchSummary(
+    matchId: string,
+  ): { players: { id: number; guestId: string | null; name: string; team: number }[] } | null {
+    const row = this.db.prepare('SELECT summary FROM matches WHERE match_id = ?').get(matchId) as
+      { summary: string } | undefined;
+    return row ? (JSON.parse(row.summary) as never) : null;
+  }
+
+  matchLog(matchId: string): unknown {
+    const row = this.db.prepare('SELECT data FROM match_logs WHERE match_id = ?').get(matchId) as
+      { data: string } | undefined;
+    return row ? (JSON.parse(row.data) as unknown) : null;
+  }
+
+  addFlags(guestId: string, matchId: string, flags: string[], aim: unknown, at: number): void {
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO player_flags (guest_id, match_id, flags, aim, at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(guestId, matchId, JSON.stringify(flags), JSON.stringify(aim), at);
+  }
+
+  addReport(r: {
+    reporter: string;
+    targetCode: string;
+    reason: string;
+    matchId: string | null;
+    at: number;
+  }): void {
+    this.db
+      .prepare(
+        'INSERT INTO reports (reporter, target_code, reason, match_id, at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(r.reporter, r.targetCode, r.reason, r.matchId, r.at);
+  }
+
+  setStatus(code: string, status: 'ok' | 'shadow' | 'banned'): boolean {
+    return (
+      this.db.prepare('UPDATE profiles SET status = ? WHERE code = ?').run(status, code).changes > 0
+    );
+  }
+
+  statusOf(guestId: string): 'ok' | 'shadow' | 'banned' {
+    const row = this.db.prepare('SELECT status FROM profiles WHERE guest_id = ?').get(guestId) as
+      { status: 'ok' | 'shadow' | 'banned' } | undefined;
+    return row?.status ?? 'ok';
+  }
+
+  /** Players worth a look: reported or flagged, most first. */
+  moderationQueue(): {
+    code: string;
+    name: string | null;
+    status: string;
+    reports: number;
+    flaggedMatches: number;
+    lastAt: number;
+  }[] {
+    return this.db
+      .prepare(
+        `WITH r AS (SELECT target_code AS code, COUNT(*) AS n, MAX(at) AS last FROM reports GROUP BY target_code),
+              f AS (SELECT p.code AS code, COUNT(*) AS n, MAX(pf.at) AS last FROM player_flags pf
+                    JOIN profiles p ON p.guest_id = pf.guest_id GROUP BY p.code),
+              codes AS (SELECT code FROM r UNION SELECT code FROM f)
+         SELECT codes.code AS code, p.name AS name, COALESCE(p.status, 'ok') AS status,
+                COALESCE(r.n, 0) AS reports, COALESCE(f.n, 0) AS flaggedMatches,
+                MAX(COALESCE(r.last, 0), COALESCE(f.last, 0)) AS lastAt
+         FROM codes LEFT JOIN profiles p ON p.code = codes.code
+         LEFT JOIN r ON r.code = codes.code LEFT JOIN f ON f.code = codes.code
+         ORDER BY reports + flaggedMatches DESC, lastAt DESC LIMIT 200`,
+      )
+      .all() as never;
+  }
+
+  /** Everything the admin page shows about one player. */
+  playerFile(code: string) {
+    const profile = this.db
+      .prepare(
+        'SELECT guest_id, name, xp, matches, wins, kills, deaths, status FROM profiles WHERE code = ?',
+      )
+      .get(code) as
+      | {
+          guest_id: string;
+          name: string;
+          xp: number;
+          matches: number;
+          wins: number;
+          kills: number;
+          deaths: number;
+          status: string;
+        }
+      | undefined;
+    const reports = this.db
+      .prepare(
+        'SELECT reason, match_id AS matchId, at FROM reports WHERE target_code = ? ORDER BY at DESC LIMIT 100',
+      )
+      .all(code);
+    const flags = profile
+      ? (
+          this.db
+            .prepare(
+              'SELECT match_id AS matchId, flags, aim, at FROM player_flags WHERE guest_id = ? ORDER BY at DESC LIMIT 50',
+            )
+            .all(profile.guest_id) as { matchId: string; flags: string; aim: string; at: number }[]
+        ).map((f) => ({
+          ...f,
+          flags: JSON.parse(f.flags) as string[],
+          aim: JSON.parse(f.aim) as unknown,
+        }))
+      : [];
+    if (!profile && reports.length === 0) return null;
+    // Never hand out the guest id (it is the player's login secret's subject).
+    const publicProfile = profile
+      ? {
+          name: profile.name,
+          xp: profile.xp,
+          matches: profile.matches,
+          wins: profile.wins,
+          kills: profile.kills,
+          deaths: profile.deaths,
+          status: profile.status,
+        }
+      : null;
+    return { code, profile: publicProfile, reports, flags };
+  }
+
   /** Kills per weapon id, all time. */
   weaponKills(guestId: string): Record<string, number> {
     const rows = this.db
@@ -191,6 +356,15 @@ export class Store {
       this.db.exec('ROLLBACK');
       throw err;
     }
+  }
+
+  createProfile(guestId: string, code: string, at: number): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO profiles (guest_id, name, xp, matches, wins, kills, deaths, updated_at, code)
+         VALUES (?, 'Player', 0, 0, 0, 0, 0, ?, ?)`,
+      )
+      .run(guestId, at, code);
   }
 
   /** Public lookup by player code: name, XP and when they last played (no guest id). */

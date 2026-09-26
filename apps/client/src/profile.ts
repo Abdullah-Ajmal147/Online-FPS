@@ -128,3 +128,24 @@ export async function refreshProfile(): Promise<void> {
     // API unreachable: the menu just hides the profile card.
   }
 }
+
+/** Report a player (by public code) to the moderators. Resolves to a message for the player. */
+export async function reportPlayer(
+  code: string,
+  reason: 'cheating' | 'abuse' | 'name',
+): Promise<string> {
+  const guest = await ensureGuest();
+  if (!guest) return 'Reports need a profile (the progression service is offline).';
+  try {
+    const res = await fetch(`${apiUrl()}/reports`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: guest.token, code, reason }),
+    });
+    if (res.status === 202) return 'Report sent. Thank you.';
+    if (res.status === 429) return 'You have sent a lot of reports; try again later.';
+    return 'Could not send the report.';
+  } catch {
+    return 'Could not send the report.';
+  }
+}

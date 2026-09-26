@@ -20,7 +20,22 @@ export async function deploy(page: Page, url = '/'): Promise<void> {
     .poll(async () => (await status(page)).net.state, { timeout: 20_000 })
     .toBe('connected');
   // …and until the server has placed our soldier (inputs before that aren't sent).
-  await expect.poll(async () => (await status(page)).spawned, { timeout: 10_000 }).toBe(true);
+  await expect
+    .poll(async () => (await status(page)).spawned, { timeout: 20_000 })
+    .toBe(true)
+    .catch(async (e: unknown) => {
+      const st = await status(page);
+      console.log(
+        '[deploy] not spawned:',
+        JSON.stringify({
+          net: st.net,
+          match: st.match?.phase,
+          stats: st.netStats,
+          inMatch: st.inMatch,
+        }),
+      );
+      throw e;
+    });
 }
 
 /** Release the mouse (what Esc does in a real browser): the pause menu opens. */

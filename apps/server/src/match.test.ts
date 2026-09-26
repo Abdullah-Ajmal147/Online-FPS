@@ -172,6 +172,12 @@ describe('a full bots-only match on Relay Yard', () => {
     }
     expect(summary).not.toBeNull();
     const s = summary!;
+    // The match log (Phase 7 task 4): a position sample per second, every kill with positions.
+    expect(s.log.samples.length).toBeGreaterThanOrEqual(s.durationSeconds - 1);
+    expect(s.log.samples[0]![1].length).toBeGreaterThan(0);
+    const scored = s.players.reduce((n, p) => n + p.kills, 0);
+    expect(s.log.kills.length).toBeGreaterThanOrEqual(scored);
+    expect(JSON.stringify(s.log).length).toBeLessThan(400_000);
     const kills = s.players.reduce((n, p) => n + p.kills, 0);
     expect(kills).toBeGreaterThan(5); // they found each other and fought
     expect(s.teamScores[0] + s.teamScores[1]).toBe(kills);

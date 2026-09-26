@@ -1,4 +1,11 @@
-import { issueGuestToken, publicCode, RateLimiter, verifyService } from '@sentinel/auth';
+import {
+  issueGuestToken,
+  publicCode,
+  RateLimiter,
+  verifyGuestToken,
+  verifyService,
+} from '@sentinel/auth';
+import { mountAdmin } from './admin.ts';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
@@ -16,6 +23,15 @@ const MatchResultSchema = z.object({
   map: z.string(),
   winner: z.number().int().min(0).max(255),
   durationSeconds: z.number().nonnegative(),
+  /** Compact replay for review (kept LOG_DAYS). Bounded so a result can't be huge. */
+  log: z
+    .object({
+      samples: z
+        .array(z.tuple([z.number(), z.array(z.array(z.number()).max(4)).max(24)]))
+        .max(4000),
+      kills: z.array(z.array(z.number()).max(9)).max(3000),
+    })
+    .optional(),
   players: z
     .array(
       z
@@ -37,6 +53,14 @@ const MatchResultSchema = z.object({
               Object.fromEntries(Object.entries(r).filter(([id]) => Object.hasOwn(weapons, id))),
             ),
           secondsPlayed: z.number().nonnegative(),
+          /** Anti-cheat numbers and anomaly flags (Phase 7 task 3). */
+          aim: z.record(z.string(), z.number().nullable()).optional(),
+          flags: z
+            .array(
+              z.enum(['accuracy', 'headshot-rate', 'reaction-time', 'snap-aim', 'kd-vs-level']),
+            )
+            .max(8)
+            .default([]),
         })
         // Consistent stats only (a buggy or misconfigured server can't inflate weapon levels).
         .refine(
@@ -63,6 +87,8 @@ export interface AppOptions {
    * each profile, so the game server and the menu follow the same switch.
    */
   unlockAll?: boolean;
+  /** Admin page password (SENTINEL_ADMIN_PASSWORD); without one the admin page is off. */
+  adminPassword?: string | undefined;
   /** Clock (tests pin it to a date to know which challenges are active). */
   now?: () => number;
 }
@@ -95,7 +121,11 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       return c.json({ error: 'too many requests' }, 429);
     }
     counters.guests.inc();
-    return c.json(issueGuestToken(secret));
+    const guest = issueGuestToken(secret);
+    // A profile row from the start: moderators can act on a reported player (by code) even
+    // if they never finished a match.
+    store.createProfile(guest.guestId, publicCode(secret, guest.guestId), now());
+    return c.json(guest);
   });
 
   app.get('/healthz', (c) => c.json({ ok: true, service: 'api' }));
@@ -125,10 +155,12 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       counters.rejected.inc();
       return c.json({ error: 'bad match result' }, 400);
     }
-    if (!store.recordMatch(parsed.matchId, parsed)) {
+    const { log, ...summary } = parsed;
+    if (!store.recordMatch(parsed.matchId, summary)) {
       counters.rejected.inc();
       return c.json({ error: 'match already recorded' }, 409);
     }
+    if (log) store.saveMatchLog(parsed.matchId, now(), log);
     counters.matches.inc();
     const awarded: { guestId: string; xp: number }[] = [];
     const seen = new Set<string>();
@@ -167,6 +199,8 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
         weaponKills: p.weaponKills,
       });
       awarded.push({ guestId: p.guestId, xp });
+      if (p.flags.length > 0)
+        store.addFlags(p.guestId, parsed.matchId, p.flags, p.aim ?? {}, now());
     }
     return c.json({ ok: true, awarded });
   });
@@ -198,8 +232,44 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
       level: levelFor(row?.xp ?? 0).level,
       weaponKills: store.weaponKills(guestId),
       unlockAll: opts.unlockAll === true,
+      status: store.statusOf(guestId),
     });
   });
+
+  /**
+   * A player reports another (by public code) from the pause menu. The reporter proves who
+   * they are with their signed guest token; a few reports per player, then one per 10 min.
+   */
+  const reportLimit = new RateLimiter(5, 1 / 600);
+  const ReportSchema = z.object({
+    token: z.string().max(200),
+    code: z.string().regex(/^[0-9a-f]{16}$/),
+    reason: z.enum(['cheating', 'abuse', 'name']),
+    matchId: z.string().max(64).nullable().default(null),
+  });
+  app.post('/reports', async (c) => {
+    let body;
+    try {
+      body = ReportSchema.parse(await c.req.json());
+    } catch {
+      return c.json({ error: 'bad report' }, 400);
+    }
+    const reporter = verifyGuestToken(body.token, secret);
+    if (!reporter) return c.json({ error: 'bad token' }, 401);
+    if (publicCode(secret, reporter) === body.code) return c.json({ error: 'that is you' }, 400);
+    if (!reportLimit.take(reporter)) return c.json({ error: 'too many reports' }, 429);
+    store.addReport({
+      reporter,
+      targetCode: body.code,
+      reason: body.reason,
+      matchId: body.matchId,
+      at: now(),
+    });
+    counters.reports.inc();
+    return c.json({ ok: true }, 202);
+  });
+
+  mountAdmin(app, store, opts.adminPassword, (guestId) => publicCode(secret, guestId));
 
   /** Friends: a player's public card by code (name, level, last played). */
   app.get('/players/:code', (c) => {

@@ -1799,3 +1799,55 @@ body.aim-enemy .crosshair-lines i {
   clip-path: var(--cut);
   border: 1px solid var(--line);
 }
+
+.row-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.link.danger {
+  color: #f0948d;
+}
+
+/* Short windows (small laptops, split screen): the rail stays reachable. */
+.menu-rail {
+  overflow-y: auto;
+}
+
+@media (max-height: 620px) {
+  .menu-top {
+    padding: 10px 24px 4px;
+  }
+
+  .wm-text {
+    font-size: 20px;
+  }
+
+  .rail-item {
+    padding: 5px 10px 5px 12px;
+    font-size: 17px;
+  }
+
+  .deploy {
+    padding: 8px 16px 7px;
+  }
+
+  .deploy span {
+    font-size: 22px;
+  }
+
+  .rail-leave {
+    margin-top: 6px;
+    padding: 5px 10px;
+  }
+
+  .menu-status {
+    padding: 4px 24px 6px;
+  }
+
+  .mode-title {
+    font-size: 36px;
+  }
+}

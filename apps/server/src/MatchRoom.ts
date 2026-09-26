@@ -122,7 +122,11 @@ export class MatchRoom extends Room {
   /** What a player has unlocked, or null if unknown (index.ts wires the API; tests: unknown). */
   static fetchAccess: (guestId: string | null) => Promise<Access | null> = async () => null;
 
-  override async onCreate(): Promise<void> {
+  /** Matchmaking pool: 'shadow' rooms only hold shadow-banned players (index.ts filterBy). */
+  private pool: 'normal' | 'shadow' = 'normal';
+
+  override async onCreate(options?: { pool?: unknown }): Promise<void> {
+    this.pool = options?.pool === 'shadow' ? 'shadow' : 'normal';
     const preset = presetFromEnv(process.env.SENTINEL_LAG);
     if (preset) {
       this.lag = new FakeLag(preset, Date.now() & 0xffff);
@@ -272,11 +276,16 @@ export class MatchRoom extends Room {
     const token = (options as { token?: unknown }).token;
     const guestId = verifyGuestToken(token, API_SECRET);
     // Unlocks come from the API (server-reported progress), never from the client.
-    return {
-      guestId,
-      access: (await MatchRoom.fetchAccess(guestId)) ?? NEW_PLAYER,
-      ip: context.ip ?? null,
-    };
+    const access = (await MatchRoom.fetchAccess(guestId)) ?? NEW_PLAYER;
+    if (access.status === 'banned') {
+      counters.rejectedJoins.inc();
+      throw new ServerError(4403, 'BANNED');
+    }
+    // Shadow pool (Phase 7 task 6): shadow-banned players only ever play each other. A join
+    // into the wrong pool is refused with the right pool's name; the client retries there.
+    const pool = access.status === 'shadow' ? 'shadow' : 'normal';
+    if (pool !== this.pool) throw new ServerError(4409, `POOL:${pool}`);
+    return { guestId, access, ip: context.ip ?? null };
   }
 
   override onJoin(
@@ -370,7 +379,12 @@ export class MatchRoom extends Room {
       if (!seat.guestId) continue;
       // If the API can't answer, the player keeps what they had.
       void MatchRoom.fetchAccess(seat.guestId).then((access) => {
-        if (access) seat.access = access;
+        if (!access) return;
+        seat.access = access;
+        // Banned since joining: out now. (Shadow status applies from the next join.)
+        if (access.status === 'banned') {
+          this.clients.find((c) => this.seats.get(c.sessionId) === seat)?.leave(4403);
+        }
       });
     }
   }

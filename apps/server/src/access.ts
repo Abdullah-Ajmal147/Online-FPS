@@ -3,7 +3,12 @@ import type { Access } from '@sentinel/content';
 
 /** Checks the API's answer (defensive: it's another process). */
 export function parseAccess(raw: unknown): Access {
-  const r = raw as { level?: unknown; weaponKills?: unknown; unlockAll?: unknown } | null;
+  const r = raw as {
+    level?: unknown;
+    weaponKills?: unknown;
+    unlockAll?: unknown;
+    status?: unknown;
+  } | null;
   if (!r || typeof r !== 'object') throw new Error('not an object');
   const level = r.level;
   if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 100)
@@ -14,7 +19,8 @@ export function parseAccess(raw: unknown): Access {
       if (typeof k === 'number' && Number.isInteger(k) && k >= 0) weaponKills[id] = k;
     }
   }
-  return { level, weaponKills, unlockAll: r.unlockAll === true };
+  const status = r.status === 'shadow' || r.status === 'banned' ? r.status : 'ok';
+  return { level, weaponKills, unlockAll: r.unlockAll === true, status };
 }
 
 /**

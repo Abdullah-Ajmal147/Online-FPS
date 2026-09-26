@@ -56,7 +56,8 @@ const server = new Server({
   },
 });
 
-server.define('match', MatchRoom);
+// Rooms are per pool: shadow-banned players get their own rooms (MatchRoom.onAuth).
+server.define('match', MatchRoom).filterBy(['pool']);
 
 // Finished matches go to the API for XP. Needs the same secret as the API.
 const report = createApiReporter({

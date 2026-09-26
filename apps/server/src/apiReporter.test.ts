@@ -11,6 +11,7 @@ const summary: MatchSummary = {
   teamScores: [75, 60],
   durationSeconds: 512,
   mvp: 1,
+  log: { samples: [[1, [[1, 0.5, -2, 1024]]]], kills: [] },
   players: [
     {
       id: 1,

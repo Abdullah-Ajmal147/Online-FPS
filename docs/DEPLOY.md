@@ -23,6 +23,7 @@ Point an A record (e.g. `play.example.com`) at the server's IP.
 git clone https://github.com/<you>/Online-FPS.git && cd Online-FPS
 cat > .env <<EOF2
 SENTINEL_API_SECRET=$(openssl rand -hex 32)
+SENTINEL_ADMIN_PASSWORD=$(openssl rand -base64 18)
 SITE_ADDRESS=play.example.com
 EOF2
 docker compose up -d --build
@@ -30,6 +31,9 @@ docker compose up -d --build
 
 Caddy gets a Let's Encrypt certificate automatically. Open `https://play.example.com`.
 
+- `SENTINEL_ADMIN_PASSWORD` opens the moderation page at `https://<domain>/api/admin`
+  (user `admin`): reports, anomaly flags, match replays, ban / shadow-ban. Leave it empty to
+  switch the page off.
 - `SENTINEL_API_SECRET` signs guest tokens and match results. Keep it secret, keep it the same
   across restarts (changing it logs every guest out of their progress), and never commit `.env`.
   The services refuse to start in production without a real one.

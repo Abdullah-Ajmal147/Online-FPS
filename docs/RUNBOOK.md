@@ -77,6 +77,21 @@ the real server once after the first deploy and note the date here.
 | Chat abuse                                    | —                                  | lines are filtered and rate-limited; players can mute. Bans: admin page (Phase 7 task 5)                                                                                                                  |
 | Suspected cheater                             | —                                  | stat flags per match (Phase 7 task 3); aim/wall hacks gain little: server authority, anti-wallhack snapshots                                                                                              |
 
+## Moderation
+
+Admin page: `https://<domain>/api/admin` (user `admin`, `SENTINEL_ADMIN_PASSWORD`).
+
+- **Queue:** players who were reported (pause menu → Squad → Report) or whose matches tripped
+  anomaly flags (accuracy, headshot rate, reaction time, snap aim, K/D far above level).
+- **Player file:** stats, every report, every flagged match with its aim numbers.
+- **Replay:** a top-down replay of a logged match (positions each second, kills), the player
+  highlighted. Logs are kept 14 days.
+- **Actions:** _Shadow-ban_ (the player only ever gets matched with other shadow-banned
+  players, from their next match; they aren't told), _Ban_ (can't join; removed at the end of
+  the current match), _Clear_.
+
+A flag alone isn't proof: look at the replay and several matches before acting.
+
 ## Capacity (load test, `apps/server/scripts/load.ts`)
 
 Measured on the development machine, bots in every slot, all snapshots encoded:

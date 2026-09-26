@@ -68,6 +68,8 @@ export interface Access {
   weaponKills: Readonly<Record<string, number>>;
   /** Test/dev switch (API env SENTINEL_UNLOCK_ALL): everything available. */
   unlockAll?: boolean;
+  /** Moderation status (admin page): banned players can't join; shadow players are pooled. */
+  status?: 'ok' | 'shadow' | 'banned';
 }
 
 /** A brand-new player. */

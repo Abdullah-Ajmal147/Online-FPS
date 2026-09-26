@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { lore, maps } from '@sentinel/content';
-import { accessOf, apiUrl } from '../profile.ts';
+import { accessOf, apiUrl, reportPlayer } from '../profile.ts';
 import { addFriend, friends, recentPlayers, removeFriend } from '../social.ts';
 import {
   ACTIONS,
@@ -360,6 +360,7 @@ function SquadScreen() {
           <p class="muted">Deploy first: the link brings friends into your match.</p>
         )}
       </div>
+      <MatchPlayers />
       <div class="play-cols">
         <div class="panel">
           <div class="panel-h">Friends</div>
@@ -641,5 +642,57 @@ function SettingsScreen({
         </div>
       )}
     </Screen>
+  );
+}
+
+/** The humans in this match: add as friend, or report to the moderators. */
+function MatchPlayers() {
+  const status = useStatus();
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [friendCodes, setFriendCodes] = useState(friends());
+  const others = (status.match?.players ?? []).filter((p) => !p.bot && !p.me && p.code);
+  if (!status.inMatch) return null;
+  return (
+    <div class="panel" data-testid="match-players">
+      <div class="panel-h">Players in this match</div>
+      {others.length === 0 && <p class="muted">Only you and bots right now.</p>}
+      {others.map((p) => (
+        <div class="list-row" key={p.code}>
+          <span>
+            {p.name}
+            <small>
+              {note[p.code] ?? (p.team === status.match!.myTeam ? 'teammate' : 'enemy')}
+            </small>
+          </span>
+          <span class="row-actions">
+            {!friendCodes.includes(p.code) && (
+              <button
+                class="link"
+                onClick={() => {
+                  addFriend(p.code);
+                  setFriendCodes(friends());
+                }}
+              >
+                Add friend
+              </button>
+            )}
+            {(['cheating', 'abuse', 'name'] as const).map((reason) => (
+              <button
+                key={reason}
+                class="link danger"
+                data-testid={`report-${reason}-${p.code}`}
+                onClick={() =>
+                  void reportPlayer(p.code, reason).then((msg) =>
+                    setNote((n) => ({ ...n, [p.code]: msg })),
+                  )
+                }
+              >
+                Report {reason}
+              </button>
+            ))}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }

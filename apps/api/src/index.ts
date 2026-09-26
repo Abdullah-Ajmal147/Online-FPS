@@ -18,6 +18,7 @@ const trustProxy = process.env.TRUST_PROXY === '1';
 const app = createApp(store, secret, {
   // Only with SENTINEL_UNLOCK_ALL=1 (`pnpm dev` sets it so every weapon can be tried locally).
   unlockAll: resolveUnlockAll(process.env),
+  adminPassword: process.env.SENTINEL_ADMIN_PASSWORD,
   clientIp: (c) =>
     (trustProxy && c.req.header('x-forwarded-for')?.split(',')[0]?.trim()) ||
     getConnInfo(c).remote.address ||

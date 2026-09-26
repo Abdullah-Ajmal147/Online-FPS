@@ -118,7 +118,11 @@ export default defineConfig({
       cwd: 'apps/api',
       url: 'http://localhost:8787/healthz',
       // Real unlocks (a new player can't use locked gear): the e2e tests check enforcement.
-      env: { SENTINEL_DB: ':memory:', SENTINEL_UNLOCK_ALL: '0' },
+      env: {
+        SENTINEL_DB: ':memory:',
+        SENTINEL_UNLOCK_ALL: '0',
+        SENTINEL_ADMIN_PASSWORD: 'e2e-admin-password',
+      },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
       reuseExistingServer: false,
     },

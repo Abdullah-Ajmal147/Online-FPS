@@ -94,6 +94,8 @@ export interface MatchHud {
     kills: number;
     deaths: number;
     me: boolean;
+    /** Public player code ('' for bots and players without a profile). */
+    code: string;
   }[];
 }
 

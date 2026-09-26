@@ -14,6 +14,15 @@ export interface MatchTimings {
 }
 
 /** One match's summary (logged as JSON at the end, sent to the API in Phase 4). */
+/**
+ * samples: [seconds, [[playerId, x, z, yaw16]…]]; kills: [seconds, killer, victim, weapon code,
+ * headshot 0/1, killerX, killerZ, victimX, victimZ].
+ */
+export interface MatchLog {
+  samples: [number, number[][]][];
+  kills: number[][];
+}
+
 export interface MatchSummary {
   /** Unique per match: the API counts each id once. */
   matchId: string;
@@ -23,6 +32,8 @@ export interface MatchSummary {
   teamScores: [number, number];
   durationSeconds: number;
   mvp: number;
+  /** Compact replay for review (admin page): positions each second, kills. */
+  log: MatchLog;
   players: {
     id: number;
     /** Guest profile id (humans only; bots and unknown guests get null). */
@@ -84,6 +95,7 @@ export class Match {
   update(): boolean {
     // Score kills from this tick's events (only while live).
     if (this.phase === MatchPhase.Live) {
+      this.recordLog();
       for (const { event } of this.sim.events) {
         if (event.type !== 'kill') continue;
         const victim = this.sim.players.get(event.victim);
@@ -150,6 +162,7 @@ export class Match {
         this.mode.reset();
         this.sim.resetStats();
         this.departed = [];
+        this.log = { samples: [], kills: [] };
         this.sim.respawnAll();
         this.sim.frozen = true;
         this.phaseEndsAt = this.sim.tick + this.ticks(this.timings.countdownSeconds);
@@ -191,6 +204,40 @@ export class Match {
 
   /** Humans who left during the live match keep their row (stats and time played). */
   private departed: MatchSummary['players'] = [];
+  private log: MatchLog = { samples: [], kills: [] };
+
+  /**
+   * Match log (Phase 7 task 4): every second each player's position (0.1 m) and view yaw,
+   * plus every kill with both positions. ~12 players × 600 s ≈ 150 KB of JSON per match.
+   */
+  private recordLog(): void {
+    const t = Math.round(((this.sim.tick - this.liveStartedAt) / TICK_RATE) * 10) / 10;
+    const r = (v: number) => Math.round(v * 10) / 10;
+    if ((this.sim.tick - this.liveStartedAt) % TICK_RATE === 0) {
+      this.log.samples.push([
+        t,
+        [...this.sim.players.values()]
+          .filter((p) => p.alive)
+          .map((p) => [p.id, r(p.sim.move.position[0]), r(p.sim.move.position[2]), p.sim.move.yaw]),
+      ]);
+    }
+    for (const { event } of this.sim.events) {
+      if (event.type !== 'kill') continue;
+      const k = this.sim.players.get(event.killer)?.sim.move.position;
+      const v = this.sim.players.get(event.victim)?.sim.move.position;
+      this.log.kills.push([
+        t,
+        event.killer,
+        event.victim,
+        event.weapon,
+        event.headshot ? 1 : 0,
+        r(k?.[0] ?? 0),
+        r(k?.[2] ?? 0),
+        r(v?.[0] ?? 0),
+        r(v?.[2] ?? 0),
+      ]);
+    }
+  }
 
   /** Call before removing a player from the sim. */
   playerLeaving(id: number): void {
@@ -228,6 +275,7 @@ export class Match {
       teamScores: this.mode.teamScores(),
       durationSeconds: Math.round((this.sim.tick - this.liveStartedAt) / TICK_RATE),
       mvp: this.mvp,
+      log: this.log,
       players: [...[...this.sim.players.values()].map((p) => this.row(p)), ...this.departed],
     };
   }

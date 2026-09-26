@@ -19,6 +19,7 @@ describe('access fetcher', () => {
       level: 7,
       weaponKills: { 'kestrel-ar': 40 },
       unlockAll: false,
+      status: 'ok',
     });
     expect(seen!.url).toBe(`http://api/access/${GUEST}`);
     expect(seen!.sig).toMatch(/^[0-9a-f]{64}$/);

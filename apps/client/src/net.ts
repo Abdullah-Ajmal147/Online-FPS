@@ -81,7 +81,7 @@ export class Connection {
           console.warn('[net] invite room unavailable, joining any match:', err);
         }
       }
-      room ??= await client.joinOrCreate('match', options);
+      room ??= await joinWithPool(client, options);
       this.room = room;
 
       room.onMessage(MessageType.Hello, (payload: Uint8Array) => {
@@ -142,10 +142,12 @@ export class Connection {
         PING_INTERVAL_MS,
       );
 
-      room.onLeave(() => {
+      room.onLeave((code: number) => {
         clearInterval(this.pingTimer);
         this.room = undefined;
-        setStatus({ net: { state: 'error', text: 'disconnected (practice mode)' } });
+        const text =
+          code === 4403 ? 'removed from the match (banned)' : 'disconnected from the match';
+        setStatus({ net: { state: 'error', text } });
         handlers.onDisconnect();
       });
     } catch (err) {
@@ -153,7 +155,9 @@ export class Connection {
       const text =
         message === RELOAD_REQUIRED
           ? 'update required, please reload'
-          : 'server unreachable (practice mode)';
+          : message.includes('banned')
+            ? 'this account is banned from matches'
+            : 'game server unreachable, try again';
       console.error('[net] join failed:', err);
       setStatus({ net: { state: 'error', text } });
     }
@@ -192,4 +196,21 @@ export function inviteUrl(roomId: string, token: string): string {
   url.searchParams.set('room', roomId);
   url.searchParams.set('with', token);
   return url.toString();
+}
+
+/**
+ * joinOrCreate, following the server if it assigns another pool ("POOL:shadow"): moderated
+ * players are matched with each other. A ban is reported as such.
+ */
+async function joinWithPool(client: Client, options: Record<string, unknown>): Promise<Room> {
+  try {
+    return await client.joinOrCreate('match', options);
+  } catch (err) {
+    const msg = String((err as { message?: unknown }).message ?? err);
+    const pool = /POOL:(\w+)/.exec(msg)?.[1];
+    if (pool) return client.joinOrCreate('match', { ...options, pool });
+    if (msg.includes('BANNED'))
+      throw new Error('This account is banned from matches.', { cause: err });
+    throw err;
+  }
 }

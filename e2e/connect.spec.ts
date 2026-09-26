@@ -18,6 +18,10 @@ test('the main menu comes first; nothing is joined until DEPLOY', async ({ page 
   await pause(page);
   await expect(page.getByTestId('play')).toContainText('Resume');
   await expect(page.getByTestId('leave')).toBeVisible();
+  // LEAVE MATCH: back to the main menu, out of the match.
+  await page.getByTestId('leave').click();
+  await expect(page.getByTestId('play')).toContainText('Deploy');
+  await expect(page.getByTestId('net-status')).toHaveText('not in a match');
   expect(errors).toEqual([]);
 });
 

@@ -14,4 +14,5 @@ export const counters = {
     'sentinel_api_rate_limited_total',
     'Requests refused by rate limits',
   ),
+  reports: metrics.counter('sentinel_api_reports_total', 'Player reports received'),
 };
