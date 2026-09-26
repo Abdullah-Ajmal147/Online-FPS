@@ -1,103 +1,125 @@
-Colyseus trusts the X-Real-IP header for the player's IP, and the API takes the first X-Forwarded-For entry. So nginx must overwrite both headers with the real address. The common $proxy_add_x_forwarded_for would let a player fake their IP and dodge IP bans.
+# Production deploy: EC2 + Docker Hub image + nginx + HTTPS
 
-Here's everything, in order.
+How **https://play.remoteref.com** runs today, step by step, so it can be rebuilt from scratch.
+(General options — Caddy instead of nginx, building on the server — are in `docs/DEPLOY.md`.)
 
-1. docker-compose.override.yml
+```
+players ──HTTPS/WSS──▶ nginx (host, :443, Let's Encrypt)
+                         ├── /api/*  ──▶ api  container  127.0.0.1:8787  (SQLite on a volume)
+                         └── /*      ──▶ game container  127.0.0.1:2567  (game server + web page)
+```
 
-Put this next to docker-compose.yml on the server; Docker Compose loads it automatically. It switches off the bundled Caddy, which would take ports 80/443, and exposes the game and API to the server itself only:
+Both containers run the same image, `abdullah211/sentinelstrike:latest`, which GitHub Actions
+builds and pushes to Docker Hub after CI passes on `main` (`.github/workflows/docker-publish.yml`).
 
-services:
-caddy:
-profiles: ['caddy'] # off: nginx on the host handles 80/443
-game:
-ports: - '127.0.0.1:2567:2567'
-api:
-ports:
-├─────────────────────────┼─────────────────────────────────────────────────────────┤
-│ SENTINEL_ADMIN_PASSWORD │ ✅ 24 characters (needs 12+) │
-├─────────────────────────┼─────────────────────────────────────
-│ SITE_ADDRESS │ ✅ valid format, see the dummy-domain note below │
-├─────────────────────────┼─────────────────────────────────────────────────────────┤
-│ SENTINEL_IMAGE │ ✅ matches the Docker Hub image your workflow publishes │
-├─────────────────────────┼─────────────────────────────────────────────────────────┤
-│ SITE_URL │ ✅ https:// + the same domain
-└─────────────────────────┴─────────────────────────────────────────────────────────┘
+## 1. Server (once)
 
-Two things to know:
+- EC2, Ubuntu, 2 vCPU (not a `t2`/`t3` burstable type for real traffic), Elastic IP attached.
+- Security group: **80** and **443** from anywhere, **22** only from your IP. Never open 2567
+  or 8787 (they only listen on `127.0.0.1`).
+- DNS: an **A record** `play.remoteref.com` → the Elastic IP.
+- Software:
 
-1. You pasted the secret and admin password into this chat. They're now in this conversation's history. That's fine for testing, but before real players
-   arrive, generate fresh values and don't share them. The .env.new the values are never shown.
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+docker compose version || sudo apt install -y docker-compose-v2
+sudo apt install -y nginx certbot python3-certbot-nginx
+```
 
-2. The dummy domain. On EC2, Caddy will try to get an HTTPS certificate for play.remoteref.com. That only works if the domain's DNS points to your EC2 IP.
-   Otherwise it fails and keeps retrying, and Let's Encrypt temporas.
+## 2. The game (containers)
 
-- Until your real domain is ready, use plain HTTP on the server's IP:
-  SITE_ADDRESS=:80
-  SITE_URL=http://<your-EC2-public-IP>
-  Then open http://<EC2-IP> in the browser. Everything works over plain HTTP, including invite links; only the Copy button falls back to "Press Ctrl+C". Make sure the security group allows port 80.
-- When the real domain points to the Elastic IP, switch both bacth https://) and restart with docker compose up -d. Caddy thengets the certificate automatically.
+```bash
+mkdir -p ~/sentinel && cd ~/sentinel
+nano .env                 # the two lines below
+nano docker-compose.yml   # paste deploy/docker-compose.ec2.yml from the repo
+sudo docker compose up -d
+```
 
-The Vite fix for the CI failures is still waiting whenever you w
+`.env` (runtime secrets: stays on the server, never in git or chat):
 
-✻ Churned for 12s · done 5:01 PM
+```
+SENTINEL_API_SECRET=<openssl rand -hex 32>
+SENTINEL_ADMIN_PASSWORD=<openssl rand -base64 18>
+```
 
-❯ give me ngnix conf i can copy and paste when image up
+Keep `SENTINEL_API_SECRET` the same forever: changing it logs every player's guest out.
 
-Checking how docker-compose.yml exposes the containers, so the nght ports:
-erver; Docker Compose loads it automatically. It switches off the bundled Caddy, which would take ports 80/443, and exposes the game and API to the server itself only:
+Check:
 
-services:
-caddy:
-profiles: ['caddy'] # off: nginx on the host handles 80/443
-game:
-ports: - '127.0.0.1:2567:2567'
-api:
-ports: - '127.0.0.1:8787:8787'
+```bash
+sudo docker compose ps               # api and game: Up
+curl -s localhost:2567/healthz       # {"ok":true,"service":"server","protocolVersion":…}
+curl -s localhost:8787/healthz       # {"ok":true,"service":"api"}
+```
 
-2. /etc/nginx/sites-available/sentinel
+## 3. nginx
 
-   client_max_body_size 64k;
-
-   gzip on;
-   gzip_types text/css application/javascript application/json image/svg+xml;
-
-   add_header X-Content-Type-Options nosniff always;
-   add_header Referrer-Policy strict-origin-when-cross-origin a
-   server_tokens off;
-
-   # API: /api/profiles/... -> api /profiles/... (the trailing
-
-   location /api/ {
-   proxy_pass http://127.0.0.1:8787/;
-   proxy_http_version 1.1;
-   proxy_set_header Host $host; # Overwrite, never append: the API trusts the first entry (IP bans, rate limits).
-   proxy_set_header X-Forwarded-For $remote_addr;
-   IP from X-Real-IP: always set it here.
-   proxy_set_header X-Real-IP $remote_addr;
-   proxy_set_header X-Forwarded-For $remote_addr;
-   proxy_set_header X-Forwarded-Proto $scheme; # Matches last 10+ minutes on one WebSocket: don't cut idle-looking connections.
-   proxy_read_timeout 3600s;
-   proxy_send_timeout 3600s;
-   proxy_buffering off;
-   }
-   }
-
-3. Commands on the server
-
-sudo apt install -y nginx
-sudo nano /etc/nginx/sites-available/sentinel # paste the config above
+```bash
+sudo nano /etc/nginx/sites-available/sentinel    # paste deploy/nginx.conf, set server_name
 sudo ln -s /etc/nginx/sites-available/sentinel /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
+```
 
-docker compose pull && docker compose up -d # game + api (Caddy stays off)
-curl -s http://localhost/api/healthz # {"ok":true,"service":"api"}
+`server_name play.remoteref.com _;` — the `_` also answers on the bare IP. The config
+overwrites `X-Real-IP` / `X-Forwarded-For` with the real client address (IP bans and rate
+limits depend on it) and returns 404 for `/metrics` and `/api/metrics`.
 
-Then open http://<EC2-public-IP>. Security group: open 80 and 443 only (2567/8787 are local-only now).
+## 4. HTTPS (Let's Encrypt)
 
-4. HTTPS, once the real domain points to the Elastic IP
+Only after the A record points at the server (`ping play.remoteref.com` shows the Elastic IP):
 
-sudo apt install -y certbot python3-certbot-nginx
+```bash
 sudo certbot --nginx -d play.remoteref.com --redirect
+```
 
-Certbot adds the certificate, the HTTP→HTTPS redirect and automaE_URL=https://play.remoteref.com in ENV_FILE, so the next imagebuild uses the right link-preview address.
+Certbot asks for an email and the terms once, gets the certificate, adds `listen 443 ssl` and
+an HTTP → HTTPS redirect to `/etc/nginx/sites-enabled/sentinel`, and installs automatic renewal
+(certificates last 90 days). Check renewal works:
+
+```bash
+sudo certbot renew --dry-run
+sudo systemctl list-timers | grep certbot
+```
+
+Optional once HTTPS is stable: in the `listen 443` server block add
+`add_header Strict-Transport-Security "max-age=31536000" always;` then
+`sudo nginx -t && sudo systemctl reload nginx` (browsers then always use HTTPS).
+
+## 5. Check from anywhere
+
+```bash
+curl -s https://play.remoteref.com/healthz        # game server, protocol version
+curl -s https://play.remoteref.com/api/healthz    # API
+curl -sI http://play.remoteref.com | head -1      # 301 (redirect to https)
+curl -s -o /dev/null -w '%{http_code}\n' https://play.remoteref.com/metrics   # 404
+```
+
+Then open https://play.remoteref.com and press DEPLOY. After a server restart, the **first**
+match takes ~30 s to start (the server builds its bot navigation once); later joins take a
+few seconds.
+
+## 6. Everyday operations
+
+| What                                                      | Command (in `~/sentinel`)                                                                                                                                        |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Update to the newest image (after CI + publish on `main`) | `sudo docker compose pull && sudo docker compose up -d`                                                                                                          |
+| Logs (JSON lines)                                         | `sudo docker compose logs -f --tail 100 game api`                                                                                                                |
+| Restart                                                   | `sudo docker compose restart`                                                                                                                                    |
+| Admin / moderation page                                   | https://play.remoteref.com/api/admin (user `admin`, password from `.env`)                                                                                        |
+| Metrics (from the server only)                            | `curl -s localhost:2567/metrics` and `curl -s localhost:8787/metrics`                                                                                            |
+| Backup the database                                       | `sudo docker compose exec api node apps/api/scripts/backup.mjs backup /data/sentinel.db /data/backups` then `sudo docker compose cp api:/data/backups ./backups` |
+| nginx config changed                                      | `sudo nginx -t && sudo systemctl reload nginx`                                                                                                                   |
+
+An update ends matches in progress (players rejoin); the database is on the `sentinel-data`
+volume and survives updates. A new protocol version makes open game pages ask for a reload.
+
+## 7. If something is wrong
+
+| Symptom                                           | Look at                                                                                                         |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Site down / 502                                   | `sudo docker compose ps` (containers up?), `sudo docker compose logs game api`                                  |
+| Page loads, DEPLOY hangs                          | WebSocket through nginx: the `Upgrade` / `Connection` lines in the config, `sudo tail /var/log/nginx/error.log` |
+| "Update required, please reload"                  | old page after an update: reload                                                                                |
+| Certificate errors                                | `sudo certbot certificates`, `sudo certbot renew --dry-run`                                                     |
+| Containers won't start: "Set SENTINEL_API_SECRET" | `.env` missing or not in `~/sentinel`                                                                           |

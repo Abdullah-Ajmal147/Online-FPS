@@ -1,0 +1,28 @@
+# Production on EC2 with nginx on the host (deploy/deploy.md). Copy to ~/sentinel/docker-compose.yml
+# on the server, next to a .env with SENTINEL_API_SECRET and SENTINEL_ADMIN_PASSWORD.
+# Needs no clone of the repo: both services run the image CI publishes to Docker Hub.
+services:
+  game:
+    image: abdullah211/sentinelstrike:latest
+    environment:
+      SENTINEL_API_URL: http://api:8787
+      SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?set it in .env}
+    ports:
+      - '127.0.0.1:2567:2567' # only nginx on this server can reach it
+    depends_on: [api]
+    restart: unless-stopped
+  api:
+    image: abdullah211/sentinelstrike:latest
+    command: ['node', 'apps/api/dist/index.mjs']
+    environment:
+      SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?set it in .env}
+      SENTINEL_DB: /data/sentinel.db
+      TRUST_PROXY: '1'
+      SENTINEL_ADMIN_PASSWORD: ${SENTINEL_ADMIN_PASSWORD:-}
+    volumes:
+      - sentinel-data:/data # the database survives restarts and updates
+    ports:
+      - '127.0.0.1:8787:8787'
+    restart: unless-stopped
+volumes:
+  sentinel-data:

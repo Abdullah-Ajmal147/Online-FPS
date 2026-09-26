@@ -4,6 +4,9 @@ The whole game runs as three containers from this repo: **Caddy** (HTTPS, public
 **game** (authoritative game server + the built web client) and **api** (guest tokens, XP,
 SQLite on a volume). One region = one of these stacks (ADR 0002: EU, NA East, Asia).
 
+**The live setup** (EC2 + Docker Hub image + nginx + Let's Encrypt, https://play.remoteref.com)
+is written up step by step in [`deploy/deploy.md`](../deploy/deploy.md).
+
 ## 1. A server
 
 Any Linux VPS with 2 vCPU / 2 GB RAM is plenty for several matches (a 12-player match ticks in
