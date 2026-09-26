@@ -1,5 +1,5 @@
 // Download-size budget for the browser client (Phase 5, ROADMAP performance budgets).
-// Run after `pnpm build`: fails (exit 1) if apps/client/dist breaks a limit.
+// Run after `pnpm build` (or build:crazygames): fails (exit 1) if apps/client/dist breaks a limit.
 //   first download < 15 MB · everything < 50 MB · < 1,500 files · no single file > 8 MB
 // Everything in dist counts as "first download" until assets are streamed lazily.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -9,7 +9,10 @@ import { gzipSync } from 'node:zlib';
 
 const MB = 1024 * 1024;
 const BUDGET = { firstDownload: 15 * MB, total: 50 * MB, files: 1500, singleFile: 8 * MB };
-const dist = fileURLToPath(new URL('../apps/client/dist/', import.meta.url));
+// Folder under apps/client (default dist; `node scripts/size-budget.mjs dist-crazygames`).
+const dist = fileURLToPath(
+  new URL(`../apps/client/${process.argv[2] ?? 'dist'}/`, import.meta.url),
+);
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {

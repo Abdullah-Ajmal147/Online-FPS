@@ -115,3 +115,22 @@ Measured on the development machine, bots in every slot, all snapshots encoded:
   (Redis) to matchmake across processes: add a Redis service and `RedisPresence` /
   `RedisDriver` when one process is no longer enough (owner's hosting decision). Re-run the
   load test on the real server type and record the numbers here.
+
+## Portal build (CrazyGames)
+
+```bash
+VITE_REGIONS='[{"id":"eu-west","name":"EU West","url":"https://eu.<domain>"}]' \
+VITE_API_URL=https://<domain>/api \
+pnpm --filter @sentinel/client build:crazygames
+node scripts/size-budget.mjs dist-crazygames
+# zip apps/client/dist-crazygames and upload it on the CrazyGames developer portal
+```
+
+The portal serves the page from its own domain, so the game server(s) and API need absolute
+HTTPS URLs. Content rating and portal checklist: `docs/PEGI.md`.
+
+## Regions
+
+`VITE_REGIONS` (build time) lists the game server regions as JSON: `[{"id","name","url"}]`.
+The client pings each `/healthz` and joins the lowest, or the player's pick. Invite links carry
+the region. The dashboard (admin page) shows median ping per region.

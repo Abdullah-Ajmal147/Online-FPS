@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:crazygames": "vite build --mode crazygames",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json"
   },

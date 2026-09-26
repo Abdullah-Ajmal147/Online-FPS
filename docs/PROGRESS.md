@@ -352,6 +352,12 @@ Done:
      the Play screen; invite links carry the region so friends land on the same server.
      Checked with two local servers (pick NA → invite → friend joins the same NA room). The
      servers themselves (Edgegap / hosting) are the owner's decision.
+- 5. WebTransport deferred (ADR 0010): needs hosting with UDP + a QUIC server; WebSocket
+     stays, the protocol already tolerates loss.
+- 6. CrazyGames build (`build:crazygames`): relative paths, SDK adapter (loading, gameplay
+     start/stop, happy time; harmless if the SDK is missing), no external links, size check
+     per build folder. PEGI 12 self-check and portal checklist in `docs/PEGI.md`. Account and
+     submission are the owner's.
 - 7. Comms screen: patch notes (`news.json`, newest first), a feedback form (bug / idea /
      other, 1000 chars, sends build + renderer + mode, rate-limited per guest and IP, kept 180
      days, listed on the admin page), community link slot (hidden until the owner has a

@@ -4,12 +4,14 @@ import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { getStatus, setStatus } from './store.ts';
 import { startSessionTelemetry } from './telemetry.ts';
+import { platform, trackGameplay } from './platform.ts';
 import { probeRegions, regions } from './regions.ts';
 import { App } from './ui/App.tsx';
 
 let settings: Settings = loadSettings();
 void probeRegions(regions());
 startSessionTelemetry();
+trackGameplay(platform());
 let game: Game | undefined;
 /** DEPLOY pressed before the game finished loading. */
 let wantToJoin = false;
@@ -54,6 +56,7 @@ startGame(canvas, () => settings)
     void probeRegions(regions()); // again, now that loading no longer blocks the page
     if (wantToJoin) void g.join(); // the mouse is captured on the next click (RESUME)
     setStatus({ backend: g.backend });
+    platform().loadingDone();
   })
   .catch((err: unknown) => {
     console.error('[game] failed to start:', err);

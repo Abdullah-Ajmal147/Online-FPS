@@ -18,6 +18,7 @@ import { useStatus } from './Hud.tsx';
 import { LoadoutPicker } from './Loadout.tsx';
 import { primerDone, setPrimerDone } from '../primer.ts';
 import { pickRegion, regions } from '../regions.ts';
+import { platform } from '../platform.ts';
 
 interface Props {
   settings: Settings;
@@ -703,7 +704,7 @@ function CommsScreen({ mode }: { mode: string }) {
           </form>
           <div class="panel">
             <div class="panel-h">Community</div>
-            {news.community.discord ? (
+            {news.community.discord && platform().externalLinks ? (
               <a
                 class="btn"
                 href={news.community.discord}
