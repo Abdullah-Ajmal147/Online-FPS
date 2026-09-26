@@ -58,6 +58,25 @@ These numbers are the contract between client and server. Change them only with 
 - Yaw/pitch: 16 bits each
 - Health/ammo: uint8
 
+## Client → server message audit (Phase 7)
+
+Every message a client can send, and what the server checks before it has any effect.
+Nothing a client sends is ever trusted as a position, hit, number or result.
+
+| Message      | Size                            | Rate                                                                                                     | Values                                                                                                                                                                                                                                                            |
+| ------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Join options | WebSocket ≤ 2 KB                | joins per IP: burst 20, then 1/s                                                                         | protocol version + content hash must match; guest token HMAC-verified; name cleaned + profanity-filtered; loadout rebuilt by `buildLoadout` against the player's server-side unlocks (only 16 entries of any array read); invite token ≤ 32 chars, party lead ≤ 3 |
+| InputCmd     | exact layout, no trailing bytes | 150 msgs/s per client (Colyseus); queue capped at 20, extra inputs dropped; one input simulated per tick | 1–3 inputs, u32 seq without overflow, seq must increase; unknown button bits masked, pitch clamped, weapon slot 0/1; view tick governed (back ≤ 0.25 tick per input, rewind ≤ 300 ms)                                                                             |
+| SnapshotAck  | 4 bytes                         | message rate cap                                                                                         | clamped to the current server tick                                                                                                                                                                                                                                |
+| Ping         | exactly 4 bytes                 | ≥ 400 ms apart                                                                                           | echoed only                                                                                                                                                                                                                                                       |
+| SetLoadout   | strict decode, lists ≤ 3        | ≥ 250 ms apart                                                                                           | every index must exist; unlocks enforced; applied only at the next spawn                                                                                                                                                                                          |
+| ChatSend     | ≤ 483 bytes before decoding     | per guest (or IP): burst 4, then 1 per 1.5 s                                                             | strict decode; cleaned (invisible/bidi removed, ≤ 120 chars, profanity filter); team chat only to the sender's team                                                                                                                                               |
+
+Malformed messages count against the sender; more than 20 and the connection is closed.
+Tests that prove the "no effect" part: a client flooding inputs gets no extra movement steps;
+a client firing at twice the fire rate gets no extra hits (`apps/server/src/sim.test.ts`);
+a hidden enemy never appears in a wallhack client's snapshots (ADR 0009).
+
 ## Testing
 
 - `pnpm dev:lag` presets: `good` (40 ms, 0%), `normal` (120 ± 20 ms, 3%), `bad` (250 ± 60 ms, 8%).

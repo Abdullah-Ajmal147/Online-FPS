@@ -23,7 +23,8 @@ process.on('unhandledRejection', (reason) => {
 });
 
 const server = new Server({
-  transport: new WebSocketTransport(),
+  // 2 KB per message: the largest thing a client may send is a chat line (< 500 bytes).
+  transport: new WebSocketTransport({ maxPayload: 2048 }),
   greet: false,
   express: (app) => {
     app.get('/healthz', (_req, res) => {
