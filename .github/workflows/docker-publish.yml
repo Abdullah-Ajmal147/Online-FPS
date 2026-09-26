@@ -1,0 +1,68 @@
+# Build and push the production image to Docker Hub after CI passes on main.
+#
+# Secrets (in the "production" environment, or as repo secrets):
+#   DOCKERHUB_USERNAME - Docker Hub username (abdullah211)
+#   DOCKERHUB_TOKEN    - Docker Hub access token (Read & Write)
+#   ENV_FILE           - optional: .env contents for build-time values (VITE_*, SITE_URL).
+#                        Runtime secrets (SENTINEL_API_SECRET, ...) belong in the server's .env
+#                        next to docker-compose.yml, not here; the image never contains the .env.
+name: Publish Docker image
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual run from the Actions tab
+
+concurrency:
+  group: docker-publish
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    # Only publish commits whose CI passed (a manual run publishes the selected branch).
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # workflow_run runs on the default branch head; build exactly the commit CI tested.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # .env is gitignored, so recreate it from the ENV_FILE secret. Passed through an env var
+      # rather than pasted into the script, so its contents can't break or inject shell code.
+      - name: Write .env file
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -n "$ENV_FILE" ]; then
+            printf '%s\n' "$ENV_FILE" > .env
+            echo "Wrote .env ($(wc -l < .env) lines)"
+          else
+            echo "ENV_FILE secret not set; building with defaults"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            abdullah211/sentinelstrike:latest
+            abdullah211/sentinelstrike:${{ github.event.workflow_run.head_sha || github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

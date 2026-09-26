@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
   game:
     build: .
-    image: sentinel-strike
+    image: ${SENTINEL_IMAGE:-sentinel-strike}
     environment:
       SENTINEL_API_URL: http://api:8787
       SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?Set SENTINEL_API_SECRET to a random value of 32+ characters (see README)}
@@ -31,7 +31,7 @@ services:
       - api
     restart: unless-stopped
   api:
-    image: sentinel-strike
+    image: ${SENTINEL_IMAGE:-sentinel-strike}
     command: ['node', 'apps/api/dist/index.mjs']
     environment:
       SENTINEL_API_SECRET: ${SENTINEL_API_SECRET:?Set SENTINEL_API_SECRET to a random value of 32+ characters (see README)}

@@ -40,15 +40,24 @@ Caddy gets a Let's Encrypt certificate automatically. Open `https://play.example
 - Data: the API's SQLite database is in the `sentinel-data` volume. Back it up with
   `docker compose cp api:/data/sentinel.db ./backup.db` (Supabase replaces it in Phase 4).
 
+**Prebuilt image instead of building on the server.** After CI passes on `main`, GitHub
+Actions (`.github/workflows/docker-publish.yml`) pushes `abdullah211/sentinelstrike:latest`
+(and `:<commit sha>`) to Docker Hub. Set it up once in the GitHub repo, Settings → Environments
+→ `production`: secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (Docker Hub access token) and,
+optionally, `ENV_FILE` with build-time values (`SITE_URL`, `VITE_*`). The server's runtime
+`.env` above stays on the server. Then on the server add
+`SENTINEL_IMAGE=abdullah211/sentinelstrike:latest` to `.env` and use
+`docker compose pull && docker compose up -d` instead of `--build`.
+
 ## 4. Operate
 
-| What                 | How                                                                                                                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Health               | `curl https://play.example.com/healthz` and `/api/healthz`                                                                                                     |
-| Metrics (Prometheus) | `docker compose exec game curl -s localhost:2567/metrics` (rooms, players, tick p50/p99, slow ticks, errors, matches) and `api …:8787/metrics`                 |
-| Logs (JSON lines)    | `docker compose logs -f game api`                                                                                                                              |
-| Update               | `git pull && docker compose up -d --build` (in-progress matches end; players rejoin)                                                                           |
-| Settings             | `SENTINEL_BOT_DIFFICULTY` (easy, normal, hard), `SENTINEL_BOTS=0` (no bots), `SENTINEL_MAP` (pin one map) or `SENTINEL_MAP_ROTATION=relay-yard,saltline-depot` |
+| What                 | How                                                                                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health               | `curl https://play.example.com/healthz` and `/api/healthz`                                                                                                       |
+| Metrics (Prometheus) | `docker compose exec game curl -s localhost:2567/metrics` (rooms, players, tick p50/p99, slow ticks, errors, matches) and `api …:8787/metrics`                   |
+| Logs (JSON lines)    | `docker compose logs -f game api`                                                                                                                                |
+| Update               | `git pull && docker compose up -d --build`, or with the Docker Hub image `docker compose pull && docker compose up -d` (in-progress matches end; players rejoin) |
+| Settings             | `SENTINEL_BOT_DIFFICULTY` (easy, normal, hard), `SENTINEL_BOTS=0` (no bots), `SENTINEL_MAP` (pin one map) or `SENTINEL_MAP_ROTATION=relay-yard,saltline-depot`   |
 
 Metrics are not exposed publicly by Caddy; scrape them from inside the network.
 
