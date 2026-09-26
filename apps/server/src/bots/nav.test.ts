@@ -27,20 +27,25 @@ describe('NavGrid on the greybox', () => {
       expect(Math.abs(path![k]![1] - path![k - 1]![1])).toBeLessThan(0.7);
   });
 
-  it('does not connect straight up the 1 m ledge or the 0.6 m block', () => {
-    const [li, lj] = grid.cellOf(-20, -20); // ledge top
-    const [fi, fj] = grid.cellOf(-20, -17.5); // floor next to it
-    expect(grid.walkable(li, lj)).toBe(true);
-    const path = grid.findPath([-20, 0, -17.5], [-20, 1, -20]);
-    // Reachable only if there were a ramp; the ledge has none, so no path.
-    expect(path).toBeNull();
-    expect(fi).toBeDefined();
-    expect(fj).toBeDefined();
+  it('does not connect the floor to the top of the 1 m ledge (needs a jump)', () => {
+    const top = grid.cellOf(-20, -20);
+    const floor = grid.cellOf(-20, -17.5);
+    expect(grid.walkable(...top)).toBe(true);
+    expect(grid.walkable(...floor)).toBe(true);
+    expect(grid.connected(top, floor)).toBe(false);
   });
 
   it('roam goals are only on the reachable floor (not the unreachable ledge top)', () => {
     const ledge = grid.cellOf(-20, -20);
     expect(grid.walkableCells().some(([i, j]) => i === ledge[0] && j === ledge[1])).toBe(false);
+  });
+
+  it('a bot on the floor beside a crate maps to the floor, not to the crate top', () => {
+    // Greybox 2 m crate at (-3, 1, 8): standing on the floor right against its south face.
+    const cell = grid.nearestWalkable(-3, 9.05, 0)!;
+    expect(grid.walkable(...cell)).toBe(true);
+    const [x, z] = grid.center(...cell);
+    expect(grid.findPath([x, 0, z], [-20, 0, 20])).not.toBeNull();
   });
 
   it('finds a path across the map in a few ms', () => {

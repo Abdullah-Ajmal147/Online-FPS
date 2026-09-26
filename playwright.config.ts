@@ -3,7 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Two game servers:
  *   :2567 — no bots, open arena, long warm-up: functional tests (movement, two players, combat)
- *   :2568 — bots fill to 12, Relay Yard, 20 s matches: the full match-flow test (?server=…)
+ *   :2568 — bots fill to 12, Relay Yard, 45 s matches: the full match-flow test (?server=…)
+ *   :2569 — open arena, easy bots, 10 min matches: the hip-fire kill regression test
  *   :8787 — progression API (in-memory DB); the :2568 server reports finished matches to it
  * Game servers are never reused (they need these exact settings), so stop `pnpm dev` first.
  */
@@ -32,8 +33,23 @@ export default defineConfig({
         PORT: '2568',
         SENTINEL_MAP: 'relay-yard',
         SENTINEL_WARMUP_SECONDS: '3',
-        SENTINEL_MATCH_SECONDS: '20',
+        SENTINEL_MATCH_SECONDS: '45',
         SENTINEL_RESULTS_SECONDS: '6',
+      },
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
+      reuseExistingServer: false,
+    },
+    {
+      // Hip-fire kill test: open arena, easy bots, long matches (stable conditions).
+      command: 'node_modules/.bin/tsx src/index.ts',
+      cwd: 'apps/server',
+      url: 'http://localhost:2569/healthz',
+      env: {
+        PORT: '2569',
+        SENTINEL_MAP: 'arena',
+        SENTINEL_BOT_DIFFICULTY: 'easy',
+        SENTINEL_WARMUP_SECONDS: '2',
+        SENTINEL_MATCH_SECONDS: '600',
       },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
       reuseExistingServer: false,

@@ -28,30 +28,35 @@ export interface Difficulty {
   fireToleranceDeg: number;
 }
 
+/**
+ * Bot skill. "normal" (default) is tuned to be beatable by a casual player: noticeable reaction
+ * time, an aim error that shrinks while tracking (early shots miss), limited recoil control.
+ * "hard" is the challenge setting.
+ */
 export const DIFFICULTIES: Record<'easy' | 'normal' | 'hard', Difficulty> = {
   easy: {
-    reactionMs: 480,
-    aimErrorDeg: 7,
-    trackingPerSecond: 0.8,
-    turnDegPerSecond: 240,
-    recoilControl: 0.3,
-    fireToleranceDeg: 3,
+    reactionMs: 650,
+    aimErrorDeg: 9,
+    trackingPerSecond: 0.6,
+    turnDegPerSecond: 200,
+    recoilControl: 0.2,
+    fireToleranceDeg: 4,
   },
   normal: {
-    reactionMs: 320,
-    aimErrorDeg: 4.5,
-    trackingPerSecond: 1.4,
-    turnDegPerSecond: 420,
-    recoilControl: 0.6,
-    fireToleranceDeg: 2,
+    reactionMs: 480,
+    aimErrorDeg: 7,
+    trackingPerSecond: 0.9,
+    turnDegPerSecond: 300,
+    recoilControl: 0.4,
+    fireToleranceDeg: 3,
   },
   hard: {
-    reactionMs: 210,
-    aimErrorDeg: 2.5,
-    trackingPerSecond: 2.2,
-    turnDegPerSecond: 720,
-    recoilControl: 0.9,
-    fireToleranceDeg: 1.3,
+    reactionMs: 240,
+    aimErrorDeg: 3,
+    trackingPerSecond: 2,
+    turnDegPerSecond: 600,
+    recoilControl: 0.85,
+    fireToleranceDeg: 1.5,
   },
 };
 
@@ -198,6 +203,42 @@ export class BotBrain {
     return best;
   }
 
+  private hunting = false;
+  private pathAge = 0;
+  private planCooldown = 0;
+
+  /**
+   * Where to go next. Mostly towards the fight: near a random living enemy (60%) or the middle
+   * of the map (25%), otherwise anywhere — so matches have constant action instead of bots
+   * wandering the edges. (Bots know roughly where enemies are, like a radar ping would.)
+   */
+  private pickGoal(pos: Vec3): Vec3 {
+    const cells = this.nav.walkableCells();
+    const nearCell = (x: number, z: number, radius: number): Vec3 => {
+      for (let tries = 0; tries < 6; tries++) {
+        const [i, j] = cells[Math.floor(this.random() * cells.length)]!;
+        const [cx, cz] = this.nav.center(i, j);
+        if (Math.hypot(cx - x, cz - z) <= radius) return [cx, 0, cz];
+      }
+      return [x, 0, z];
+    };
+    const r = this.random();
+    const enemies = [...this.sim.players.values()].filter(
+      (p) => p.team !== this.self.team && p.alive,
+    );
+    if (r < 0.6 && enemies.length > 0) {
+      const e = enemies[Math.floor(this.random() * enemies.length)]!.sim.move.position;
+      this.hunting = true;
+      return nearCell(e[0], e[2], 8);
+    }
+    this.hunting = false;
+    if (r < 0.85) return nearCell(0, 0, 12);
+    const [i, j] = cells[Math.floor(this.random() * cells.length)]!;
+    const [x, z] = this.nav.center(i, j);
+    void pos;
+    return [x, 0, z];
+  }
+
   private turnTowards(yaw: number, pitch: number): void {
     const max = (this.diff.turnDegPerSecond * DEG) / TICK_RATE;
     const dy = wrapAngle(yaw - this.yaw);
@@ -210,16 +251,26 @@ export class BotBrain {
   /** Walk to random points on the map, sprinting; jump or re-plan if stuck. */
   private roam(me: SimPlayer): number {
     const pos = me.sim.move.position;
+    // Hunters re-plan every few seconds: their quarry moves.
+    if (this.hunting && ++this.pathAge > HUNT_REPLAN_TICKS) this.path = [];
     if (this.path.length === 0) {
       // One search per bot per tick at most, and only while the shared budget lasts: when many
       // bots need a plan at once (respawn, match start) they spread over a few ticks.
+      if (this.planCooldown > 0) {
+        // A plan just failed: step back from whatever we're against, then try again.
+        this.planCooldown--;
+        return Button.Back;
+      }
       if (this.planBudget.left <= 0) return 0;
       this.planBudget.left--;
-      const cells = this.nav.walkableCells();
-      const [i, j] = cells[Math.floor(this.random() * cells.length)]!;
-      const [x, z] = this.nav.center(i, j);
-      this.path = this.nav.findPath(pos, [x, 0, z]) ?? [];
-      if (this.path.length === 0) return 0;
+      const goal = this.pickGoal(pos);
+      this.path = this.nav.findPath(pos, goal) ?? [];
+      this.pathAge = 0;
+      if (this.path.length === 0) {
+        // Never retry every tick: that would also eat every other bot's planning budget.
+        this.planCooldown = 30;
+        return 0;
+      }
     }
     let next = this.path[0]!;
     while (this.path.length > 1 && Math.hypot(next[0] - pos[0], next[2] - pos[2]) < 0.7) {
@@ -249,6 +300,9 @@ export class BotBrain {
     return buttons;
   }
 }
+
+/** Re-plan a hunt path every 4 s. */
+const HUNT_REPLAN_TICKS = 4 * TICK_RATE;
 
 /** Where bots aim: upper torso. */
 function aimPoint(p: SimPlayer): Vec3 {

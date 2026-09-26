@@ -45,6 +45,7 @@ import { ensureGuest, refreshProfile } from '../profile.ts';
 import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
 import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
+import { Feedback } from './feedback.ts';
 import { RemotePlayers } from './remotePlayers.ts';
 import { Viewmodel } from './viewmodel.ts';
 
@@ -78,10 +79,10 @@ export async function startGame(
   console.info(`[renderer] backend: ${backend}`);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x9fb6c9);
-  scene.fog = new THREE.Fog(0x9fb6c9, 60, 140);
-  scene.add(new THREE.HemisphereLight(0xdfeeff, 0x3a3f47, 1.4));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  scene.background = new THREE.Color(0x8ec3ef);
+  scene.fog = new THREE.Fog(0x8ec3ef, 70, 160);
+  scene.add(new THREE.HemisphereLight(0xe8f3ff, 0x5a5048, 1.7));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
   sun.position.set(20, 40, 15);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -101,6 +102,7 @@ export async function startGame(
   window.addEventListener('resize', resize);
 
   const viewmodel = new Viewmodel(camera);
+  const feedback = new Feedback(document.getElementById('ui')!);
   const audio = new GameAudio();
   const rapier = await initPhysics();
 
@@ -155,6 +157,7 @@ export async function startGame(
     hitKind: 'hit',
     damage: [],
     killFeed: [],
+    announcements: [],
   };
   let hudDirty = true;
   let feedKey = 0;
@@ -175,6 +178,11 @@ export async function startGame(
     }
     const wasEnded = frozen && lastPhase === MatchPhase.Ended;
     frozen = info.phase === MatchPhase.Countdown || info.phase === MatchPhase.Ended;
+    if (info.phase === MatchPhase.Countdown) {
+      // New match: first blood is up for grabs again, streaks start over.
+      firstBloodTaken = false;
+      streak = 0;
+    }
     // Match just ended: the server reports it to the API; show the new XP shortly after.
     if (info.phase === MatchPhase.Ended && lastPhase !== MatchPhase.Ended && !wasEnded) {
       setTimeout(() => void refreshProfile(), 2000);
@@ -214,6 +222,39 @@ export async function startGame(
   // Test hook for Playwright: where remote players are drawn. Harmless in production.
   (window as unknown as { __sentinelRemotes?: () => number[][] }).__sentinelRemotes = () =>
     remotePlayers.positions();
+  if (import.meta.env.DEV) {
+    // Dev/test only: enemies as drawn, with line of sight from our eyes (Playwright "player" tests).
+    (window as unknown as { __sentinelDebug?: unknown }).__sentinelDebug = {
+      /** Current recoil offset of the view, radians [yaw, pitch] (a person re-aims against it). */
+      recoil: () => [
+        predictor.state.weapon.recoilYaw * RAD_PER_UNIT,
+        predictor.state.weapon.recoilPitch * RAD_PER_UNIT,
+      ],
+      targets: () =>
+        [...remotePoses.entries()].map(([id, p]) => {
+          const eye = eyePosition(predictor.state.move, moveCtx);
+          const aim = [p.position[0], p.position[1] + 1.1, p.position[2]] as const;
+          const d = [aim[0] - eye[0], aim[1] - eye[1], aim[2] - eye[2]] as const;
+          const len = Math.hypot(d[0], d[1], d[2]);
+          const blocked = moveCtx.world.castRay(
+            new rapier.Ray(
+              { x: eye[0], y: eye[1], z: eye[2] },
+              { x: d[0] / len, y: d[1] / len, z: d[2] / len },
+            ),
+            len,
+            true,
+            rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+          );
+          return {
+            id,
+            enemy: p.team !== myTeam(),
+            alive: p.alive,
+            visible: !blocked,
+            position: p.position,
+          };
+        }),
+    };
+  }
   let latestServerTick = 0;
   let spawnedFromServer = false;
   let lifeId = -1;
@@ -305,6 +346,14 @@ export async function startGame(
         hud.hitAt = performance.now();
         hud.hitKind = ev.killed ? 'kill' : ev.zone === 'head' ? 'head' : 'hit';
         audio.hit(hud.hitKind as 'hit' | 'head' | 'kill');
+        remotePlayers.flash(ev.victim);
+        const head = remotePlayers.headOf(ev.victim, new THREE.Vector3());
+        if (head)
+          feedback.damage(
+            head.setY(head.y - 0.35),
+            ev.damage,
+            hud.hitKind as 'hit' | 'head' | 'kill',
+          );
       } else if (ev.type === 'damaged') {
         const me = predictor.state.move.position;
         const toAttacker = Math.atan2(-(ev.from[0] - me[0]), -(ev.from[2] - me[2]));
@@ -324,10 +373,40 @@ export async function startGame(
         };
         hud.killFeed = [...hud.killFeed.slice(-4), entry];
         if (ev.victim === myId && ev.killer !== myId) hud.killedBy = nameOf(ev.killer);
+        if (ev.victim === myId) streak = 0;
+        if (ev.killer !== ev.victim && !firstBloodTaken) {
+          firstBloodTaken = true;
+          if (ev.killer === myId) announce('medal', 'FIRST BLOOD');
+        }
+        if (ev.killer === myId && ev.victim !== myId) onMyKill(nameOf(ev.victim), ev.headshot);
       }
     }
     hudDirty = true;
   };
+
+  // --- Kill rewards: confirmation, multi-kills, streaks ---
+  let firstBloodTaken = false;
+  let streak = 0;
+  let recentKills: number[] = [];
+  const announce = (kind: 'kill' | 'medal', text: string, sub = '') => {
+    const now = performance.now();
+    hud.announcements = [
+      ...hud.announcements.filter((a) => now - a.at < 2500).slice(-3),
+      { key: feedKey++, kind, text, sub, at: now },
+    ];
+    if (kind === 'medal') audio.medal();
+    hudDirty = true;
+  };
+  function onMyKill(victim: string, headshot: boolean): void {
+    const now = performance.now();
+    announce('kill', `ELIMINATED ${victim.toUpperCase()}`, headshot ? '+100 · HEADSHOT' : '+100');
+    recentKills = [...recentKills.filter((t) => now - t < 4000), now];
+    streak++;
+    const multi = ['', '', 'DOUBLE KILL', 'TRIPLE KILL'][recentKills.length] ?? 'MULTI KILL';
+    if (multi) announce('medal', multi);
+    if (streak === 5) announce('medal', 'KILLING SPREE');
+    if (streak === 10) announce('medal', 'UNSTOPPABLE');
+  }
 
   let myTeamCache = 0;
   const myTeam = () => myTeamCache;
@@ -420,6 +499,27 @@ export async function startGame(
       tmpA.clone().addScaledVector(tmpDir, wall?.distance ?? 80),
     );
     audio.shot(slot, [tmpA.x, tmpA.y, tmpA.z]);
+  }
+
+  const aimDir = new THREE.Vector3();
+  /** Crosshair turns red over a visible enemy; teammates get name tags. */
+  function updateAimAndTags(): void {
+    camera.getWorldDirection(aimDir);
+    const eye: [number, number, number] = [camera.position.x, camera.position.y, camera.position.z];
+    const dir: [number, number, number] = [aimDir.x, aimDir.y, aimDir.z];
+    const wall = effects.castMap(camera.position, aimDir, 150)?.distance ?? 150;
+    let onEnemy = false;
+    const tags = new Map<number, { name: string; head: THREE.Vector3 | null }>();
+    for (const [id, pose] of remotePoses) {
+      if (!pose.alive) continue;
+      if (pose.team === myTeam()) {
+        tags.set(id, { name: nameOf(id), head: remotePlayers.headOf(id, new THREE.Vector3()) });
+      } else if (!onEnemy && rayPlayer(eye, dir, pose.position, pose.crouching, movement, wall)) {
+        onEnemy = true;
+      }
+    }
+    document.body.classList.toggle('aim-enemy', onEnemy && hud.alive);
+    feedback.setTags(camera, tags);
   }
 
   // --- Frame loop ---
@@ -527,9 +627,11 @@ export async function startGame(
         const pose = buf.sample(renderTick);
         if (!pose) continue;
         remotePoses.set(id, pose);
-        remotePlayers.update(id, pose);
+        remotePlayers.update(id, pose, frame);
       }
     }
+    updateAimAndTags();
+    feedback.update(camera, frame);
     effects.update(frame);
     renderer.render(scene, camera);
 

@@ -26,6 +26,7 @@ export function CombatHud() {
       <HitMarker c={c} now={now} />
       <DamageArcs c={c} now={now} />
       <KillFeed c={c} />
+      <Announcements c={c} now={now} />
       {c.alive ? <Vitals c={c} /> : <DeathScreen c={c} />}
     </>
   );
@@ -114,6 +115,28 @@ function DeathScreen({ c }: { c: CombatHudState }) {
     <div class="death" data-testid="death-screen">
       <div class="death-title">Eliminated{c.killedBy ? ` by ${c.killedBy}` : ''}</div>
       <div class="death-sub">Respawning in {Math.max(0, c.respawnSeconds).toFixed(1)} s</div>
+    </div>
+  );
+}
+
+/** "ELIMINATED Bot Heron +100", medals like DOUBLE KILL, for a couple of seconds. */
+function Announcements({ c, now }: { c: CombatHudState; now: number }) {
+  const live = c.announcements.filter((a) => now - a.at < 2500);
+  if (live.length === 0) return null;
+  return (
+    <div class="announce" data-testid="announcements">
+      {live.map((a) =>
+        a.kind === 'medal' ? (
+          <div class="announce-medal" key={a.key}>
+            {a.text}
+          </div>
+        ) : (
+          <div class="announce-kill" key={a.key}>
+            {a.text}
+            <span>{a.sub}</span>
+          </div>
+        ),
+      )}
     </div>
   );
 }

@@ -5,8 +5,16 @@
   "slot": 0,
   "fireMode": "auto",
   "rpm": 600,
-  "damage": { "head": 34, "torso": 22, "limbs": 18 },
-  "falloff": { "start": 25, "end": 45, "minMultiplier": 0.8 },
+  "damage": {
+    "head": 40,
+    "torso": 22,
+    "limbs": 18
+  },
+  "falloff": {
+    "start": 30,
+    "end": 55,
+    "minMultiplier": 0.85
+  },
   "maxRange": 150,
   "magazine": 30,
   "reserve": 120,
@@ -14,31 +22,32 @@
   "equipTime": 0.45,
   "adsTime": 0.25,
   "spread": {
-    "hip": 2.4,
-    "ads": 0.15,
-    "moving": 1.4,
-    "airborne": 4,
-    "perShot": 0.35,
-    "max": 3,
-    "recoveryPerSecond": 8
+    "hip": 0.6,
+    "ads": 0,
+    "moving": 0.4,
+    "airborne": 2.5,
+    "perShot": 0.1,
+    "max": 1.0,
+    "recoveryPerSecond": 10
   },
   "recoil": {
     "pattern": [
-      [0.55, 0.05],
-      [0.6, -0.1],
-      [0.6, 0.15],
-      [0.55, 0.2],
-      [0.5, -0.05],
-      [0.45, -0.25],
-      [0.4, -0.3],
-      [0.35, 0.1],
-      [0.35, 0.3],
-      [0.3, 0.25],
-      [0.3, -0.1],
-      [0.3, -0.3]
+      [0.22, 0.02],
+      [0.22, -0.04],
+      [0.21, 0.05],
+      [0.2, 0.06],
+      [0.19, -0.02],
+      [0.18, -0.07],
+      [0.17, -0.08],
+      [0.16, 0.03],
+      [0.16, 0.08],
+      [0.15, 0.06],
+      [0.15, -0.03],
+      [0.15, -0.08]
     ],
     "adsMultiplier": 0.7,
-    "recoveryPerSecond": 9
+    "recoveryPerSecond": 12,
+    "sprayRecovery": 0.15
   },
   "moveSpeedMultiplier": 0.95,
   "adsMoveSpeedMultiplier": 0.6

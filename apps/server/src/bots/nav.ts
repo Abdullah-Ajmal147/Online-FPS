@@ -159,20 +159,35 @@ export class NavGrid {
   }
 
   /** Nearest walkable cell to a position (searching outwards a few cells). */
-  nearestWalkable(x: number, z: number): [number, number] | null {
+  /**
+   * The walkable cell that best represents a position: nearest in the grid, at a height close
+   * to `y` when given (a bot on the floor beside a 2 m barrier belongs to the floor, not to the
+   * barrier's rooftop), and on the main floor when `preferMain` (goals). Falls back step by step.
+   */
+  nearestWalkable(x: number, z: number, y?: number, preferMain = false): [number, number] | null {
     const [ci, cj] = this.cellOf(x, z);
-    for (let r = 0; r <= 4; r++) {
-      for (let dj = -r; dj <= r; dj++) {
-        for (let di = -r; di <= r; di++) {
-          if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
-          if (this.walkable(ci + di, cj + dj)) return [ci + di, cj + dj];
+    const tries: ((c: number) => boolean)[] = [
+      (c) =>
+        (y === undefined || Math.abs(this.height[c]! - y) <= 0.75) &&
+        (!preferMain || this.region[c] === this.mainRegion),
+      (c) => y === undefined || Math.abs(this.height[c]! - y) <= 0.75,
+      () => true,
+    ];
+    for (const ok of tries) {
+      for (let r = 0; r <= 4; r++) {
+        for (let dj = -r; dj <= r; dj++) {
+          for (let di = -r; di <= r; di++) {
+            if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+            const i = ci + di;
+            const j = cj + dj;
+            if (this.walkable(i, j) && ok(j * this.w + i)) return [i, j];
+          }
         }
       }
     }
     return null;
   }
 
-  /** All walkable cells (for picking roam goals). */
   /**
    * Cells worth walking to: the main connected floor only (not rooftops or crate tops, which
    * can't be reached on foot). Computed once; the grid never changes.
@@ -198,8 +213,8 @@ export class NavGrid {
    * height) from start to goal, or null if unreachable.
    */
   findPath(from: Vec3, to: Vec3): Vec3[] | null {
-    const start = this.nearestWalkable(from[0], from[2]);
-    const goal = this.nearestWalkable(to[0], to[2]);
+    const start = this.nearestWalkable(from[0], from[2], from[1]);
+    const goal = this.nearestWalkable(to[0], to[2], undefined, true);
     if (!start || !goal) return null;
     // Different regions: unreachable. Answer at once instead of searching the whole map.
     if (!this.connected(start, goal)) return null;

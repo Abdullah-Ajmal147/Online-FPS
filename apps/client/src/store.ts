@@ -45,6 +45,8 @@ export interface CombatHud {
   /** Damage directions (degrees, 0 = ahead, clockwise) with the time they arrived. */
   damage: { key: number; angle: number; at: number }[];
   killFeed: KillFeedEntry[];
+  /** Kill confirmations and medals, newest last (shown ~2.5 s). */
+  announcements: { key: number; kind: 'kill' | 'medal'; text: string; sub: string; at: number }[];
 }
 
 export interface MatchHud {

@@ -31,8 +31,11 @@ shooter actually saw.
 
 ## Amendment (2026-09-25, netcode review H1)
 
-A raw client-chosen `viewTick` allowed a "backtrack" cheat: picking a different rewind point
-for every shot inside the window. The server now governs it per player: it keeps a slow moving
-average of the view offset (server tick − viewTick) and accepts only view ticks within ±2 ticks
-of it. Honest drift (jitter, interpolation-delay changes) is followed; per-shot jumps are not.
-Measured after the change: 150/150 on-target shots registered at 150 ms.
+A raw client-chosen `viewTick` allowed a "backtrack" cheat: picking an older rewind point for a
+single shot. The server now governs it per player: the view tick may move forward freely but
+back by at most 0.25 tick per input, so a per-shot jump back is refused while honest slow drift
+(interpolation delay growing under jitter) passes.
+
+A first version bounded the _gap_ (server tick − view tick) to ±2 ticks of its average; that
+cut rewinds short for players below 60 fps, whose gap legitimately saw-tooths by the number of
+ticks per rendered frame. Replaced by the rule above.

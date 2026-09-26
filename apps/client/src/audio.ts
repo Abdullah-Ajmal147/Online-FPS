@@ -93,6 +93,11 @@ export class GameAudio {
     freqs.forEach((f, i) => this.tone(f, 0.05, 0.25, i * 0.06));
   }
 
+  /** Rising arpeggio for a medal (double kill, spree…). */
+  medal(): void {
+    [660, 880, 1320].forEach((f, i) => this.tone(f, 0.12, 0.22, i * 0.07, 'triangle'));
+  }
+
   /** Dull thud when you take damage. */
   hurt(): void {
     this.tone(90, 0.12, 0.5, 0, 'triangle');

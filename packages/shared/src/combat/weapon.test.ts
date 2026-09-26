@@ -136,9 +136,12 @@ describe('aiming, spread and recoil', () => {
     );
   });
 
-  it('recoil climbs while spraying and settles back after', () => {
+  it('a full-magazine spray climbs, but stays controllable (< 2°), and settles back after', () => {
+    const { state: full } = run(170, Button.Fire); // 29 shots: just before the magazine runs dry
+    expect(full.recoilPitch).toBeGreaterThan(0.3 * UNITS_PER_DEGREE);
+    expect(full.recoilPitch).toBeLessThan(2 * UNITS_PER_DEGREE);
     const { state } = run(30, Button.Fire);
-    expect(state.recoilPitch).toBeGreaterThan(2 * UNITS_PER_DEGREE);
+    expect(state.recoilPitch).toBeGreaterThan(0);
     const settled = run(120, 0, state).state;
     expect(settled.recoilPitch).toBe(0);
     expect(settled.recoilYaw).toBe(0);

@@ -39,31 +39,28 @@ export const REGEN_PER_TICK = 1;
 export const MAX_REWIND_TICKS = Math.round((MAX_REWIND_MS / 1000) * TICK_RATE);
 /**
  * Anti-"backtrack" (review H1). A client says which tick it was looking at (viewTick, ADR 0005);
- * a cheater could pick a different one for every shot to hit players who already reached cover.
- * We keep a slow moving average of each player's view offset (server tick − viewTick) and only
- * accept view ticks within ±VIEW_TICK_TOLERANCE of it. Honest offsets drift slowly (jitter,
- * interpolation delay changes) and are followed; a per-shot jump of many ticks is not. Raising
- * the average slowly is the same as having high ping, which the 300 ms cap already bounds.
+ * a cheater could jump it back for a single shot to hit players who already reached cover.
+ * Rule: the view tick may move forward freely (that only means less rewind), but may move back
+ * by at most VIEW_TICK_MAX_RETREAT per input. Honest clients only drift back slowly (their
+ * interpolation delay grows a little under jitter); a per-shot jump back is refused.
+ *
+ * Note: a client below 60 fps sends several inputs per rendered frame with the same view tick,
+ * so the gap (server tick − view tick) legitimately saw-tooths by the ticks-per-frame. Rules
+ * built on that gap (an earlier version) cut those players' rewinds short; this one doesn't.
  */
-export const VIEW_TICK_TOLERANCE = 2;
-const VIEW_OFFSET_SMOOTHING = 0.02;
+export const VIEW_TICK_MAX_RETREAT = 0.25;
 
 export interface ViewTickGovernor {
-  avgOffset: number | null;
+  last: number | null;
 }
 
-export function governViewTick(g: ViewTickGovernor, claimed: number, tick: number): number {
-  const offset = tick - claimed;
-  if (g.avgOffset === null || !Number.isFinite(g.avgOffset)) {
-    g.avgOffset = offset;
-    return claimed;
-  }
-  const allowed = Math.max(
-    g.avgOffset - VIEW_TICK_TOLERANCE,
-    Math.min(g.avgOffset + VIEW_TICK_TOLERANCE, offset),
-  );
-  g.avgOffset += (allowed - g.avgOffset) * VIEW_OFFSET_SMOOTHING;
-  return tick - allowed;
+export function governViewTick(g: ViewTickGovernor, claimed: number): number {
+  const v =
+    g.last === null || !Number.isFinite(g.last)
+      ? claimed
+      : Math.max(claimed, g.last - VIEW_TICK_MAX_RETREAT);
+  g.last = v;
+  return v;
 }
 
 /** Spawn protection: 1.5 s, or until you fire (Phase 3). */
@@ -192,7 +189,7 @@ export class MatchSim {
       deaths: 0,
       history: [],
       viewTick: 0,
-      viewGovernor: { avgOffset: null },
+      viewGovernor: { last: null },
     };
     this.players.set(id, player);
     return player;
@@ -222,7 +219,7 @@ export class MatchSim {
       // Always consumed, even while dead or frozen, so seqs keep flowing.
       const input = p.bot ? p.botInput : p.queue.next();
       if (!input) continue;
-      p.viewTick = governViewTick(p.viewGovernor, input.viewTick, this.tick);
+      p.viewTick = governViewTick(p.viewGovernor, input.viewTick);
       if (!p.alive || this.frozen) continue;
       const r = stepSim(p.sim, input, this.ctx, p.body);
       p.sim = r.state;
@@ -373,7 +370,10 @@ export class MatchSim {
     victim.health = 0;
     victim.respawnTicks = RESPAWN_TICKS;
     victim.deaths++;
-    if (killer) killer.kills++;
+    if (killer) {
+      killer.kills++;
+      this.rewardAmmo(killer);
+    }
     // A fall (no killer) shows as the victim "killing" themselves in the feed.
     this.events.push({
       to: null,
@@ -385,6 +385,20 @@ export class MatchSim {
         headshot,
       },
     });
+  }
+
+  /**
+   * Scavenging: each kill adds one magazine to both weapons' reserve (capped at the starting
+   * reserve), so aggressive players don't run dry mid-fight. Server-side like all ammo; the
+   * client picks it up from its next snapshot.
+   */
+  private rewardAmmo(p: SimPlayer): void {
+    const w = p.sim.weapon;
+    const ammo = w.ammo.map((a, i) => {
+      const def = this.ctx.loadout[i as 0 | 1].def;
+      return { ammo: a.ammo, reserve: Math.min(def.reserve, a.reserve + def.magazine) };
+    }) as SimState['weapon']['ammo'];
+    p.sim = { ...p.sim, weapon: { ...w, ammo } };
   }
 
   private updateLife(): void {

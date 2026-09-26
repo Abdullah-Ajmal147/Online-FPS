@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('full match with bots: join, play a 20 s match, see results, next match starts', async ({
+test('full match with bots: join, play a 45 s match, see results, next match starts', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   await page.goto('/?server=http://localhost:2568');
   await expect(page.getByTestId('net-status')).toHaveText(/connected/, { timeout: 20_000 });
   await page.addStyleTag({ content: '.menu{display:none!important}' });
@@ -13,7 +13,10 @@ test('full match with bots: join, play a 20 s match, see results, next match sta
   const match = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus().match);
   await expect.poll(async () => (await match())?.players.length, { timeout: 10_000 }).toBe(12);
   const m = await match();
-  expect(m!.players.filter((p) => p.bot)).toHaveLength(11);
+  // Bots fill every empty slot (another test's player may still be leaving this server).
+  const humans = m!.players.filter((p) => !p.bot).length;
+  expect(humans).toBeGreaterThanOrEqual(1);
+  expect(m!.players.filter((p) => p.bot)).toHaveLength(12 - humans);
   expect(m!.players.filter((p) => p.team === 0)).toHaveLength(6);
 
   // Tab shows the scoreboard with bot tags.
@@ -23,7 +26,7 @@ test('full match with bots: join, play a 20 s match, see results, next match sta
 
   // The match goes live, bots fight (kill feed fills), and it ends with a results screen.
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).toBe('live');
-  await expect.poll(async () => (await match())?.phase, { timeout: 40_000 }).toBe('ended');
+  await expect.poll(async () => (await match())?.phase, { timeout: 70_000 }).toBe('ended');
   const results = page.getByTestId('results');
   await expect(results).toBeVisible();
   await expect(results).toContainText(/Victory|Defeat|Draw/);

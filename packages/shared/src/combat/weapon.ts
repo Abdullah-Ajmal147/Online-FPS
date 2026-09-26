@@ -31,6 +31,8 @@ export interface WeaponSpec {
   recoil: [number, number][];
   recoilAdsMultiplierPct: number;
   recoilRecoveryPerTick: number;
+  /** Recovery between shots of a spray (a fraction of recoilRecoveryPerTick). */
+  recoilSprayRecoveryPerTick: number;
 }
 
 export function compileWeapon(def: Weapon): WeaponSpec {
@@ -53,6 +55,9 @@ export function compileWeapon(def: Weapon): WeaponSpec {
     recoil: def.recoil.pattern.map(([up, right]) => [toUnits(up), toUnits(right)]),
     recoilAdsMultiplierPct: Math.round(def.recoil.adsMultiplier * 100),
     recoilRecoveryPerTick: Math.max(1, toUnits(def.recoil.recoveryPerSecond / TICK_RATE)),
+    recoilSprayRecoveryPerTick: toUnits(
+      (def.recoil.recoveryPerSecond / TICK_RATE) * def.recoil.sprayRecovery,
+    ),
   };
 }
 
@@ -226,6 +231,10 @@ export function stepWeapon(
     recoilYaw = towardZero(recoilYaw, spec.recoilRecoveryPerTick);
     bloom = towardZero(bloom, spec.spread.recoveryPerTick);
     if ((held & Button.Fire) === 0) shotIndex = 0;
+  } else {
+    // Between shots of a spray: the view settles a little, so a held trigger climbs slowly.
+    recoilPitch = towardZero(recoilPitch, spec.recoilSprayRecoveryPerTick);
+    recoilYaw = towardZero(recoilYaw, spec.recoilSprayRecoveryPerTick);
   }
 
   return {

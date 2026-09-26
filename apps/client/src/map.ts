@@ -5,12 +5,12 @@ import type { Solid } from '@sentinel/shared';
 
 /** Greybox palette: flat colours per material so shapes read clearly. */
 const COLORS: Record<Material, number> = {
-  floor: 0x3a3f47,
-  wall: 0x59616d,
-  prop: 0xb08d57,
-  ramp: 0x4f7ea8,
-  stairs: 0x6b8f5e,
-  platform: 0x7d6a9a,
+  floor: 0x6a6f76,
+  wall: 0x8b939e,
+  prop: 0xc8964f,
+  ramp: 0x5a93cf,
+  stairs: 0x76ab6a,
+  platform: 0x9a82c8,
 };
 
 /**

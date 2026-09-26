@@ -193,6 +193,11 @@ export const WeaponSchema = z
         .max(255),
       adsMultiplier: z.number().min(0).max(2),
       recoveryPerSecond: z.number().nonnegative(),
+      /**
+       * Fraction of the recovery that also happens between shots of a spray (0 = the view only
+       * settles after you stop). Small values keep sprays controllable for new players.
+       */
+      sprayRecovery: z.number().min(0).max(1).default(0),
     }),
     moveSpeedMultiplier: z.number().positive().max(1.5),
     adsMoveSpeedMultiplier: z.number().positive().max(1.5),

@@ -295,6 +295,34 @@ describe('MatchSim: spawn protection', () => {
   });
 });
 
+describe('MatchSim: scavenging', () => {
+  it('a kill refills one magazine of reserve ammo (capped)', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer();
+    const target = sim.addPlayer();
+    place(shooter, [0, 0, 10]);
+    place(target, [0, 0, 0]);
+    shooter.sim = {
+      ...shooter.sim,
+      weapon: {
+        ...shooter.sim.weapon,
+        ammo: [
+          { ammo: 30, reserve: 10 },
+          { ammo: 12, reserve: 48 },
+        ],
+      },
+    };
+    target.health = 5;
+    target.lastDamageTick = sim.tick;
+    const pitch = aimPitch(1.67, 1.1, 10);
+    aimIn(sim, shooter, pitch);
+    for (let i = 0; i < 30 && target.alive; i++) feed(sim, shooter, 1, AIM_FIRE, { pitch });
+    expect(target.alive).toBe(false);
+    expect(shooter.sim.weapon.ammo[0].reserve).toBe(10 + defaultLoadout[0].magazine);
+    expect(shooter.sim.weapon.ammo[1].reserve).toBe(defaultLoadout[1].reserve); // already full
+  });
+});
+
 describe('MatchSim: health', () => {
   it('regenerates 4 s after the last damage', () => {
     const sim = newSim(arena);
@@ -350,15 +378,17 @@ describe('MatchSim: performance', () => {
 });
 
 describe('MatchSim: review fixes', () => {
-  it('governViewTick: steady clients pass, per-shot jumps are refused, slow drift is followed', () => {
-    const g = { avgOffset: null as number | null };
-    expect(governViewTick(g, 96, 100)).toBe(96); // first input sets the baseline (offset 4)
-    expect(governViewTick(g, 97, 101)).toBe(97);
-    expect(governViewTick(g, 85, 102)).toBeCloseTo(96, 0); // "backtrack" 17 ticks → ±2 of offset 4
-    // An honest client whose interpolation delay grows from 4 to 6 ticks is followed.
-    let t = 103;
-    for (let i = 0; i < 300; i++, t++) governViewTick(g, t - 6, t);
-    expect(governViewTick(g, t - 6, t)).toBeCloseTo(t - 6, 1);
+  it('governViewTick: forward freely, back only slowly (per-shot backtrack refused)', () => {
+    const g = { last: null as number | null };
+    expect(governViewTick(g, 96)).toBe(96); // baseline
+    expect(governViewTick(g, 97)).toBe(97);
+    expect(governViewTick(g, 80)).toBe(96.75); // "backtrack" 17 ticks: refused
+    // A 10 fps client: 6 inputs per frame share one view tick, then it jumps ahead. Honest, allowed.
+    const low = { last: null as number | null };
+    for (let frame = 0; frame < 5; frame++) {
+      for (let i = 0; i < 6; i++)
+        expect(governViewTick(low, 100 + frame * 6)).toBe(100 + frame * 6);
+    }
   });
 
   it('a client steadily ~2 ticks behind cannot suddenly rewind 17 ticks for one shot', () => {

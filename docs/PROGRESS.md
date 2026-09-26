@@ -160,4 +160,29 @@ Open issues carried forward:
 - Phase 4 (lite, pulled forward for the end-to-end game): API with SQLite (`node:sqlite`) — `POST /matches` accepts only HMAC-signed results from the game server, each match id once; XP (150 + 100/kill + 250 win / 100 draw) and levels (500, 750, 1000… XP) computed by the API; `GET /profiles/:guestId`. Browser keeps a random guest id (not a secure identity; Supabase replaces it in Phase 4); menu shows level/XP, refreshed after each match. E2E checks XP after a full bot match.
 - Secure guest identity (replaces the unsigned guest id): `packages/auth` issues HMAC-signed guest tokens (`POST /guests`); the game server verifies them on join and only verified guests earn XP. Rate limits per IP: guest creation (burst 30, 0.5/s), profile reads, room joins (burst 20, 1/s) — generous because many players can share one IP.
 
+## Owner playtest feedback (2026-09-25): "enemies don't die, not interesting"
+
+Investigated with a scripted human-like player and server shot logs (client and server always
+agreed on hits, so not a netcode bug). Causes and fixes:
+
+- Hip-fire spread 2.4° (+1.4° moving) made a ~1.5 m cone at fight distance: aimed shots missed.
+  → hip 0.6° (+0.4° moving), ADS exact, lighter bloom.
+- Recoil climbed for the whole spray (no recovery until you stop): after 5 shots aim was 0.7 m
+  high at 28 m. → smaller kicks (~0.2°), partial settle between shots (`recoil.sprayRecovery`,
+  data), a full magazine climbs < 2°.
+- Bots were too accurate for a casual player once spread tightened → default "normal" bots
+  slower to react, bigger initial aim error, less recoil control ("hard" stays hard).
+- Bots got permanently stuck beside walls (their grid cell resolved to the barrier's rooftop
+  region; failed plans retried every tick and starved everyone's planning budget). By minute 7
+  nobody moved. → height-aware cell lookup + back-off. Now ~40 kills/min all match.
+- Few fights: bots wandered randomly → bots hunt (towards enemies 60%, centre 25%).
+- Low-fps players got short rewinds (view-tick governor v2 bounded the saw-toothing gap) →
+  governor v3: view tick may move forward freely, back only 0.25 tick per input.
+- Engagement: kill pop-ups ("ELIMINATED … +100"), medals (First Blood, Double/Triple/Multi Kill,
+  Killing Spree, Unstoppable), floating damage numbers, red crosshair over enemies, enemy hit
+  flash, death fall, soldier models instead of capsules, teammate name tags, brighter map,
+  ammo refilled per kill (a magazine per weapon).
+- New regression test: a hip-firing, crosshair-re-centring player gets kills against bots in a
+  real match (`e2e/fun.spec.ts`).
+
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
