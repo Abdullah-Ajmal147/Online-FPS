@@ -3,7 +3,7 @@ import type { MusicState } from './music.ts';
 
 /**
  * Which music for the game's state: the theme in the menu and on the results screen, a
- * heartbeat during the countdown, quiet while playing (footsteps matter more).
+ * heartbeat during the countdown, a quiet bed while playing (footsteps matter more).
  */
 export function musicFor(s: Pick<ClientStatus, 'inMatch' | 'match'>): MusicState {
   if (!s.inMatch) return 'menu';

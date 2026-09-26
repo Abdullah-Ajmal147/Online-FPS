@@ -40,8 +40,11 @@ export interface NoteEvent {
   velocity: number;
 }
 
-/** How busy the music is: the menu plays everything, the countdown only bass and pulse. */
-export type Arrangement = 'menu' | 'countdown';
+/**
+ * How busy the music is: the menu plays everything, the countdown only bass and a heartbeat,
+ * a match only soft pads and bass underneath the game (never silent, never in the way).
+ */
+export type Arrangement = 'menu' | 'countdown' | 'match';
 
 /** Small deterministic PRNG (mulberry32): the same bar always plays the same melody. */
 function rng(seed: number): () => number {
@@ -74,6 +77,14 @@ export function stepEvents(bar: number, step: number, arrangement: Arrangement):
       out.push({ voice: 'pulse', midi: 36, offset: 0, length: 0.25, velocity: 0.9 });
     if (step === 0)
       out.push({ voice: 'bass', midi: bassMidi, offset: 0, length: BEAT_S * 4, velocity: 0.6 });
+    return out;
+  }
+
+  if (arrangement === 'match') {
+    if (step !== 0) return out;
+    for (const n of chord.notes)
+      out.push({ voice: 'pad', midi: n, offset: 0, length: BEAT_S * 4, velocity: 0.35 });
+    out.push({ voice: 'bass', midi: bassMidi, offset: 0, length: BEAT_S * 3, velocity: 0.4 });
     return out;
   }
 

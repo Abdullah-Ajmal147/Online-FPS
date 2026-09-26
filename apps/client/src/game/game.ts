@@ -92,9 +92,12 @@ export async function startGame(
   settings: () => Settings,
 ): Promise<Game> {
   // --- Renderer ---
+  // Shadows and anti-aliasing are fixed when the renderer starts (a preset change for these
+  // applies after a reload; resolution applies live).
+  const startQuality = GRAPHICS[settings().graphics];
   const renderer = new THREE.WebGPURenderer({
     canvas,
-    antialias: true,
+    antialias: startQuality.antialias,
     forceWebGL: !(await webgpuAvailable()),
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -118,15 +121,56 @@ export async function startGame(
 
   // Shadows are set once, before the first frame: three's WebGPU shadow node does not survive
   // having its shadow map switched off/on or resized later (null depth texture crash).
-  const startQuality = GRAPHICS[settings().graphics];
   sun.castShadow = startQuality.shadowMapSize > 0;
   if (sun.castShadow)
     sun.shadow.mapSize.set(startQuality.shadowMapSize, startQuality.shadowMapSize);
+  // Medium: the map's shadows are drawn once per map (the sun and the map don't move) instead
+  // of every frame; only High redraws them each frame with soldiers in them. The per-frame
+  // shadow pass was the biggest GPU cost on integrated graphics.
+  sun.shadow.autoUpdate = startQuality.dynamicShadows;
+  RemotePlayers.castShadows = startQuality.dynamicShadows;
+
+  /**
+   * Automatic resolution: when frames run slow for a couple of seconds (GPU busy), render
+   * fewer pixels; raise them again when there is headroom. Changes at most every 2 s, since
+   * resizing the canvas costs a frame itself. Multiplies the preset and the menu's scale.
+   */
+  let dynamicScale = 1;
+  let slowWindows = 0;
+  let fastWindows = 0;
+  let windowFrames = 0;
+  let windowMs = 0;
+  let lastScaleChange = 0;
+  function adaptResolution(frameMs: number, now: number): void {
+    if (!settings().autoResolution) {
+      dynamicScale = 1;
+      return;
+    }
+    windowFrames++;
+    windowMs += frameMs;
+    if (windowMs < 1000) return;
+    const avg = windowMs / windowFrames;
+    windowFrames = 0;
+    windowMs = 0;
+    slowWindows = avg > 19 ? slowWindows + 1 : 0; // under ~52 fps
+    fastWindows = avg < 15.5 ? fastWindows + 1 : 0; // steady 60+
+    if (now - lastScaleChange < 2000) return;
+    if (slowWindows >= 2 && dynamicScale > 0.6) {
+      dynamicScale = Math.max(0.6, dynamicScale - 0.1);
+      lastScaleChange = now;
+      slowWindows = 0;
+    } else if (fastWindows >= 5 && dynamicScale < 1) {
+      dynamicScale = Math.min(1, dynamicScale + 0.05);
+      lastScaleChange = now;
+      fastWindows = 0;
+    }
+  }
 
   /** Resolution (preset pixel-ratio cap × render scale), applied live when the menu changes. */
   let appliedGraphics = '';
   function applyGraphics(): void {
-    const { graphics, renderScale } = settings();
+    const { graphics } = settings();
+    const renderScale = settings().renderScale * dynamicScale;
     const key = `${graphics}|${renderScale}`;
     if (key === appliedGraphics) return;
     appliedGraphics = key;
@@ -192,6 +236,7 @@ export async function startGame(
     grenadeView.clear();
     pointMarkers.setMap(map, modes['domination']?.capture?.radius ?? 4);
     applyLighting(map.lighting);
+    sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
     setStatus({ mapName: map.name, mapId: map.id });
     moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
     simCtx = createSimContext(moveCtx, loadout);
@@ -881,6 +926,8 @@ export async function startGame(
   renderer.setAnimationLoop((time) => {
     timer.update(time);
     const frame = timer.getDelta();
+    // A long gap (tab in the background) says nothing about the GPU.
+    if (frame < 0.25) adaptResolution(frame * 1000, performance.now());
     frames++;
 
     if (!joined) {
@@ -1153,9 +1200,15 @@ const LIGHTING: Record<
   },
 };
 
-/** Per preset: shadow map size (0 = no shadows) and the highest device pixel ratio used. */
-const GRAPHICS: Record<GraphicsPreset, { shadowMapSize: number; maxPixelRatio: number }> = {
-  low: { shadowMapSize: 0, maxPixelRatio: 1 },
-  medium: { shadowMapSize: 1024, maxPixelRatio: 1.5 },
-  high: { shadowMapSize: 2048, maxPixelRatio: 2 },
+/**
+ * Per preset: shadow map size (0 = no shadows), whether shadows are redrawn every frame (with
+ * soldiers), MSAA, and the highest device pixel ratio used.
+ */
+const GRAPHICS: Record<
+  GraphicsPreset,
+  { shadowMapSize: number; dynamicShadows: boolean; antialias: boolean; maxPixelRatio: number }
+> = {
+  low: { shadowMapSize: 0, dynamicShadows: false, antialias: false, maxPixelRatio: 1 },
+  medium: { shadowMapSize: 1024, dynamicShadows: false, antialias: true, maxPixelRatio: 1.5 },
+  high: { shadowMapSize: 2048, dynamicShadows: true, antialias: true, maxPixelRatio: 2 },
 };

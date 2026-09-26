@@ -31,7 +31,16 @@ export class GrenadeView {
   private readonly smokeCanMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad });
   private readonly puffGeo = new THREE.SphereGeometry(1, 14, 10);
 
-  constructor(private readonly scene: THREE.Scene) {}
+  /**
+   * Smoke clouds are built once and reused (new materials mid-match make the renderer stall
+   * while it prepares them). Three at a time is plenty; a fourth reuses the oldest.
+   */
+  private readonly cloudPool: THREE.Group[] = [];
+  private nextCloud = 0;
+
+  constructor(private readonly scene: THREE.Scene) {
+    for (let c = 0; c < 3; c++) this.cloudPool.push(this.buildCloud());
+  }
 
   onSnapshot(serverTick: number, projectiles: ProjectileState[]): void {
     const seen = new Set<number>();
@@ -117,8 +126,7 @@ export class GrenadeView {
     for (const id of [...this.tracked.keys()]) this.drop(id);
   }
 
-  private releaseCloud(t: Tracked): void {
-    this.scene.remove(t.mesh);
+  private buildCloud(): THREE.Group {
     const cloud = new THREE.Group();
     const r = equipment.smoke.smoke!.radius;
     // A fixed spiral layout: every client draws the same cloud shape.
@@ -138,21 +146,32 @@ export class GrenadeView {
       puff.position.set(Math.cos(a) * rr, s * 0.55 + (i % 4) * 0.25, Math.sin(a) * rr);
       cloud.add(puff);
     }
+    // Drawn once far below the map while loading, so the first smoke doesn't stall.
+    cloud.position.set(0, -500, 0);
+    this.scene.add(cloud);
+    requestAnimationFrame(() => requestAnimationFrame(() => (cloud.visible = false)));
+    return cloud;
+  }
+
+  private releaseCloud(t: Tracked): void {
+    this.scene.remove(t.mesh);
+    const cloud = this.cloudPool[this.nextCloud]!;
+    this.nextCloud = (this.nextCloud + 1) % this.cloudPool.length;
+    // Whoever still used this cloud loses it (only with 4+ smokes at once).
+    for (const [id, other] of this.tracked) if (other.mesh === cloud) this.tracked.delete(id);
+    cloud.visible = true;
+    cloud.scale.setScalar(0.3);
     t.mesh = cloud;
     t.cloud = true;
     t.cloudSince = performance.now();
-    this.scene.add(cloud);
   }
 
   private drop(id: number): void {
     const t = this.tracked.get(id);
     if (!t) return;
-    this.scene.remove(t.mesh);
-    if (t.cloud) {
-      for (const puff of (t.mesh as THREE.Group).children as THREE.Mesh[]) {
-        (puff.material as THREE.Material).dispose();
-      }
-    }
+    // Pooled clouds stay in the scene, hidden; grenade bodies are removed.
+    if (t.cloud) t.mesh.visible = false;
+    else this.scene.remove(t.mesh);
     this.tracked.delete(id);
   }
 }

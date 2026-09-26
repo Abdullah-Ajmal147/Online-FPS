@@ -23,6 +23,9 @@ interface Remote {
  * bright for readability. Hit → white flash; death → topple over and sink away.
  */
 export class RemotePlayers {
+  /** Soldiers cast shadows only where shadows are redrawn every frame (High). */
+  static castShadows = true;
+
   private remotes = new Map<number, Remote>();
 
   constructor(private readonly scene: THREE.Scene) {}
@@ -119,7 +122,7 @@ function box(
 ): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
   mesh.position.set(x, y, z);
-  mesh.castShadow = true;
+  mesh.castShadow = RemotePlayers.castShadows;
   return mesh;
 }
 
@@ -160,7 +163,7 @@ function makeSoldier(team: number): Remote {
   // Head: helmet + visor
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 10), uniform);
   head.position.set(0, 1.62, 0);
-  head.castShadow = true;
+  head.castShadow = RemotePlayers.castShadows;
   const helmet = new THREE.Mesh(
     new THREE.SphereGeometry(0.17, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
     vest,

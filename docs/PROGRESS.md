@@ -397,4 +397,21 @@ Learned: the e2e suite is at the machine's limit. With other apps running (load 
 cores), timing-sensitive browser tests fail at random (all pass alone). Now 4 workers and
 wider harness waits; run the full suite on a quiet machine or in CI.
 
+## Owner playtest (2026-09-26): "sound stops after 5–10 s", "the game lags"
+
+Measured with headless Chrome on the real GPU (Intel Arrow Lake iGPU, the budget's target):
+
+- Sound didn't break; the music went silent by design once the match was live, which felt
+  like audio dying. Now a quiet pad-and-bass bed plays under the match. Firefights were also
+  too hot (RMS 0.4, limiter pumping): effects lowered to about -16 dBFS typical, peaks < 0.9.
+- Lag was frame hitches, not the server (server A/B vs Phase 7: 1.33 vs 1.43 ms/tick). Every
+  tracer, flash, impact and smoke puff created a new material; the renderer set each one up
+  mid-fight (100–300 ms stalls). Effects are now pooled and drawn once while loading.
+  Medium draws the map's shadows once per map instead of every frame (soldier shadows:
+  High only); MSAA off on Low; automatic resolution lowers pixels when frames run slow.
+  Medium: 37–50 → 54–56 fps, worst frame ~290 → ~100 ms; High 33 → 53 fps.
+- Netcode healthy when the machine isn't overloaded: 0.7 % corrections, no snapshot loss.
+
+Learned: never create materials during play with three's WebGPU renderer; pool and pre-warm.
+
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

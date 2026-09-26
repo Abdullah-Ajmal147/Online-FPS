@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PROGRESSION, SCALE_PITCH_CLASSES, STEPS_PER_BAR, stepEvents } from './score.ts';
 
-const bars = (n: number, arrangement: 'menu' | 'countdown' = 'menu') =>
+const bars = (n: number, arrangement: 'menu' | 'countdown' | 'match' = 'menu') =>
   Array.from({ length: n }, (_, bar) =>
     Array.from({ length: STEPS_PER_BAR }, (_, step) => stepEvents(bar, step, arrangement)).flat(),
   );
@@ -27,6 +27,13 @@ describe('music score', () => {
     const plucks = bars(16).map((b) => b.filter((e) => e.voice === 'pluck').length);
     expect(plucks.slice(0, 8).every((n) => n === 0)).toBe(true);
     expect(plucks.slice(8).reduce((a, b) => a + b, 0)).toBeGreaterThan(30);
+  });
+
+  it('in a match only soft pads and bass play, once per bar', () => {
+    const events = bars(8, 'match').flat();
+    expect(new Set(events.map((e) => e.voice))).toEqual(new Set(['pad', 'bass']));
+    expect(events.every((e) => e.velocity <= 0.4)).toBe(true);
+    expect(events.filter((e) => e.voice === 'bass')).toHaveLength(8);
   });
 
   it('the countdown is only bass and a heartbeat', () => {

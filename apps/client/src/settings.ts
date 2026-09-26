@@ -51,6 +51,8 @@ export interface Settings {
   graphics: GraphicsPreset;
   /** Fraction of the screen resolution rendered (0.5–1): lower is faster, blurrier. */
   renderScale: number;
+  /** Lower the resolution automatically when frames run slow. */
+  autoResolution: boolean;
   /** Playlist chosen on the Play screen (a content mode id). */
   mode: string;
   /** Game server region id, or 'auto' (lowest ping). */
@@ -83,6 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volumeEffects: 0.9,
   graphics: 'medium',
   renderScale: 1,
+  autoResolution: true,
   primary: 'kestrel-ar',
   secondary: 'wren-sp',
   attachments: [],
@@ -158,6 +161,8 @@ export function normalizeSettings(raw: unknown): Settings {
       typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
     headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
     killcam: typeof r.killcam === 'boolean' ? r.killcam : DEFAULT_SETTINGS.killcam,
+    autoResolution:
+      typeof r.autoResolution === 'boolean' ? r.autoResolution : DEFAULT_SETTINGS.autoResolution,
     volumeMaster: clamp(r.volumeMaster, 0, 1, DEFAULT_SETTINGS.volumeMaster),
     volumeMusic: clamp(r.volumeMusic, 0, 1, DEFAULT_SETTINGS.volumeMusic),
     volumeEffects: clamp(r.volumeEffects, 0, 1, DEFAULT_SETTINGS.volumeEffects),

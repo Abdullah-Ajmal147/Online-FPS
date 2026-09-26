@@ -93,17 +93,22 @@ export class Music {
     const prev = this.state;
     this.state = next;
     const t = this.ctx.currentTime;
-    // Sits well under the effects: about -22 dBFS RMS at default volume.
-    const level = next === 'menu' ? 0.32 : next === 'countdown' ? 0.3 : 0;
+    // Sits well under the effects: about -22 dBFS RMS at default volume in the menu, a quiet
+    // bed during play (footsteps and gunfire must stay on top).
+    const level = next === 'menu' ? 0.32 : next === 'countdown' ? 0.3 : next === 'match' ? 0.13 : 0;
     this.bus.gain.cancelScheduledValues(t);
     this.bus.gain.setTargetAtTime(level, t, next === 'match' ? 0.6 : 0.8);
-    this.staticGain.gain.setTargetAtTime(next === 'menu' ? 0.035 : 0, t, 1);
-    if (next === 'off' || next === 'match') {
+    this.staticGain.gain.setTargetAtTime(
+      next === 'off' ? 0 : next === 'match' ? 0.05 : 0.035,
+      t,
+      1,
+    );
+    if (next === 'off') {
       // Let the fade finish, then stop scheduling notes.
       setTimeout(() => this.state === next && this.stopTimer(), 3000);
       return;
     }
-    if (prev === 'off' || prev === 'match' || !this.timer) {
+    if (prev === 'off' || !this.timer) {
       this.bar = 0;
       this.step = 0;
       this.nextStepAt = t + 0.1;
@@ -132,7 +137,7 @@ export class Music {
   }
 
   private schedule(): void {
-    if (this.state !== 'menu' && this.state !== 'countdown') return;
+    if (this.state === 'off') return;
     const arrangement: Arrangement = this.state;
     // After a long stall (tab in the background) skip ahead instead of playing a burst.
     if (this.nextStepAt < this.ctx.currentTime - 0.5) this.nextStepAt = this.ctx.currentTime + 0.05;

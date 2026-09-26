@@ -78,7 +78,7 @@ export class GameAudio {
       comp.release.value = 0.25;
       // Make-up gain after the compressor, then a hard ceiling so nothing ever clips.
       const makeup = ctx.createGain();
-      makeup.gain.value = 1.8;
+      makeup.gain.value = 1.2;
       const limiter = ctx.createDynamicsCompressor();
       limiter.threshold.value = -2;
       limiter.knee.value = 0;

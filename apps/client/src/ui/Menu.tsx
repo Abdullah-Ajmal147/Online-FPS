@@ -854,7 +854,9 @@ function SettingsScreen({
               <option value="high">High</option>
             </select>
           </label>
-          <p class="hint">Shadow quality changes after a reload; resolution right away.</p>
+          <p class="hint">
+            Shadows and anti-aliasing change after a reload; resolution right away.
+          </p>
           <label class="row">
             <span>Render scale: {Math.round(settings.renderScale * 100)}%</span>
             <input
@@ -864,6 +866,14 @@ function SettingsScreen({
               step="0.05"
               value={settings.renderScale}
               onInput={(e) => set('renderScale', Number((e.target as HTMLInputElement).value))}
+            />
+          </label>
+          <label class="row">
+            <span>Automatic resolution (keeps the frame rate smooth)</span>
+            <input
+              type="checkbox"
+              checked={settings.autoResolution}
+              onChange={(e) => set('autoResolution', (e.target as HTMLInputElement).checked)}
             />
           </label>
         </div>
