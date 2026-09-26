@@ -49,6 +49,27 @@ optionally, `ENV_FILE` with build-time values (`SITE_URL`, `VITE_*`). The server
 `SENTINEL_IMAGE=abdullah211/sentinelstrike:latest` to `.env` and use
 `docker compose pull && docker compose up -d` instead of `--build`.
 
+### Alternative: nginx on the host instead of Caddy
+
+If you prefer nginx (e.g. already installed, or certificates via certbot):
+
+```bash
+sudo apt install -y nginx
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/sentinel   # set your domain in it
+sudo ln -s /etc/nginx/sites-available/sentinel /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default && sudo nginx -t && sudo systemctl reload nginx
+docker compose -f docker-compose.yml -f deploy/docker-compose.nginx.yml up -d
+```
+
+`deploy/docker-compose.nginx.yml` switches the Caddy container off and publishes the game
+(2567) and API (8787) on `127.0.0.1` only. Before the domain is ready the site answers on
+`http://<server IP>`; once the domain points at the server:
+`sudo certbot --nginx -d play.example.com --redirect` (certificate, redirect, renewal).
+
+The config overwrites `X-Real-IP` / `X-Forwarded-For` with the real client address: the
+game server and API use them for IP bans and rate limits, so they must never come from the
+player. Keep ports 2567 and 8787 closed in the firewall / security group.
+
 ## 4. Operate
 
 | What                 | How                                                                                                                                                              |
@@ -59,7 +80,8 @@ optionally, `ENV_FILE` with build-time values (`SITE_URL`, `VITE_*`). The server
 | Update               | `git pull && docker compose up -d --build`, or with the Docker Hub image `docker compose pull && docker compose up -d` (in-progress matches end; players rejoin) |
 | Settings             | `SENTINEL_BOT_DIFFICULTY` (easy, normal, hard), `SENTINEL_BOTS=0` (no bots), `SENTINEL_MAP` (pin one map) or `SENTINEL_MAP_ROTATION=relay-yard,saltline-depot`   |
 
-Metrics are not exposed publicly by Caddy; scrape them from inside the network.
+Metrics are not exposed publicly (Caddy and `deploy/nginx.conf` answer 404 for `/metrics` and
+`/api/metrics`); scrape them from inside the network.
 
 ## Known limits before a public launch
 

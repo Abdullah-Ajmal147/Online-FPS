@@ -1,0 +1,13 @@
+# Use with nginx on the host (deploy/nginx.conf) instead of the bundled Caddy:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.nginx.yml up -d
+# (or copy this file to docker-compose.override.yml on the server; Compose loads that one
+# automatically).
+services:
+  caddy:
+    profiles: ['caddy'] # off: nginx on the host handles ports 80 and 443
+  game:
+    ports:
+      - '127.0.0.1:2567:2567' # reachable from the server itself only
+  api:
+    ports:
+      - '127.0.0.1:8787:8787'

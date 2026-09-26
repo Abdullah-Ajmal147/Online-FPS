@@ -4,6 +4,13 @@
 {$SITE_ADDRESS:http://localhost:8080} {
 	encode zstd gzip
 
+	# Prometheus metrics stay inside the network (curl game:2567/metrics, api:8787/metrics).
+	# A handle block: plain `respond` would run after the catch-all proxy below.
+	@internal path /metrics /api/metrics
+	handle @internal {
+		respond 404
+	}
+
 	# API: /api/profiles/… → api:8787/profiles/…
 	handle_path /api/* {
 		reverse_proxy api:8787
