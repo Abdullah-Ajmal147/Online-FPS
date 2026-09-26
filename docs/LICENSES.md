@@ -11,7 +11,8 @@ Not allowed: anything ripped from other games, "free" assets without a stated li
 
 ## Original assets made in this repo (no third-party license)
 
-| Asset               | File path                        | Made from                                                                       |
-| ------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
-| Logo mark / favicon | `apps/client/public/favicon.svg` | hand-written SVG (same shape as the menu wordmark)                              |
-| Link-preview card   | `apps/client/public/og.png`      | `tools/brand/og-card.html`, rendered by `tools/brand/render.mjs` (system fonts) |
+| Asset                                | File path                        | Made from                                                                       |
+| ------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------- |
+| Logo mark / favicon                  | `apps/client/public/favicon.svg` | hand-written SVG (same shape as the menu wordmark)                              |
+| Link-preview card                    | `apps/client/public/og.png`      | `tools/brand/og-card.html`, rendered by `tools/brand/render.mjs` (system fonts) |
+| Music "Static" and all sound effects | `apps/client/src/audio/`         | generated at runtime with Web Audio (no audio files)                            |

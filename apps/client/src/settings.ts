@@ -57,6 +57,10 @@ export interface Settings {
   region: string;
   /** Replay your death from the killer's eyes. */
   killcam: boolean;
+  /** Volumes, 0–1. */
+  volumeMaster: number;
+  volumeMusic: number;
+  volumeEffects: number;
   /** Loadout weapon ids (applied at the next spawn). */
   primary: string;
   secondary: string;
@@ -74,6 +78,9 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: 'team-deathmatch',
   region: 'auto',
   killcam: true,
+  volumeMaster: 0.8,
+  volumeMusic: 0.6,
+  volumeEffects: 0.9,
   graphics: 'medium',
   renderScale: 1,
   primary: 'kestrel-ar',
@@ -151,6 +158,9 @@ export function normalizeSettings(raw: unknown): Settings {
       typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
     headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
     killcam: typeof r.killcam === 'boolean' ? r.killcam : DEFAULT_SETTINGS.killcam,
+    volumeMaster: clamp(r.volumeMaster, 0, 1, DEFAULT_SETTINGS.volumeMaster),
+    volumeMusic: clamp(r.volumeMusic, 0, 1, DEFAULT_SETTINGS.volumeMusic),
+    volumeEffects: clamp(r.volumeEffects, 0, 1, DEFAULT_SETTINGS.volumeEffects),
     bindings,
   };
 }

@@ -8,9 +8,9 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
   await deploy(page, '/?server=http://localhost:2568');
 
   // The match bar shows up and bots fill the match to 12.
-  await expect(page.getByTestId('scorebar')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('scorebar')).toBeVisible({ timeout: 20_000 });
   const match = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus().match);
-  await expect.poll(async () => (await match())?.players.length, { timeout: 10_000 }).toBe(12);
+  await expect.poll(async () => (await match())?.players.length, { timeout: 20_000 }).toBe(12);
   const m = await match();
   // Bots fill every empty slot (another test's player may still be leaving this server).
   const humans = m!.players.filter((p) => !p.bot).length;
@@ -24,7 +24,7 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
   await page.keyboard.up('Tab');
 
   // The match goes live, bots fight (kill feed fills), and it ends with a results screen.
-  await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).toBe('live');
+  await expect.poll(async () => (await match())?.phase, { timeout: 40_000 }).toBe('live');
   await expect.poll(async () => (await match())?.phase, { timeout: 70_000 }).toBe('ended');
   const results = page.getByTestId('results');
   await expect(results).toBeVisible();

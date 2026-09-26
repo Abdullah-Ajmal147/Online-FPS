@@ -26,7 +26,7 @@ const input = (p: Page, look: [number, number] | null, fire: boolean) =>
 
 /** Owner feature list: after a death, the killer's view is replayed until respawn. */
 test('killcam: the victim sees the replay from the killer, then respawns', async ({ browser }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(180_000); // two pages; slow when the machine is busy
   const killer = await (await browser.newContext()).newPage();
   const victim = await (await browser.newContext()).newPage();
   await Promise.all([
@@ -37,6 +37,12 @@ test('killcam: the victim sees the replay from the killer, then respawns', async
     .poll(async () => (await remotes(killer)).length, { timeout: 15_000 })
     .toBeGreaterThanOrEqual(1);
 
+  // Watch from now on: the replay lasts ~2.3 s and state polling is slow under load.
+  const cam = victim.getByTestId('killcam');
+  const seen = cam.waitFor({ state: 'visible', timeout: 60_000 }).then(async () => ({
+    text: await cam.textContent(),
+    shot: await victim.screenshot({ path: 'test-results/killcam.png' }),
+  }));
   // The killer aims at the victim and fires until the victim is down.
   let dead = false;
   for (let attempt = 0; attempt < 60 && !dead; attempt++) {
@@ -55,10 +61,7 @@ test('killcam: the victim sees the replay from the killer, then respawns', async
 
   // Death view first, then the killcam names the killer (the victim saw them long enough:
   // they stood in the open the whole time).
-  const cam = victim.getByTestId('killcam');
-  await expect(cam).toBeVisible({ timeout: 3_000 });
-  await expect(cam).toContainText('Kestrel');
-  await victim.screenshot({ path: 'test-results/killcam.png' });
+  expect((await seen).text).toContain('Kestrel');
   // It ends with the respawn.
   await expect.poll(async () => (await combat(victim))?.alive, { timeout: 8_000 }).toBe(true);
   await expect(cam).toHaveCount(0);

@@ -732,7 +732,7 @@ function SettingsScreen({
   settings: Settings;
   onSettings: (next: Settings) => void;
 }) {
-  const [tab, setTab] = useState<'game' | 'graphics' | 'controls'>('game');
+  const [tab, setTab] = useState<'game' | 'graphics' | 'audio' | 'controls'>('game');
   const [waitingFor, setWaitingFor] = useState<Action | null>(null);
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     onSettings({ ...settings, [key]: value });
@@ -754,7 +754,7 @@ function SettingsScreen({
   return (
     <Screen title="Settings">
       <div class="tabs">
-        {(['game', 'graphics', 'controls'] as const).map((t) => (
+        {(['game', 'graphics', 'audio', 'controls'] as const).map((t) => (
           <button
             key={t}
             class={`tab${tab === t ? ' active' : ''}`}
@@ -866,6 +866,37 @@ function SettingsScreen({
               onInput={(e) => set('renderScale', Number((e.target as HTMLInputElement).value))}
             />
           </label>
+        </div>
+      )}
+
+      {tab === 'audio' && (
+        <div class="form">
+          {(
+            [
+              ['volumeMaster', 'Master'],
+              ['volumeMusic', 'Music'],
+              ['volumeEffects', 'Effects'],
+            ] as const
+          ).map(([key, label]) => (
+            <label class="row" key={key}>
+              <span>
+                {label}: {Math.round(settings[key] * 100)}%
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={settings[key]}
+                data-testid={key}
+                onInput={(e) => set(key, Number((e.target as HTMLInputElement).value))}
+              />
+            </label>
+          ))}
+          <p class="hint">
+            Music plays in the menus and before a match; it stays out of the way during play so you
+            can hear footsteps. Crouch-walking is nearly silent.
+          </p>
         </div>
       )}
 

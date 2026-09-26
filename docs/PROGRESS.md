@@ -383,5 +383,18 @@ Done before: third weapon, grenades, second map. Now:
   protocol change and nothing new revealed. Server-side visibility means we only have the
   killer's movement while we could see or hear them; with under 0.75 s of it, the camera just
   turns toward the killer instead. Setting: Settings → Game → Killcam.
+- Music and sound: an original generated score, "Static" (A minor, 84 BPM, pads, sub bass,
+  echoing plucks over radio static; `apps/client/src/audio/score.ts`, tested to stay in key).
+  Plays in menus and on results, a heartbeat in the countdown, silent in play; win/loss
+  stings. Effects rebuilt: compressor + limiter, generated room reverb, distance darkening,
+  three-layer gunshots with slight variation, 3D footsteps (crouch-walking nearly silent),
+  mechanical reloads, dry fire, headshot "tink", Domination capture stings, menu ticks.
+  Voice budget and cheap panning for footsteps keep weak CPUs safe. Master / Music / Effects
+  sliders (Settings → Audio). Levels checked in a browser test: music about -22 dBFS RMS,
+  sustained fire about -17, nothing clips.
+
+Learned: the e2e suite is at the machine's limit. With other apps running (load 20+ on 14
+cores), timing-sensitive browser tests fail at random (all pass alone). Now 4 workers and
+wider harness waits; run the full suite on a quiet machine or in CI.
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

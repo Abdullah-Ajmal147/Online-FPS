@@ -20,6 +20,12 @@ test('a hip-firing player kills bots in a real match', async ({ page }) => {
   const status = () => page.evaluate(async () => (await import('/src/store.ts')).getStatus());
   await expect.poll(async () => (await status()).match?.phase, { timeout: 30_000 }).toBe('live');
 
+  // Watch for the kill banner from the start: it shows ~2.5 s, and polling the game state is
+  // slow when many headless pages share the machine.
+  const eliminated = page
+    .getByTestId('announcements')
+    .filter({ hasText: 'ELIMINATED' })
+    .waitFor({ timeout: 200_000 });
   const kills = async () => (await status()).match?.players.find((p) => p.me)?.kills ?? 0;
   // Keep playing across match phases (we may join a match that is nearly over).
   // Generous: headless pages run a few fps while other tests share the machine.
@@ -41,7 +47,7 @@ test('a hip-firing player kills bots in a real match', async ({ page }) => {
   // The headless browser runs ~10 fps, so its aim lags: one kill proves shots kill enemies.
   expect(await kills()).toBeGreaterThanOrEqual(1);
   // …and the kill is rewarded on screen.
-  await expect(page.getByTestId('announcements')).toContainText('ELIMINATED', { timeout: 3_000 });
+  await eliminated;
 });
 
 async function aimAndFire(

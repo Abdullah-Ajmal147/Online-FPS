@@ -3,6 +3,7 @@ import { deploy } from './helpers.ts';
 
 /** Phase 8 task 2: first-match tips advance as the player does each thing, once. */
 test('first-match primer: steps advance by doing them, then never show again', async ({ page }) => {
+  test.setTimeout(120_000); // two deploys
   await deploy(page, '/?server=http://localhost:2567');
   const primer = page.getByTestId('primer');
   await expect(primer).toHaveAttribute('data-step', 'move');

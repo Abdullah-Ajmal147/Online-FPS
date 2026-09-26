@@ -2,15 +2,35 @@ import { h, render } from 'preact';
 import { startGame, type Game } from './game/game.ts';
 import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
-import { getStatus, setStatus } from './store.ts';
+import { getStatus, setStatus, subscribe } from './store.ts';
 import { startSessionTelemetry } from './telemetry.ts';
 import { platform, trackGameplay } from './platform.ts';
+import { gameAudio } from './audio/index.ts';
+import { musicFor } from './audio/director.ts';
 import { probeRegions, regions } from './regions.ts';
 import { App } from './ui/App.tsx';
 
 let settings: Settings = loadSettings();
 void probeRegions(regions());
 startSessionTelemetry();
+
+// Audio: browsers allow sound only after a gesture, so the first click or key anywhere starts
+// it (menu music included). Volumes follow the settings; music follows the match state.
+const applyVolumes = () =>
+  gameAudio.setVolumes({
+    master: settings.volumeMaster,
+    music: settings.volumeMusic,
+    effects: settings.volumeEffects,
+  });
+applyVolumes();
+for (const type of ['pointerdown', 'keydown'] as const)
+  addEventListener(type, () => gameAudio.unlock(), { once: true, capture: true });
+subscribe((s) => gameAudio.setMusic(musicFor(s)));
+gameAudio.setMusic(musicFor(getStatus()));
+// A soft tick for menu buttons.
+addEventListener('click', (e) => {
+  if ((e.target as Element | null)?.closest?.('.menu button')) gameAudio.uiClick();
+});
 trackGameplay(platform());
 let game: Game | undefined;
 /** DEPLOY pressed before the game finished loading. */
@@ -24,6 +44,7 @@ const rerender = () =>
       onSettings: (next: Settings) => {
         settings = next;
         saveSettings(next);
+        applyVolumes();
         rerender();
       },
       onPlay: () => {

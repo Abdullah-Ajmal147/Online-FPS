@@ -22,7 +22,7 @@ test('three friends join by one invite link and play on the same team', async ({
     await deploy(page, link);
     friends.push(page);
   }
-  for (const f of friends) await expect.poll(() => myTeam(f)).toBe(team);
+  for (const f of friends) await expect.poll(() => myTeam(f), { timeout: 15_000 }).toBe(team);
   // Everyone is in the same match: the host sees two more humans on its team.
   await expect
     .poll(() =>

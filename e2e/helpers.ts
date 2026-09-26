@@ -17,11 +17,11 @@ export async function deploy(page: Page, url = '/'): Promise<void> {
   await page.goto(url);
   await page.getByTestId('play').click();
   await expect
-    .poll(async () => (await status(page)).net.state, { timeout: 20_000 })
+    .poll(async () => (await status(page)).net.state, { timeout: 40_000 })
     .toBe('connected');
   // …and until the server has placed our soldier (inputs before that aren't sent).
   await expect
-    .poll(async () => (await status(page)).spawned, { timeout: 20_000 })
+    .poll(async () => (await status(page)).spawned, { timeout: 40_000 })
     .toBe(true)
     .catch(async (e: unknown) => {
       const st = await status(page);

@@ -22,6 +22,7 @@ import {
   type Snapshot,
 } from '@sentinel/protocol';
 import {
+  Button,
   Predictor,
   SKIN,
   TICK_RATE,
@@ -48,7 +49,7 @@ import {
   type SimContext,
   type SimState,
 } from '@sentinel/shared';
-import { GameAudio } from '../audio.ts';
+import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees } from '../camera.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes } from '../map.ts';
@@ -149,7 +150,7 @@ export async function startGame(
 
   const viewmodel = new Viewmodel(camera);
   const feedback = new Feedback(document.getElementById('ui')!);
-  const audio = new GameAudio();
+  const audio = gameAudio;
   const rapier = await initPhysics();
 
   // --- Map + simulation (same code the server runs). Rebuilt when the server names its map. ---
@@ -284,6 +285,7 @@ export async function startGame(
   chatBridge.opened = () => input.releaseAll();
 
   const PHASES = ['warmup', 'countdown', 'live', 'ended'] as const;
+  const pointOwners = new Map<string, number>();
   const onMatchInfo = (info: MatchInfo) => {
     for (const p of info.players) {
       names.set(p.id, p.name);
@@ -301,6 +303,7 @@ export async function startGame(
     if (info.phase === MatchPhase.Ended && lastPhase !== MatchPhase.Ended && !wasEnded) {
       // Humans you just played with (the menu's "Recent players"; add them as friends there).
       rememberRecentPlayers(info.players.filter((p) => !p.bot && p.id !== myId && p.code));
+      audio.sting(info.winner === DRAW ? 'draw' : info.winner === myTeam() ? 'win' : 'loss');
       // Twice: the report may still be on its way at the first try.
       setTimeout(() => void refreshProfile(), 1500);
       setTimeout(() => void refreshProfile(), 5000);
@@ -312,6 +315,18 @@ export async function startGame(
     const mine = myTeam();
     const mvp = info.players.find((p) => p.id === info.mvp);
     pointMarkers.update(info.points);
+    // Domination: a node changed hands (not at the start of a match, when all reset).
+    for (const p of info.points) {
+      const before = pointOwners.get(p.id);
+      if (
+        before !== undefined &&
+        before !== p.owner &&
+        p.owner !== -1 &&
+        info.phase === MatchPhase.Live
+      )
+        audio.capture(p.owner === mine);
+      pointOwners.set(p.id, p.owner);
+    }
     setStatus({
       match: {
         phase: PHASES[info.phase]!,
@@ -740,6 +755,35 @@ export async function startGame(
   const aimDir = new THREE.Vector3();
   /** Crosshair turns red over a visible enemy; teammates get name tags. */
   /**
+   * Other players' footsteps, placed where they walk: how far they moved since last frame.
+   * Crouch-walking is nearly silent (a real tactic). Enemies are only in our snapshots when
+   * near or visible (ADR 0009), which is also roughly when you could hear them.
+   */
+  function remoteFootsteps(id: number, pose: RemotePose, frame: number): void {
+    const [x, y, z] = pose.position;
+    const last = remoteSteps.get(id);
+    if (!last || !pose.alive) {
+      remoteSteps.set(id, { x, y, z, walked: 0 });
+      return;
+    }
+    const d = Math.hypot(x - last.x, z - last.z);
+    const onGround = Math.abs(y - last.y) < 0.02;
+    last.x = x;
+    last.y = y;
+    last.z = z;
+    // A teleport (respawn) or standing still: no steps.
+    if (d > 2 || d < 0.001 || !onGround || frame <= 0) return;
+    last.walked += d;
+    const speed = d / frame;
+    const length = pose.crouching ? 1.3 : speed > movement.walkSpeed + 0.5 ? 2.3 : 1.9;
+    if (last.walked >= length) {
+      last.walked = 0;
+      const loud = pose.crouching ? 0.12 : Math.min(1, speed / movement.sprintSpeed);
+      audio.footstep(loud, [x, y, z]);
+    }
+  }
+
+  /**
    * After our death: 0.5 s on the death view, then the killcam replay from the killer's eyes
    * (if we saw enough of them), else the camera turns toward the killer. Returns true while
    * the replay is drawing the players (the live remote update is skipped then).
@@ -826,6 +870,11 @@ export async function startGame(
   let lastHud = 0;
   let frames = 0;
   let lastSlot = 0;
+  let fireWasDown = false;
+  /** Metres walked since the last footstep (own). */
+  let stride = 0;
+  /** Remote players' last drawn position and distance walked, for their footsteps. */
+  const remoteSteps = new Map<number, { x: number; y: number; z: number; walked: number }>();
   let lastReload = 0;
 
   let orbit = 0;
@@ -866,6 +915,12 @@ export async function startGame(
         { skip },
       );
       if (shot && hud.alive) ownShot(shot);
+      // Dry fire: trigger pulled on an empty magazine (once per pull).
+      const firing = (sample.buttons & Button.Fire) !== 0;
+      const wpn = predictor.state.weapon;
+      if (firing && !fireWasDown && hud.alive && !frozen && wpn.ammo[wpn.slot].ammo === 0)
+        audio.dryFire();
+      fireWasDown = firing;
       if (conn.connected && spawnedFromServer) {
         conn.sendInput({ ackServerTick: latestServerTick, inputs: predictor.recentInputs() });
       }
@@ -923,7 +978,18 @@ export async function startGame(
       grounded: m.grounded,
     });
     audio.setListener(camera.position.x, camera.position.y, camera.position.z, input.look.yaw);
-    if (w.slot !== lastSlot || (w.reloadTicks > 0 && lastReload === 0)) audio.click();
+    if (w.slot !== lastSlot) audio.click();
+    else if (w.reloadTicks > 0 && lastReload === 0) audio.reload(w.reloadTicks / TICK_RATE);
+    // Own footsteps: a step every ~1.9 m (longer strides sprinting, short and soft crouched).
+    if (hud.alive && m.grounded && speed > 1.2 && !replaying) {
+      stride += speed * frame;
+      const sprinting = speed > movement.walkSpeed + 0.5;
+      const length = m.crouching ? 1.3 : sprinting ? 2.3 : 1.9;
+      if (stride >= length) {
+        stride = 0;
+        audio.footstep(m.crouching ? 0.08 : sprinting ? 0.4 : 0.28);
+      }
+    }
     lastSlot = w.slot;
     lastReload = w.reloadTicks;
 
@@ -944,6 +1010,7 @@ export async function startGame(
         if (!pose) continue;
         remotePoses.set(id, pose);
         remotePlayers.update(id, pose, frame);
+        remoteFootsteps(id, pose, frame);
       }
       grenadeView.update(renderTick, performance.now());
     }

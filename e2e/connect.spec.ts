@@ -33,6 +33,12 @@ test('holding W walks the player forward (-Z)', async ({ page }) => {
   await deploy(page, '/');
   await expect.poll(async () => (await status(page)).combat?.alive, { timeout: 15_000 }).toBe(true);
   const zOf = async () => (await status(page)).player!.position[2];
+  // Face -Z (yaw 0) whatever team we got: the spawn direction depends on the side.
+  await page.evaluate(() =>
+    (
+      window as unknown as { __sentinelInput: { setLook(y: number, p: number): void } }
+    ).__sentinelInput.setLook(0, 0),
+  );
   const z0 = await zOf();
 
   await page.keyboard.down('KeyW');

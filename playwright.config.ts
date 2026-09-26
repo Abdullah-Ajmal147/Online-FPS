@@ -16,6 +16,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: 'e2e',
   timeout: 30_000,
+  // Each page draws 3D in software (no GPU in headless Chrome), with sound: more than ~4 at once
+  // oversubscribes a 14-core machine (load 25+) and tests start missing their timings.
+  workers: process.env.CI ? 2 : 4,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: 'http://localhost:5173' },
