@@ -15,6 +15,28 @@ export interface Profile {
   weaponKills: Record<string, number>;
   /** Local play: everything unlocked (the API decides, the game server follows the same). */
   unlockAll: boolean;
+  /** Today's and this week's challenges with this guest's progress. */
+  challenges: ChallengeView[];
+  /** XP breakdown of the last counted match (results screen). */
+  lastMatch: LastMatch | null;
+}
+
+export interface ChallengeView {
+  id: string;
+  text: string;
+  period: 'daily' | 'weekly';
+  target: number;
+  progress: number;
+  xp: number;
+}
+
+export interface LastMatch {
+  matchId: string;
+  lines: { label: string; xp: number }[];
+  challenges: { text: string; xp: number }[];
+  total: number;
+  levelBefore: number;
+  levelAfter: number;
 }
 
 /** What the menu may offer: the same unlocks the game server enforces. No profile → new player. */

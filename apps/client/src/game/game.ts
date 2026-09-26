@@ -53,7 +53,7 @@ import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
 import { loadoutChoice, type GraphicsPreset, type Settings } from '../settings.ts';
 import { ensureGuest, refreshProfile } from '../profile.ts';
-import { setStatus, type CombatHud, type KillFeedEntry } from '../store.ts';
+import { setStatus, type CombatHud, type KillFeedEntry, getStatus } from '../store.ts';
 import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
@@ -262,7 +262,12 @@ export async function startGame(
     }
     // Match just ended: the server reports it to the API; show the new XP shortly after.
     if (info.phase === MatchPhase.Ended && lastPhase !== MatchPhase.Ended && !wasEnded) {
-      setTimeout(() => void refreshProfile(), 2000);
+      // Twice: the report may still be on its way at the first try.
+      setTimeout(() => void refreshProfile(), 1500);
+      setTimeout(() => void refreshProfile(), 5000);
+    }
+    if (info.phase === MatchPhase.Live && lastPhase !== MatchPhase.Live) {
+      setStatus({ xpBaseline: getStatus().profile?.lastMatch?.matchId ?? null });
     }
     lastPhase = info.phase;
     const mine = myTeam();

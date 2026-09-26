@@ -123,8 +123,43 @@ function Results({ m }: { m: MatchHud }) {
         {m.scores[0]} – {m.scores[1]}
       </div>
       {m.mvp && <div class="results-mvp">MVP: {m.mvp}</div>}
+      <XpPanel />
       <Table m={m} />
       <div class="results-next">Next match in {Math.ceil(m.secondsLeft)} s</div>
+    </div>
+  );
+}
+
+/** This match's XP, line by line, from the API (appears a moment after the match ends). */
+function XpPanel() {
+  const { profile, xpBaseline } = useStatus();
+  const last = profile?.lastMatch;
+  if (!last || last.matchId === xpBaseline) {
+    return <div class="xp-panel xp-pending">Counting XP…</div>;
+  }
+  return (
+    <div class="xp-panel" data-testid="xp-panel">
+      {last.lines.map((l) => (
+        <div class="xp-line" key={l.label}>
+          <span>{l.label}</span>
+          <span>+{l.xp}</span>
+        </div>
+      ))}
+      {last.challenges.map((c) => (
+        <div class="xp-line xp-challenge" key={c.text}>
+          <span>Challenge: {c.text}</span>
+          <span>+{c.xp}</span>
+        </div>
+      ))}
+      <div class="xp-line xp-total">
+        <span>Total</span>
+        <span>+{last.total} XP</span>
+      </div>
+      {last.levelAfter > last.levelBefore && (
+        <div class="level-up" data-testid="level-up">
+          Level up! Level {last.levelAfter}
+        </div>
+      )}
     </div>
   );
 }

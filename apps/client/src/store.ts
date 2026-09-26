@@ -89,6 +89,8 @@ export interface ClientStatus {
   match: MatchHud | null;
   /** Guest level/XP from the API, null until loaded (or if the API is down). */
   profile: Profile | null;
+  /** lastMatch id when the current match went live: a newer one is this match's XP. */
+  xpBaseline: string | null;
 }
 
 type Listener = (status: ClientStatus) => void;
@@ -104,6 +106,7 @@ let status: ClientStatus = {
   combat: null,
   match: null,
   profile: null,
+  xpBaseline: null,
 };
 const listeners = new Set<Listener>();
 

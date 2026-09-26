@@ -33,6 +33,9 @@ test('menu shows controls and rebinding', async ({ page }) => {
   await expect(page.getByText('Crouch / slide')).toBeVisible();
   // The guest profile (level/XP) loads from the API on page load.
   await expect(page.getByTestId('profile')).toContainText('Level 1');
+  // Daily and weekly challenges, progress from zero.
+  await expect(page.getByTestId('challenges')).toContainText('Daily challenges');
+  await expect(page.getByTestId('challenges')).toContainText('Weekly challenges');
 });
 
 test('graphics presets switch without breaking rendering', async ({ page }) => {

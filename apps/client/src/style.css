@@ -850,3 +850,72 @@ body.aim-enemy .crosshair-lines i {
   opacity: 0.55;
   cursor: default;
 }
+
+.xp-panel {
+  width: min(360px, 100%);
+  margin: 10px auto;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgb(13 17 23 / 70%);
+  font-size: 13px;
+}
+
+.xp-pending {
+  color: #8b949e;
+  text-align: center;
+}
+
+.xp-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.xp-challenge {
+  color: #d29922;
+}
+
+.xp-total {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #30363d;
+  font-weight: 700;
+}
+
+.level-up {
+  margin-top: 6px;
+  color: #3fb950;
+  font-weight: 700;
+  text-align: center;
+  font-size: 16px;
+}
+
+.challenges {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.challenges-h {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.challenge {
+  margin-bottom: 6px;
+}
+
+.challenge-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.challenge-row span:last-child {
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.challenge.done .challenge-row span:first-child {
+  color: #3fb950;
+}

@@ -49,6 +49,7 @@ export function Menu({ settings, onSettings, onPlay }: Props) {
           Team Deathmatch · 6v6{useStatus().mapName ? ` · ${useStatus().mapName}` : ''}
         </p>
         <ProfileCard />
+        <Challenges />
         <button class="play" data-testid="play" onClick={onPlay}>
           Click to play
         </button>
@@ -188,6 +189,42 @@ function ProfileCard() {
       <div class="profile-stats">
         {p.matches} matches · {p.wins} wins · {p.kills} kills
       </div>
+    </div>
+  );
+}
+
+/** Today's and this week's challenges (progress comes from the server's match reports). */
+function Challenges() {
+  const list = useStatus().profile?.challenges;
+  if (!list?.length) return null;
+  return (
+    <div class="challenges" data-testid="challenges">
+      {(['daily', 'weekly'] as const).map((period) => (
+        <div key={period}>
+          <div class="challenges-h">{period === 'daily' ? 'Daily' : 'Weekly'} challenges</div>
+          {list
+            .filter((c) => c.period === period)
+            .map((c) => {
+              const done = c.progress >= c.target;
+              return (
+                <div class={`challenge${done ? ' done' : ''}`} key={c.id}>
+                  <div class="challenge-row">
+                    <span>{c.text}</span>
+                    <span>
+                      {done ? 'Done' : `${c.progress}/${c.target}`} · +{c.xp} XP
+                    </span>
+                  </div>
+                  <div class="xp-bar">
+                    <div
+                      class="xp-fill"
+                      style={{ width: `${Math.round((100 * c.progress) / c.target)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      ))}
     </div>
   );
 }
