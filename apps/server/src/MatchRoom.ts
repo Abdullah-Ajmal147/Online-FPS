@@ -304,6 +304,7 @@ export class MatchRoom extends Room {
       name: sanitizeName(options?.name),
       guestId,
       code: guestId ? publicCode(API_SECRET, guestId) : '',
+      level: access.level,
       ...(team === undefined ? {} : { team }),
       loadout: buildLoadout(
         {

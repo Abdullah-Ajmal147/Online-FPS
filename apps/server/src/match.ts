@@ -1,3 +1,4 @@
+import { aimSummary, flagsFor } from './anticheat.ts';
 import { randomUUID } from 'node:crypto';
 import { MatchPhase, NO_WINNER, type MatchInfo, type MatchPhaseId } from '@sentinel/protocol';
 import { TICK_RATE } from '@sentinel/shared';
@@ -35,6 +36,10 @@ export interface MatchSummary {
     fragKills: number;
     /** Kills per weapon id (weapon levels). */
     weaponKills: Record<string, number>;
+    level: number;
+    /** Anti-cheat numbers and the anomaly flags they tripped (anticheat.ts). */
+    aim: ReturnType<typeof aimSummary>;
+    flags: string[];
     /** Time actually spent in the live match (the API requires a minimum for XP). */
     secondsPlayed: number;
   }[];
@@ -207,6 +212,9 @@ export class Match {
       headshots: p.headshots,
       fragKills: p.fragKills,
       weaponKills: Object.fromEntries(p.weaponKills),
+      level: p.level,
+      aim: aimSummary(p.aim),
+      flags: p.bot ? [] : flagsFor(p),
       secondsPlayed: Math.max(0, Math.round((this.sim.tick - from) / TICK_RATE)),
     };
   }

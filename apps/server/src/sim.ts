@@ -44,6 +44,7 @@ import {
   type SimState,
   type Vec3,
 } from '@sentinel/shared';
+import { SNAP_DEGREES, newAimStats, type AimStats } from './anticheat.ts';
 import { Grenades, type Detonation } from './grenades.ts';
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
@@ -155,6 +156,10 @@ export interface SimPlayer {
   headshots: number;
   fragKills: number;
   weaponKills: Map<string, number>;
+  /** Anti-cheat measurements for this match (anticheat.ts). */
+  aim: AimStats;
+  /** Account level (from the API's unlocks; 1 if unknown), for the K/D-vs-level flag. */
+  level: number;
   history: HistoryEntry[];
   /** Last tick this player fired (gunfire is audible, so it counts as visible nearby). */
   lastShotTick: number;
@@ -292,6 +297,7 @@ export class MatchSim {
       team?: number;
       guestId?: string | null;
       code?: string;
+      level?: number;
       /** A built loadout, or just [primary, secondary] (no attachments or perks). */
       loadout?: Loadout | readonly [Weapon, Weapon];
     } = {},
@@ -339,6 +345,8 @@ export class MatchSim {
       headshots: 0,
       fragKills: 0,
       weaponKills: new Map(),
+      aim: newAimStats(),
+      level: opts.level ?? 1,
       history: [],
       viewTick: 0,
       viewGovernor: { last: null },
@@ -375,6 +383,9 @@ export class MatchSim {
       p.viewTick = governViewTick(p.viewGovernor, input.viewTick);
       if (!p.alive || this.frozen) continue;
       const before = p.sim;
+      // Snap detection: how far the view turned this tick (16-bit yaw, wrapped).
+      const dyaw = Math.abs((((input.yaw - before.move.yaw) & 0xffff) << 16) >> 16);
+      if (dyaw * (360 / 65536) > SNAP_DEGREES) p.aim.lastSnapTick = this.tick;
       const r = stepSim(p.sim, input, p.ctx, p.body);
       p.sim = r.state;
       this.maybeThrow(p, before);
@@ -382,6 +393,7 @@ export class MatchSim {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
         p.lastShotTick = this.tick;
+        p.aim.shots++;
         shots.push({ shooter: p, shot: r.shot, viewTick: p.viewTick });
       }
       if (p.sim.move.position[1] < this.map.killY) this.kill(p, null, NO_WEAPON, false);
@@ -526,6 +538,18 @@ export class MatchSim {
       }
       this.lastShots.push(result);
     }
+    if (byVictim.size > 0) {
+      shooter.aim.hits++;
+      if (this.tick - shooter.aim.lastSnapTick <= 2) shooter.aim.snapHits++;
+    }
+    for (const victim of byVictim.keys()) {
+      // Reaction time: from this enemy entering the shooter's line of sight to this first hit.
+      const since = shooter.aim.visibleSince.get(victim.id);
+      if (since !== undefined) {
+        shooter.aim.reactionsMs.push(((this.tick - since) * 1000) / TICK_RATE);
+        shooter.aim.visibleSince.delete(victim.id);
+      }
+    }
     for (const [victim, z] of byVictim) {
       // The zone that took most of the damage is the one reported (a blast with one stray
       // pellet in the head is not a headshot).
@@ -661,6 +685,7 @@ export class MatchSim {
       p.headshots = 0;
       p.fragKills = 0;
       p.weaponKills.clear();
+      p.aim = newAimStats();
     }
   }
 
@@ -781,9 +806,10 @@ export class MatchSim {
     const dx = m.position[0] - eye[0];
     const dz = m.position[2] - eye[2];
     const dist = Math.hypot(dx, dz);
-    let visible =
+    const heard =
       dist < PVS_HEAR_METRES ||
       (this.tick - p.lastShotTick < PVS_SHOT_HEARD_TICKS && dist < PVS_SHOT_HEARD_METRES);
+    let visible = heard;
     if (!visible) {
       const h = capsuleHeight(this.tuning, m.crouching);
       const v = m.velocity;
@@ -805,6 +831,9 @@ export class MatchSim {
         this.clearLine(eye, chest) ||
         this.clearLine(eye, ahead) ||
         this.clearLine(eyeAhead, chest);
+    }
+    if (visible && !heard && !viewer.aim.visibleSince.has(p.id)) {
+      viewer.aim.visibleSince.set(p.id, this.tick); // came into sight (reaction-time start)
     }
     if (visible) viewer.sendUntil.set(p.id, this.tick + PVS_HOLD_TICKS);
     else viewer.hiddenUntil.set(p.id, this.tick + PVS_RECHECK_TICKS);
