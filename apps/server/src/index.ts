@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { Server } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
-import { resolveApiSecret } from '@sentinel/auth';
+import { resolveApiSecret, resolveUnlockAll } from '@sentinel/auth';
 import { PROTOCOL_VERSION } from '@sentinel/protocol';
 import express from 'express';
 import { MatchRoom } from './MatchRoom.ts';
@@ -63,9 +63,13 @@ const report = createApiReporter({
   secret: resolveApiSecret(process.env),
   log,
 });
-MatchRoom.onMatchEnd = (summary) => void report(summary);
+MatchRoom.onMatchEnd = (summary) => report(summary);
 // Unlocks (level, weapon kills) come from the API, signed with the same secret.
+if (resolveUnlockAll(process.env)) {
+  log.warn('SENTINEL_UNLOCK_ALL=1: everything unlocked for every player (local play/tests only)');
+}
 MatchRoom.fetchAccess = createAccessFetcher({
+  allowUnlockAll: resolveUnlockAll(process.env),
   url: process.env.SENTINEL_API_URL ?? 'http://localhost:8787',
   secret: resolveApiSecret(process.env),
   log,

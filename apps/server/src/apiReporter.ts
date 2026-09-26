@@ -1,5 +1,4 @@
-import { createHmac } from 'node:crypto';
-import type { Logger } from '@sentinel/auth';
+import { serviceHeaders, type Logger } from '@sentinel/auth';
 import type { MatchSummary } from './match.ts';
 
 /**
@@ -18,13 +17,17 @@ export function createApiReporter(opts: {
   const doFetch = opts.fetchImpl ?? fetch;
   return async function report(summary: MatchSummary): Promise<boolean> {
     const body = JSON.stringify(summary);
-    const signature = createHmac('sha256', opts.secret).update(body).digest('hex');
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
+        // Signed per attempt: the signature carries the time and expires after a minute.
         const res = await doFetch(`${opts.url}/matches`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-sentinel-signature': signature },
+          headers: {
+            'content-type': 'application/json',
+            ...serviceHeaders(opts.secret, 'match', body),
+          },
           body,
+          signal: AbortSignal.timeout(5000),
         });
         if (res.ok || res.status === 409) return true; // 409 = already recorded
         warn('API refused match result', { status: res.status, match: summary.matchId, attempt });

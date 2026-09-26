@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createApp, sign } from './app.ts';
+import { serviceHeaders } from '@sentinel/auth';
+import { createApp } from './app.ts';
 import { Store } from './db.ts';
 import { levelFor, xpForMatch, xpToNext } from './xp.ts';
 
@@ -52,12 +53,15 @@ function result(matchId: string, winner = 0) {
   };
 }
 
-async function post(a: ReturnType<typeof app>, body: unknown, secret = SECRET) {
+async function post(a: ReturnType<typeof app>, body: unknown, secret = SECRET, nowMs = Date.now()) {
   const text = JSON.stringify(body);
   return a.request('/matches', {
     method: 'POST',
     body: text,
-    headers: { 'content-type': 'application/json', 'x-sentinel-signature': sign(text, secret) },
+    headers: {
+      'content-type': 'application/json',
+      ...serviceHeaders(secret, 'match', text, nowMs),
+    },
   });
 }
 
@@ -172,7 +176,7 @@ describe('api', () => {
 
 describe('unlocks', () => {
   const access = (a: ReturnType<typeof app>, guestId: string, secret = SECRET) =>
-    a.request(`/access/${guestId}`, { headers: { 'x-sentinel-signature': sign(guestId, secret) } });
+    a.request(`/access/${guestId}`, { headers: serviceHeaders(secret, 'access', guestId) });
 
   it('headshots add XP and weapon kills are stored per weapon', async () => {
     const a = app();
@@ -233,17 +237,17 @@ describe('challenges', () => {
     expect(before.challenges.length).toBeGreaterThan(0);
     expect(before.challenges.every((c) => c.progress === 0)).toBe(true);
     // A modified client posts "its" stats: no valid signature → rejected, nothing moves.
-    const forged = await post(a, result(`${ids[0]}1`), 'not-the-server-secret');
+    const forged = await post(a, result(`${ids[0]}1`), 'not-the-server-secret', MONDAY);
     expect(forged.status).toBe(401);
     expect((await profile(a)).challenges.every((c) => c.progress === 0)).toBe(true);
     // The real server's result moves progress.
-    expect((await post(a, result(`${ids[0]}2`))).status).toBe(200);
+    expect((await post(a, result(`${ids[0]}2`), SECRET, MONDAY)).status).toBe(200);
     expect((await profile(a)).challenges.some((c) => c.progress > 0)).toBe(true);
   });
 
   it('a completed challenge pays its XP once, and the results breakdown adds up', async () => {
     const a = pinned();
-    for (let i = 0; i < 6; i++) await post(a, result(`${ids[1]}${i}`));
+    for (let i = 0; i < 6; i++) await post(a, result(`${ids[1]}${i}`), SECRET, MONDAY);
     const p = await profile(a);
     const completed = p.challenges.filter((c) => c.progress >= c.target);
     expect(completed.length).toBeGreaterThan(0);
@@ -255,5 +259,44 @@ describe('challenges', () => {
       last.lines.reduce((n, l) => n + l.xp, 0) + last.challenges.reduce((n, c) => n + c.xp, 0),
     );
     expect(last.levelAfter).toBeGreaterThanOrEqual(last.levelBefore);
+  });
+});
+
+describe('service request hardening (review)', () => {
+  it('a match result signature expires and can not be reused for another purpose', async () => {
+    const a = app();
+    const text = JSON.stringify(result('cccccccc-0000-4000-8000-000000000001'));
+    const old = serviceHeaders(SECRET, 'match', text, Date.now() - 5 * 60_000);
+    const replay = await a.request('/matches', { method: 'POST', body: text, headers: old });
+    expect(replay.status).toBe(401);
+    const wrongPurpose = serviceHeaders(SECRET, 'access', text);
+    expect(
+      (await a.request('/matches', { method: 'POST', body: text, headers: wrongPurpose })).status,
+    ).toBe(401);
+  });
+
+  it('rejects inconsistent stats and ignores unknown weapons', async () => {
+    const a = app();
+    const bad = result('cccccccc-0000-4000-8000-000000000002') as { players: object[] };
+    bad.players[0] = { ...bad.players[0], headshots: 99 };
+    expect((await post(a, bad)).status).toBe(400);
+    const odd = result('cccccccc-0000-4000-8000-000000000003') as { players: object[] };
+    odd.players[0] = { ...odd.players[0], weaponKills: { 'kestrel-ar': 3, 'laser-cannon': 2 } };
+    expect((await post(a, odd)).status).toBe(200);
+    const res = await a.request(`/access/${GUEST}`, {
+      headers: serviceHeaders(SECRET, 'access', GUEST),
+    });
+    expect(((await res.json()) as { weaponKills: object }).weaponKills).toEqual({
+      'kestrel-ar': 3,
+    });
+  });
+
+  it('rate-limits failed /access attempts per IP', async () => {
+    const a = app();
+    let limited = false;
+    for (let i = 0; i < 80 && !limited; i++) {
+      limited = (await a.request(`/access/${GUEST}`)).status === 429;
+    }
+    expect(limited).toBe(true);
   });
 });

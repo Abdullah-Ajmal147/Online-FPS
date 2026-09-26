@@ -106,9 +106,9 @@ export class MatchRoom extends Room {
   private rotation: string[] = [];
   private rotationIndex = 0;
   /** Called with each finished match (MatchRoom logs it; Phase 4 posts it to the API). */
-  static onMatchEnd: ((summary: MatchSummary) => void) | null = null;
-  /** What a player has unlocked (index.ts wires the API; tests: a new player's). */
-  static fetchAccess: (guestId: string | null) => Promise<Access> = async () => NEW_PLAYER;
+  static onMatchEnd: ((summary: MatchSummary) => Promise<unknown>) | null = null;
+  /** What a player has unlocked, or null if unknown (index.ts wires the API; tests: unknown). */
+  static fetchAccess: (guestId: string | null) => Promise<Access | null> = async () => null;
 
   override async onCreate(): Promise<void> {
     const preset = presetFromEnv(process.env.SENTINEL_LAG);
@@ -138,15 +138,13 @@ export class MatchRoom extends Room {
       },
       this.mapId,
     );
-    this.match.onNextMatch = () => {
-      this.refreshAccess(); // XP from the match just reported may have unlocked something
-      return this.rotateMap();
-    };
+    this.match.onNextMatch = () => this.rotateMap();
     this.match.onMatchEnd = (summary) => {
       // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
       counters.matches.inc();
       log.info('match ended', { room: this.roomId, summary });
-      MatchRoom.onMatchEnd?.(summary);
+      // Once the API has the result, re-read unlocks (this match may have levelled someone up).
+      void Promise.resolve(MatchRoom.onMatchEnd?.(summary)).finally(() => this.refreshAccess());
     };
 
     if (process.env.SENTINEL_BOTS !== '0') {
@@ -230,7 +228,7 @@ export class MatchRoom extends Room {
     const token = (options as { token?: unknown }).token;
     const guestId = verifyGuestToken(token, API_SECRET);
     // Unlocks come from the API (server-reported progress), never from the client.
-    return { guestId, access: await MatchRoom.fetchAccess(guestId) };
+    return { guestId, access: (await MatchRoom.fetchAccess(guestId)) ?? NEW_PLAYER };
   }
 
   override onJoin(
@@ -297,8 +295,9 @@ export class MatchRoom extends Room {
   private refreshAccess(): void {
     for (const seat of this.seats.values()) {
       if (!seat.guestId) continue;
+      // If the API can't answer, the player keeps what they had.
       void MatchRoom.fetchAccess(seat.guestId).then((access) => {
-        seat.access = access;
+        if (access) seat.access = access;
       });
     }
   }

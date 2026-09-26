@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { RateLimiter, TOKEN_MAX_AGE_SECONDS, issueGuestToken, verifyGuestToken } from './index.ts';
+import {
+  RateLimiter,
+  TOKEN_MAX_AGE_SECONDS,
+  issueGuestToken,
+  resolveUnlockAll,
+  serviceHeaders,
+  verifyGuestToken,
+  verifyService,
+} from './index.ts';
 
 const SECRET = 'test-secret';
 
@@ -92,5 +100,29 @@ describe('ops', () => {
       msg: 'hello',
       room: 'r1',
     });
+  });
+});
+
+describe('service signatures', () => {
+  const now = Date.UTC(2026, 8, 26, 12);
+  it('verify only for the same purpose, payload, secret and within a minute', () => {
+    const h = serviceHeaders('s', 'access', 'guest-1', now);
+    const t = h['x-sentinel-time'];
+    const sig = h['x-sentinel-signature'];
+    expect(verifyService('s', 'access', 'guest-1', t, sig, now + 30_000)).toBe(true);
+    expect(verifyService('s', 'match', 'guest-1', t, sig, now)).toBe(false); // other purpose
+    expect(verifyService('s', 'access', 'guest-2', t, sig, now)).toBe(false);
+    expect(verifyService('x', 'access', 'guest-1', t, sig, now)).toBe(false);
+    expect(verifyService('s', 'access', 'guest-1', t, sig, now + 61_000)).toBe(false); // replay
+    expect(verifyService('s', 'access', 'guest-1', undefined, sig, now)).toBe(false);
+    expect(verifyService('s', 'access', 'guest-1', t, 'zz', now)).toBe(false);
+  });
+
+  it('unlock-all is off unless explicitly set to 1', () => {
+    expect(resolveUnlockAll({})).toBe(false);
+    expect(resolveUnlockAll({ NODE_ENV: 'development' })).toBe(false);
+    expect(resolveUnlockAll({ SENTINEL_UNLOCK_ALL: '0' })).toBe(false);
+    expect(resolveUnlockAll({ SENTINEL_UNLOCK_ALL: 'true' })).toBe(false);
+    expect(resolveUnlockAll({ SENTINEL_UNLOCK_ALL: '1', NODE_ENV: 'production' })).toBe(true);
   });
 });

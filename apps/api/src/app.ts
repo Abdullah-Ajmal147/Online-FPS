@@ -1,11 +1,10 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { issueGuestToken, RateLimiter } from '@sentinel/auth';
+import { issueGuestToken, RateLimiter, verifyService } from '@sentinel/auth';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
 import type { Store } from './db.ts';
 import { counters, metrics } from './ops.ts';
-import { activeChallenges, challengeProgress } from '@sentinel/content';
+import { activeChallenges, challengeProgress, weapons } from '@sentinel/content';
 import { levelFor, xpBreakdown } from './xp.ts';
 
 const GUEST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -19,36 +18,37 @@ const MatchResultSchema = z.object({
   durationSeconds: z.number().nonnegative(),
   players: z
     .array(
-      z.object({
-        guestId: z.string().regex(GUEST_ID).nullable(),
-        name: z.string().max(32),
-        team: z.number().int().min(0).max(1),
-        bot: z.boolean(),
-        kills: z.number().int().nonnegative().max(1000),
-        deaths: z.number().int().nonnegative().max(1000),
-        headshots: z.number().int().nonnegative().max(1000).default(0),
-        fragKills: z.number().int().nonnegative().max(1000).default(0),
-        /** Kills per weapon id (weapon levels). Unknown ids are ignored when stored. */
-        weaponKills: z
-          .record(z.string().regex(/^[a-z0-9-]{1,32}$/), z.number().int().nonnegative().max(1000))
-          .default({})
-          .refine((r) => Object.keys(r).length <= 16, 'too many weapons'),
-        secondsPlayed: z.number().nonnegative(),
-      }),
+      z
+        .object({
+          guestId: z.string().regex(GUEST_ID).nullable(),
+          name: z.string().max(32),
+          team: z.number().int().min(0).max(1),
+          bot: z.boolean(),
+          kills: z.number().int().nonnegative().max(1000),
+          deaths: z.number().int().nonnegative().max(1000),
+          headshots: z.number().int().nonnegative().max(1000).default(0),
+          fragKills: z.number().int().nonnegative().max(1000).default(0),
+          /** Kills per weapon id (weapon levels); ids not in the weapon catalog are dropped. */
+          weaponKills: z
+            .record(z.string().regex(/^[a-z0-9-]{1,32}$/), z.number().int().nonnegative().max(1000))
+            .default({})
+            .refine((r) => Object.keys(r).length <= 16, 'too many weapons')
+            .transform((r) =>
+              Object.fromEntries(Object.entries(r).filter(([id]) => Object.hasOwn(weapons, id))),
+            ),
+          secondsPlayed: z.number().nonnegative(),
+        })
+        // Consistent stats only (a buggy or misconfigured server can't inflate weapon levels).
+        .refine(
+          (p) =>
+            p.headshots <= p.kills &&
+            p.fragKills <= p.kills &&
+            Object.values(p.weaponKills).reduce((n, k) => n + k, 0) <= p.kills,
+          'headshots, frag kills and weapon kills can not exceed kills',
+        ),
     )
     .max(24), // players present at the end plus those who left during the match
 });
-
-/** HMAC-SHA256 of the raw body with the shared server secret, hex. */
-export function sign(body: string, secret: string): string {
-  return createHmac('sha256', secret).update(body).digest('hex');
-}
-
-function validSignature(body: string, signature: string | undefined, secret: string): boolean {
-  if (!signature || !/^[0-9a-f]{64}$/.test(signature)) return false;
-  const expected = Buffer.from(sign(body, secret), 'hex');
-  return timingSafeEqual(expected, Buffer.from(signature, 'hex'));
-}
 
 export interface AppOptions {
   /** How to find the caller's IP for rate limits (the Node listener passes the socket address). */
@@ -103,7 +103,15 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
    */
   app.post('/matches', async (c) => {
     const body = await c.req.text();
-    if (!validSignature(body, c.req.header('x-sentinel-signature'), secret)) {
+    const signed = verifyService(
+      secret,
+      'match',
+      body,
+      c.req.header('x-sentinel-time'),
+      c.req.header('x-sentinel-signature'),
+      now(),
+    );
+    if (!signed) {
       counters.rejected.inc();
       return c.json({ error: 'bad signature' }, 401);
     }
@@ -167,8 +175,18 @@ export function createApp(store: Store, secret: string, opts: AppOptions = {}): 
   app.get('/access/:guestId', (c) => {
     const guestId = c.req.param('guestId');
     if (!GUEST_ID.test(guestId)) return c.json({ error: 'bad guest id' }, 400);
-    if (!validSignature(guestId, c.req.header('x-sentinel-signature'), secret)) {
+    const signed = verifyService(
+      secret,
+      'access',
+      guestId,
+      c.req.header('x-sentinel-time'),
+      c.req.header('x-sentinel-signature'),
+      now(),
+    );
+    if (!signed) {
+      // Game servers are never limited; failed attempts are, per IP (it's reachable publicly).
       counters.rejected.inc();
+      if (!readLimit.take(ipOf(c))) return c.json({ error: 'too many requests' }, 429);
       return c.json({ error: 'bad signature' }, 401);
     }
     const row = store.profile(guestId);

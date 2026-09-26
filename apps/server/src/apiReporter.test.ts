@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { verifyService } from '@sentinel/auth';
 import { describe, expect, it } from 'vitest';
 import { createApiReporter } from './apiReporter.ts';
 import type { MatchSummary } from './match.ts';
@@ -30,19 +30,21 @@ const summary: MatchSummary = {
 
 describe('api reporter', () => {
   it('posts the summary signed with the server secret', async () => {
-    let seen: { url: string; body: string; sig: string } | null = null;
+    let seen: { url: string; body: string; sig: string; time: string } | null = null;
     const fetchImpl = (async (url: string, init: RequestInit) => {
       seen = {
         url,
         body: init.body as string,
         sig: (init.headers as Record<string, string>)['x-sentinel-signature']!,
+        time: (init.headers as Record<string, string>)['x-sentinel-time']!,
       };
       return new Response('{}', { status: 200 });
     }) as unknown as typeof fetch;
     const ok = await createApiReporter({ url: 'http://api', secret: 's3cret', fetchImpl })(summary);
     expect(ok).toBe(true);
     expect(seen!.url).toBe('http://api/matches');
-    expect(seen!.sig).toBe(createHmac('sha256', 's3cret').update(seen!.body).digest('hex'));
+    // What the API checks: purpose 'match', within a minute, this exact body.
+    expect(verifyService('s3cret', 'match', seen!.body, seen!.time, seen!.sig)).toBe(true);
     expect(JSON.parse(seen!.body)).toEqual(summary);
   });
 

@@ -1,6 +1,5 @@
-import { createHmac } from 'node:crypto';
-import type { Logger } from '@sentinel/auth';
-import { NEW_PLAYER, type Access } from '@sentinel/content';
+import { serviceHeaders, type Logger } from '@sentinel/auth';
+import type { Access } from '@sentinel/content';
 
 /** Checks the API's answer (defensive: it's another process). */
 export function parseAccess(raw: unknown): Access {
@@ -20,8 +19,10 @@ export function parseAccess(raw: unknown): Access {
 
 /**
  * Asks the API what a player has unlocked (level, weapon kills), signed with the server secret.
- * Unknown guests, a slow or unreachable API: a new player's unlocks (fail closed: nobody gets
- * locked gear because the API is down).
+ * Returns null when it can't tell (no guest, API slow or down, bad answer): callers fall back
+ * to a new player's unlocks on join (fail closed) and keep what they had on a refresh.
+ * `allowUnlockAll`: this game server's own SENTINEL_UNLOCK_ALL; without it an "everything
+ * unlocked" answer from the API is ignored.
  */
 export function createAccessFetcher(opts: {
   url: string;
@@ -29,22 +30,23 @@ export function createAccessFetcher(opts: {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   log?: Logger;
+  allowUnlockAll?: boolean;
 }) {
   const doFetch = opts.fetchImpl ?? fetch;
-  return async function fetchAccess(guestId: string | null): Promise<Access> {
-    if (!guestId) return NEW_PLAYER;
+  return async function fetchAccess(guestId: string | null): Promise<Access | null> {
+    if (!guestId) return null;
     try {
       const res = await doFetch(`${opts.url}/access/${guestId}`, {
-        headers: {
-          'x-sentinel-signature': createHmac('sha256', opts.secret).update(guestId).digest('hex'),
-        },
+        headers: serviceHeaders(opts.secret, 'access', guestId),
         signal: AbortSignal.timeout(opts.timeoutMs ?? 1500),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
-      return parseAccess(await res.json());
+      const access = parseAccess(await res.json());
+      if (access.unlockAll && !opts.allowUnlockAll) access.unlockAll = false;
+      return access;
     } catch (err) {
-      opts.log?.warn("could not load unlocks; using a new player's", { err: String(err) });
-      return NEW_PLAYER;
+      opts.log?.warn('could not load unlocks', { err: String(err) });
+      return null;
     }
   };
 }

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "SENTINEL_UNLOCK_ALL=${SENTINEL_UNLOCK_ALL:-1} tsx watch src/index.ts",
     "start": "node dist/index.mjs",
     "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json"
