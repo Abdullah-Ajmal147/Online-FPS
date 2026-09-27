@@ -109,21 +109,29 @@ test('report → admin shadow-ban → the player is matched in a separate pool',
     await request.get('http://localhost:8787/admin/api/queue', { headers: admin })
   ).json()) as { code: string; reports: number }[];
   expect(queue.find((q) => q.code === hostCode)?.reports).toBeGreaterThanOrEqual(1);
-  const set = await request.post(`http://localhost:8787/admin/api/players/${hostCode}/status`, {
-    // The admin page's own requests are same-origin JSON (anything else is refused: CSRF).
-    headers: { ...admin, 'sec-fetch-site': 'same-origin' },
-    data: { status: 'shadow' },
-  });
-  expect(set.status()).toBe(200);
-
-  // The host's next match is in the shadow pool: a different room from everyone else's.
-  const roomOf = async (p: Page) => new URL((await status(p)).invite!).searchParams.get('room');
-  const normalRoom = await roomOf(mate);
-  await pause(host);
-  await host.getByTestId('leave').click(); // back to the main menu (fresh page)
-  await host.getByTestId('play').click();
-  await expect.poll(async () => (await status(host)).spawned, { timeout: 20_000 }).toBe(true);
-  await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
-  expect(await roomOf(host)).not.toBe(normalRoom);
-  for (const p of [host, mate]) await p.context().close();
+  const setStatus = (status: 'shadow' | 'ok') =>
+    request.post(`http://localhost:8787/admin/api/players/${hostCode}/status`, {
+      // The admin page's own requests are same-origin JSON (anything else is refused: CSRF).
+      headers: { ...admin, 'sec-fetch-site': 'same-origin' },
+      data: { status },
+    });
+  expect((await setStatus('shadow')).status()).toBe(200);
+  // The shadow status also covers the host's IP, and every test browser shares 127.0.0.1:
+  // lift it afterwards (pass or fail), or a retry and later tests all land in the shadow pool.
+  try {
+    // The host's next match is in the shadow pool: a different room from everyone else's.
+    const roomOf = async (p: Page) => new URL((await status(p)).invite!).searchParams.get('room');
+    const normalRoom = await roomOf(mate);
+    await mate.context().close(); // not needed any more: frees CPU for the host's new room
+    await pause(host);
+    await host.getByTestId('leave').click(); // back to the main menu (fresh page)
+    await host.getByTestId('play').click();
+    // A new shadow-pool room is created for the host (map, bots): slow on a small CI runner.
+    await expect.poll(async () => (await status(host)).spawned, { timeout: 60_000 }).toBe(true);
+    await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
+    expect(await roomOf(host)).not.toBe(normalRoom);
+  } finally {
+    await setStatus('ok');
+  }
+  await host.context().close();
 });
