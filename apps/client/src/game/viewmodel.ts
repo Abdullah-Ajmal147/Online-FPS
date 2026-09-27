@@ -1,10 +1,13 @@
 import type { Weapon } from '@sentinel/content';
 import * as THREE from 'three/webgpu';
+import { loadSoldierAssets, type SoldierAssets } from './soldier/assets.ts';
+import { FirstPersonArms } from './soldier/fpArms.ts';
+import { HOLDS, MODEL_FOR_CLASS } from './soldier/holds.ts';
 
 /**
- * First-person weapon, built from simple shapes (greybox; real models come with the content
- * pipeline in Phase 5). Hangs off the camera; kicks back on each shot, moves to the centre when
- * aiming, dips during reload and drops out/in on weapon switch.
+ * First-person weapon. Hangs off the camera; kicks back on each shot, moves to the centre when
+ * aiming, dips during reload and drops out/in on weapon switch. Drawn with the real weapon models
+ * held by the player's own gloved arms once those load (soldier/), before that as simple shapes.
  */
 export class Viewmodel {
   readonly root = new THREE.Group();
@@ -14,8 +17,17 @@ export class Viewmodel {
   private kick = 0;
   private bobPhase = 0;
   private readonly flash: THREE.Mesh;
+  private readonly camera: THREE.Camera;
+  /** Real models, one per weapon class (null until loaded). */
+  private real: Record<Weapon['class'], THREE.Group> | null = null;
+  private classes: [Weapon['class'], Weapon['class']] = ['rifle', 'sidearm'];
+  private assets: SoldierAssets | null = null;
+  private arms: FirstPersonArms | null = null;
+  private armsTeam = -1;
+  private team = 0;
 
   constructor(camera: THREE.Camera) {
+    this.camera = camera;
     this.models = {
       rifle: buildRifle(),
       smg: buildSmg(),
@@ -35,11 +47,72 @@ export class Viewmodel {
     this.flash.visible = false;
     this.root.add(this.flash);
     camera.add(this.root);
+    loadSoldierAssets()
+      .then((a) => {
+        this.assets = a;
+        this.buildReal(a);
+      })
+      .catch(() => undefined); // keep the simple shapes
+  }
+
+  /**
+   * Real weapon models, placed inside the moving root so that, aiming down the sights (root at
+   * x 0, y -0.092), the sight line is exactly at eye height.
+   */
+  private buildReal(assets: SoldierAssets): void {
+    const real = {} as Record<Weapon['class'], THREE.Group>;
+    for (const cls of Object.keys(this.models) as Weapon['class'][]) {
+      const id = MODEL_FOR_CLASS[cls];
+      const src = assets.weapons.get(id);
+      if (!src) return; // a model is missing: keep the simple shapes for all
+      const g = new THREE.Group();
+      const gun = src.clone();
+      gun.scale.setScalar(HOLDS[id].fp.scale ?? 1);
+      gun.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(gun);
+      const sight = box.max.y - HOLDS[id].fp.sightDrop;
+      gun.position.set(0, 0.092 - sight, HOLDS[id].fp.z + 0.32);
+      gun.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = false;
+        mesh.frustumCulled = false;
+        // Scope lenses: see-through here, or aiming would put a dark disc over the crosshair.
+        const m = mesh.material as THREE.MeshStandardMaterial;
+        if (/glass/i.test(m.name)) {
+          const lens = m.clone();
+          lens.transparent = true;
+          lens.opacity = 0.12;
+          lens.depthWrite = false;
+          mesh.material = lens;
+        }
+      });
+      g.add(gun);
+      g.visible = false;
+      g.userData = {
+        gun,
+        id,
+        muzzleZ: box.min.z + gun.position.z,
+        muzzleY: sight - 0.02 + gun.position.y,
+      };
+      this.root.add(g);
+      real[cls] = g;
+    }
+    for (const g of Object.values(this.models)) g.visible = false;
+    this.real = real;
+    this.guns = [real[this.classes[0]], real[this.classes[1]]];
+  }
+
+  /** Our team (the arms wear its uniform). */
+  setTeam(team: number): void {
+    this.team = team;
   }
 
   /** Show the models for this loadout (called when the server confirms our loadout). */
   setLoadout(primary: Weapon, secondary: Weapon): void {
-    this.guns = [this.models[primary.class], this.models[secondary.class]];
+    this.classes = [primary.class, secondary.class];
+    const set = this.real ?? this.models;
+    this.guns = [set[primary.class], set[secondary.class]];
   }
 
   onShot(): void {
@@ -50,7 +123,13 @@ export class Viewmodel {
   /** World position of the muzzle (for tracers). */
   muzzleWorld(slot: number, out: THREE.Vector3): THREE.Vector3 {
     const gun = this.guns[slot]!;
-    return gun.localToWorld(out.set(0, 0.02, gun.userData.muzzleZ as number));
+    return gun.localToWorld(
+      out.set(
+        0,
+        (gun.userData.muzzleY as number | undefined) ?? 0.02,
+        gun.userData.muzzleZ as number,
+      ),
+    );
   }
 
   update(
@@ -64,7 +143,7 @@ export class Viewmodel {
       grounded: boolean;
     },
   ): void {
-    for (const g of Object.values(this.models)) g.visible = g === this.guns[o.slot];
+    for (const g of Object.values(this.real ?? this.models)) g.visible = g === this.guns[o.slot];
     this.kick = Math.max(0, this.kick - frame * 14);
     if (this.flash.visible && this.kick < 0.6) this.flash.visible = false;
     if (o.grounded && o.speed > 0.5) this.bobPhase += frame * o.speed * 1.6;
@@ -85,7 +164,30 @@ export class Viewmodel {
     );
     this.root.rotation.set(this.kick * 0.06 - o.reloading * 0.6, 0, o.reloading * 0.3);
     const gun = this.guns[o.slot]!;
-    this.flash.position.set(gun.position.x, 0.02, (gun.userData.muzzleZ as number) - 0.03);
+    this.flash.position.set(
+      gun.position.x,
+      (gun.userData.muzzleY as number | undefined) ?? 0.02,
+      (gun.userData.muzzleZ as number) - 0.03,
+    );
+    this.updateArms(gun);
+  }
+
+  /** Gloved hands on the drawn weapon (built for our team when the models are ready). */
+  private updateArms(shown: THREE.Group): void {
+    if (!this.assets || !this.real) return;
+    if (this.armsTeam !== this.team) {
+      this.arms?.root.removeFromParent();
+      this.arms = new FirstPersonArms(this.assets, this.team);
+      this.armsTeam = this.team;
+      this.camera.add(this.arms.root);
+    }
+    const arms = this.arms!;
+    arms.root.visible = this.root.visible;
+    if (!arms.root.visible) return;
+    const id = shown.userData.id as keyof typeof HOLDS;
+    const hold = HOLDS[id];
+    // The grip points scale with the drawn weapon (they are in its space).
+    arms.grip(shown.userData.gun as THREE.Object3D, hold.right, hold.left);
   }
 }
 

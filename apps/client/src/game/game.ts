@@ -406,7 +406,7 @@ export async function startGame(
   const clock = new ServerClock();
   const interpDelay = new InterpolationDelay();
   const remoteBuffers = new Map<number, RemoteBuffer>();
-  const remotePlayers = new RemotePlayers(scene);
+  const remotePlayers = new RemotePlayers(scene, renderer, camera);
   const remotePoses = new Map<number, RemotePose>();
   /** Last few seconds of snapshots, for the killcam (see killcam.ts). */
   const killcamRec = new KillcamRecorder();
@@ -550,6 +550,7 @@ export async function startGame(
       let buf = remoteBuffers.get(e.id);
       if (!buf) remoteBuffers.set(e.id, (buf = new RemoteBuffer()));
       buf.push(snap.serverTick, e);
+      remotePlayers.setWeapon(e.id, weaponCatalog[e.weapon]?.class);
       // A remote player fired since the last snapshot: muzzle flash, tracer, 3D sound.
       const lastShots = remoteShots.get(e.id);
       if (lastShots !== undefined && lastShots !== e.shotCount && e.alive)
@@ -796,12 +797,13 @@ export async function startGame(
     );
     const cp = Math.cos(pose.pitch);
     tmpDir.set(-Math.sin(pose.yaw) * cp, Math.sin(pose.pitch), -Math.cos(pose.yaw) * cp);
-    effects.muzzleFlash(tmpA.clone().addScaledVector(tmpDir, 0.5));
+    // The shot goes where they look (from the eyes); the flash and tracer start at their gun.
+    remotePlayers.fired(id);
+    const muzzle =
+      remotePlayers.muzzleOf(id, new THREE.Vector3()) ?? tmpA.clone().addScaledVector(tmpDir, 0.5);
+    effects.muzzleFlash(muzzle);
     const wall = effects.castMap(tmpA, tmpDir, 80);
-    effects.tracer(
-      tmpA.clone().addScaledVector(tmpDir, 0.5),
-      tmpA.clone().addScaledVector(tmpDir, wall?.distance ?? 80),
-    );
+    effects.tracer(muzzle, tmpA.clone().addScaledVector(tmpDir, wall?.distance ?? 80));
     audio.shot(def?.class ?? 'rifle', [tmpA.x, tmpA.y, tmpA.z]);
   }
 
@@ -1024,6 +1026,7 @@ export async function startGame(
       camera.updateProjectionMatrix();
     }
     viewmodel.root.visible = hud.alive;
+    viewmodel.setTeam(myTeam());
     viewmodel.update(frame, {
       slot: w.slot,
       ads,
@@ -1060,6 +1063,8 @@ export async function startGame(
     // Remote players: drawn in the past, between two snapshots we already have.
     if (serverNow !== null && !replaying) {
       const renderTick = serverNow - interpDelay.ticks;
+      remotePlayers.viewer.copy(camera.position);
+      remotePlayers.beginFrame();
       for (const [id, buf] of remoteBuffers) {
         const pose = buf.sample(renderTick);
         if (!pose) continue;

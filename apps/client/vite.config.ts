@@ -26,6 +26,12 @@ export default defineConfig(({ mode }) => ({
     include: [
       'three/webgpu',
       'three/addons/geometries/ConvexGeometry.js',
+      // Soldier models (soldier/): loaded after the menu, so not discovered until mid-game.
+      'three/addons/loaders/GLTFLoader.js',
+      'three/addons/libs/meshopt_decoder.module.js',
+      'three/addons/utils/SkeletonUtils.js',
+      'three/addons/utils/BufferGeometryUtils.js',
+      'three/addons/geometries/RoundedBoxGeometry.js',
       '@colyseus/sdk',
       // Dependencies of our packages, not of the client itself: named through the package that
       // has them, or Vite can't find them here and reloads the page on first use instead.

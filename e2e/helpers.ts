@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 /** The game's status store, read in the page. */
 export const status = (page: Page) =>
@@ -51,4 +51,18 @@ export async function deploy(page: Page, url = '/'): Promise<void> {
 export async function pause(page: Page): Promise<void> {
   await page.evaluate(() => document.exitPointerLock());
   await expect(page.getByTestId('menu')).toBeVisible();
+}
+
+/**
+ * A browser context for one of several players in the same test. Several players drawing
+ * eleven animated soldier models each in one software-rendered browser is more than the test
+ * machine can do in time, so these keep the simple soldiers (dev-only hook; the models have
+ * their own tests in soldiers.spec.ts).
+ */
+export async function playerContext(browser: Browser): Promise<BrowserContext> {
+  const context = await browser.newContext();
+  await context.addInitScript(() => {
+    (window as unknown as { __sentinelSimpleSoldiers: boolean }).__sentinelSimpleSoldiers = true;
+  });
+  return context;
 }

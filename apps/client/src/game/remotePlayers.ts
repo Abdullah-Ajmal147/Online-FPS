@@ -1,6 +1,12 @@
 import * as THREE from 'three/webgpu';
 import { movement } from '@sentinel/content';
 import type { RemotePose } from '@sentinel/shared';
+import type { Weapon } from '@sentinel/content';
+import { createSoldierModel, loadSoldierAssets, type SoldierAssets } from './soldier/assets.ts';
+import { MODEL_FOR_CLASS, type WeaponModelId } from './soldier/holds.ts';
+
+const WEAPON_MODELS: WeaponModelId[] = ['rifle', 'smg', 'shotgun', 'marksman', 'sidearm'];
+import { SoldierRig } from './soldier/rig.ts';
 
 /** Faction colours from docs/GAME_DESIGN.md: Aegis Directive blue, Ember Syndicate orange. */
 const TEAM_COLORS = [0x2f7bff, 0xff7a1f];
@@ -17,32 +23,119 @@ interface Remote {
   deadFor: number;
 }
 
+/** A drawn player: the animated soldier model, or the simple shape soldier until it loads. */
+interface Drawn {
+  team: number;
+  rig: SoldierRig | null;
+  simple: Remote | null;
+  flashUntil: number;
+  weapon: WeaponModelId | null;
+}
+
 /**
- * Other players, drawn as simple original soldiers built from shapes (real models arrive with
- * the content pipeline): helmet with visor, vest, arms holding a rifle, legs. Team colours stay
- * bright for readability. Hit → white flash; death → topple over and sink away.
+ * Other players. Drawn as animated soldier models (soldier/: dressed body, locomotion and aim,
+ * weapon held with IK) once those load in the background; until then (or if they can't load) as
+ * a simple original soldier built from shapes. Hit → white flash; death → fall, then sink away.
  */
 export class RemotePlayers {
   /** Soldiers cast shadows only where shadows are redrawn every frame (High). */
   static castShadows = true;
+  /** Beyond this distance soldiers animate legs only (no aim or arm IK): too small to see. */
+  static detailDistance = 35;
 
-  private remotes = new Map<number, Remote>();
+  private drawn = new Map<number, Drawn>();
+  private assets: SoldierAssets | null = null;
+  /** Camera position, for the level of detail. */
+  readonly viewer = new THREE.Vector3();
 
-  constructor(private readonly scene: THREE.Scene) {}
+  /** Model soldiers built this frame (swapping 11 at once would be one long frame). */
+  private builtThisFrame = 0;
+
+  constructor(
+    private readonly scene: THREE.Scene,
+    renderer?: THREE.WebGPURenderer,
+    camera?: THREE.Camera,
+  ) {
+    loadSoldierAssets()
+      .then((a) => this.warm(a, renderer, camera))
+      .then((a) => {
+        this.assets = a;
+      })
+      .catch((e: unknown) => console.warn('[soldiers] models unavailable, using simple shapes', e));
+  }
+
+  /**
+   * Before any soldier appears: dress every body/team combination (the one slow step, ~20 ms
+   * each on a laptop) and let the renderer set up their materials in the background. Done a
+   * piece at a time so frames keep coming. Without this the first enemies on screen froze the
+   * game for a moment (measured: 0.7 s to dress + 0.46 s of shader setup on a slow machine).
+   */
+  private async warm(
+    assets: SoldierAssets,
+    renderer?: THREE.WebGPURenderer,
+    camera?: THREE.Camera,
+  ): Promise<SoldierAssets> {
+    const yieldFrame = () => new Promise((r) => setTimeout(r, 0));
+    const group = new THREE.Group();
+    group.position.set(0, -400, 0); // compiled, never seen
+    const rigs: SoldierRig[] = [];
+    for (const [team, variant] of [
+      [0, 0],
+      [0, 1],
+      [1, 0],
+      [1, 1],
+    ] as const) {
+      const model = createSoldierModel(assets, team, variant);
+      const rig = new SoldierRig(assets, model);
+      group.add(model.root);
+      rig.setWeapon(WEAPON_MODELS[rigs.length % WEAPON_MODELS.length]!);
+      rigs.push(rig);
+      await yieldFrame();
+    }
+    // Every weapon model once.
+    for (const id of WEAPON_MODELS) {
+      const w = assets.weapons.get(id);
+      if (w) group.add(w.clone());
+    }
+    if (renderer && camera) {
+      this.scene.add(group);
+      await renderer.compileAsync(group, camera, this.scene).catch(() => undefined);
+      this.scene.remove(group);
+    }
+    for (const r of rigs) r.dispose();
+    return assets;
+  }
+
+  /** Call once per frame before the updates. */
+  beginFrame(): void {
+    this.builtThisFrame = 0;
+  }
 
   update(id: number, pose: RemotePose, frameSeconds: number): void {
-    let r = this.remotes.get(id);
-    if (!r || r.root.userData.team !== pose.team) {
-      if (r) this.scene.remove(r.root);
-      r = makeSoldier(pose.team);
-      this.remotes.set(id, r);
-      this.scene.add(r.root);
+    let d = this.drawn.get(id);
+    // (Re)build when the team changes, or to swap the simple soldier for the model.
+    const upgrade = d?.simple && this.assets && this.builtThisFrame < 2;
+    if (!d || d.team !== pose.team || upgrade) {
+      const weapon = d?.weapon ?? null;
+      if (d) this.remove(d);
+      d = this.build(id, pose.team);
+      this.drawn.set(id, d);
+      d.weapon = null;
+      this.setWeaponOf(d, weapon);
     }
+    const flashing = performance.now() < d.flashUntil;
+    if (d.rig) {
+      d.rig.visible = true;
+      const near = d.rig.root.position.distanceTo(this.viewer) < RemotePlayers.detailDistance;
+      d.rig.update(pose, frameSeconds, near);
+      for (const m of d.rig.model.flashMats) m.emissiveIntensity = flashing ? 1.2 : 0;
+      return;
+    }
+    const r = d.simple!;
     // Death: fall over for 0.5 s, stay down briefly, sink out; respawn resets.
     if (!pose.alive && r.alive) r.deadFor = 0;
     if (pose.alive && !r.alive) r.deadFor = -1;
     r.alive = pose.alive;
-
     r.root.position.set(...pose.position);
     r.root.rotation.y = pose.yaw;
     if (r.deadFor >= 0) {
@@ -58,45 +151,99 @@ export class RemotePlayers {
       // Crouch: squash the body (the model is built at standing height).
       r.body.scale.y = pose.crouching ? movement.crouchHeight / movement.standingHeight : 1;
     }
-
-    const flashing = performance.now() < r.flashUntil;
     for (const m of r.flashMats) m.emissiveIntensity = flashing ? 1.6 : 0;
+  }
+
+  private build(id: number, team: number): Drawn {
+    if (this.assets) {
+      try {
+        // Body variant from the player id: a mix of men and women on both sides.
+        this.builtThisFrame++;
+        const model = createSoldierModel(this.assets, team, id % 2);
+        model.root.traverse((o) => {
+          if ((o as THREE.Mesh).isMesh) o.castShadow = RemotePlayers.castShadows;
+        });
+        this.scene.add(model.root);
+        return {
+          team,
+          rig: new SoldierRig(this.assets, model),
+          simple: null,
+          flashUntil: 0,
+          weapon: null,
+        };
+      } catch (e) {
+        console.warn('[soldiers] could not build a model soldier', e);
+      }
+    }
+    const simple = makeSoldier(team);
+    this.scene.add(simple.root);
+    return { team, rig: null, simple, flashUntil: 0, weapon: null };
+  }
+
+  private remove(d: Drawn): void {
+    d.rig?.dispose();
+    if (d.simple) this.scene.remove(d.simple.root);
+  }
+
+  private setWeaponOf(d: Drawn, weapon: WeaponModelId | null): void {
+    if (d.weapon === weapon) return;
+    d.weapon = weapon;
+    d.rig?.setWeapon(weapon);
+  }
+
+  /** Which weapon a player holds (from their snapshot). */
+  setWeapon(id: number, weaponClass: Weapon['class'] | undefined): void {
+    const d = this.drawn.get(id);
+    if (d) this.setWeaponOf(d, weaponClass ? MODEL_FOR_CLASS[weaponClass] : null);
+  }
+
+  /** A player fired: their weapon kicks. */
+  fired(id: number): void {
+    this.drawn.get(id)?.rig?.fired();
+  }
+
+  /** Where a player's shots leave their gun (for tracers), if their model is drawn. */
+  muzzleOf(id: number, out: THREE.Vector3): THREE.Vector3 | null {
+    return this.drawn.get(id)?.rig?.muzzle(out) ?? null;
   }
 
   /** Hide one player until their next update (killcam: the camera is inside the killer). */
   hide(id: number): void {
-    const r = this.remotes.get(id);
-    if (r) r.root.visible = false;
+    const d = this.drawn.get(id);
+    if (d?.rig) d.rig.visible = false;
+    if (d?.simple) d.simple.root.visible = false;
   }
 
   /** Brief white flash: the server confirmed our hit on this player. */
   flash(id: number): void {
-    const r = this.remotes.get(id);
-    if (r) r.flashUntil = performance.now() + 110;
+    const d = this.drawn.get(id);
+    if (d) d.flashUntil = performance.now() + 110;
   }
 
   /** Positions of drawn remote players (used by end-to-end tests). */
   positions(): number[][] {
-    return [...this.remotes.values()].map((r) => [
-      r.root.position.x,
-      r.root.position.y,
-      r.root.position.z,
-    ]);
+    return [...this.drawn.values()].map((d) => {
+      const p = (d.rig?.root ?? d.simple!.root).position;
+      return [p.x, p.y, p.z];
+    });
   }
 
-  /** Head position of a player (for name tags / damage numbers). */
+  /** Above a player's head (for name tags / damage numbers). */
   headOf(id: number, out: THREE.Vector3): THREE.Vector3 | null {
-    const r = this.remotes.get(id);
-    if (!r || !r.root.visible) return null;
+    const d = this.drawn.get(id);
+    if (!d) return null;
+    if (d.rig) return d.rig.visible ? d.rig.head(out).setY(out.y + 0.32) : null;
+    const r = d.simple!;
+    if (!r.root.visible) return null;
     return out.copy(r.root.position).setY(r.root.position.y + movement.standingHeight + 0.25);
   }
 
   /** Remove players that are no longer in snapshots. */
   retain(ids: ReadonlySet<number>): void {
-    for (const [id, r] of this.remotes) {
+    for (const [id, d] of this.drawn) {
       if (ids.has(id)) continue;
-      this.scene.remove(r.root);
-      this.remotes.delete(id);
+      this.remove(d);
+      this.drawn.delete(id);
     }
   }
 }

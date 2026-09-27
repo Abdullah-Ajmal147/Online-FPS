@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { deploy, pause, status } from './helpers.ts';
+import { deploy, pause, playerContext, status } from './helpers.ts';
 
 const SERVER = '/?server=http://localhost:2574'; // own server: bots on, long warm-up
 
@@ -8,7 +8,7 @@ test('private match: invite-only, strangers kept out, friends can switch team', 
   browser,
 }) => {
   test.setTimeout(180_000);
-  const page = async () => (await browser.newContext()).newPage();
+  const page = async () => (await playerContext(browser)).newPage();
 
   // Host creates a private match on Saltline Depot, with bots.
   const host = await page();
