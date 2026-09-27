@@ -184,6 +184,8 @@ export async function startGame(
   }
 
   /** Resolution (preset pixel-ratio cap × render scale), applied live when the menu changes. */
+  /** Pre-filtered sky light (see bakeSkyLight below); null until the first map is lit. */
+  let skyLight: THREE.RenderTarget | null = null;
   let appliedGraphics = '';
   function applyGraphics(): void {
     const { graphics } = settings();
@@ -194,7 +196,9 @@ export async function startGame(
     const q = GRAPHICS[graphics];
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.maxPixelRatio) * renderScale);
     renderer.setSize(window.innerWidth, window.innerHeight);
+    applySkyLight();
   }
+
   applyGraphics();
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.02, 250);
@@ -332,11 +336,18 @@ export async function startGame(
     bakeSkyLight();
   }
 
+  /** Sky light on Medium/High (it costs a little on every lit pixel); Low keeps flat fill. */
+  function applySkyLight(): void {
+    if (!skyLight) return; // not baked yet (this also runs at start-up, before any map)
+    const on = GRAPHICS[settings().graphics].skyLight;
+    scene.environment = on ? skyLight.texture : null;
+    hemi.intensity = LIGHTING[map.lighting].hemiIntensity * (on ? HEMI_UNDER_SKY_LIGHT : 1);
+  }
+
   // Light from the sky: the sky (without its sun disc: no hard hot spots) rendered once into a
   // pre-filtered environment map. Metal reflects it and every surface gets the sky's own
   // colour as ambient light; the flat hemisphere light only fills in under it.
   const pmrem = new THREE.PMREMGenerator(renderer);
-  let skyLight: THREE.RenderTarget | null = null;
   function bakeSkyLight(): void {
     const skyScene = new THREE.Scene();
     const s = new SkyMesh();
@@ -356,9 +367,8 @@ export async function startGame(
       const next = pmrem.fromScene(skyScene, 0.02);
       skyLight?.dispose();
       skyLight = next;
-      scene.environment = next.texture;
       scene.environmentIntensity = SKY_LIGHT;
-      hemi.intensity *= HEMI_UNDER_SKY_LIGHT;
+      applySkyLight();
     } catch (e) {
       console.warn('[lighting] sky light unavailable', e);
     }
@@ -1332,6 +1342,8 @@ const GRAPHICS: Record<
     antialias: boolean;
     maxPixelRatio: number;
     bloom: boolean;
+    /** Light from the sky (environment map): costs a little on every lit pixel. */
+    skyLight: boolean;
   }
 > = {
   low: {
@@ -1340,6 +1352,7 @@ const GRAPHICS: Record<
     antialias: false,
     maxPixelRatio: 1,
     bloom: false,
+    skyLight: false,
   },
   medium: {
     shadowMapSize: 1024,
@@ -1347,6 +1360,7 @@ const GRAPHICS: Record<
     antialias: true,
     maxPixelRatio: 1.5,
     bloom: false,
+    skyLight: true,
   },
   high: {
     shadowMapSize: 2048,
@@ -1354,5 +1368,6 @@ const GRAPHICS: Record<
     antialias: true,
     maxPixelRatio: 2,
     bloom: true,
+    skyLight: true,
   },
 };

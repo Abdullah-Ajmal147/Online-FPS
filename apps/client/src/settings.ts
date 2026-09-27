@@ -144,7 +144,7 @@ export function normalizeSettings(raw: unknown): Settings {
         : DEFAULT_SETTINGS.region,
     graphics: GRAPHICS_PRESETS.includes(r.graphics as GraphicsPreset)
       ? (r.graphics as GraphicsPreset)
-      : DEFAULT_SETTINGS.graphics,
+      : defaultGraphics(),
     renderScale: clamp(
       r.renderScale,
       LIMITS.renderScale.min,
@@ -221,4 +221,15 @@ export function loadoutChoice(s: Settings): LoadoutChoice {
     attachments: s.attachments,
     perks: s.perks,
   };
+}
+
+/**
+ * The preset for a player with no saved choice: Medium. Browser tests (dev builds under
+ * automation) start on Low instead: they render in software, where Medium's lighting made pages
+ * too slow for timing checks. Tests that check presets set them explicitly.
+ */
+function defaultGraphics(): GraphicsPreset {
+  const automated =
+    import.meta.env?.DEV && typeof navigator !== 'undefined' && navigator.webdriver === true;
+  return automated ? 'low' : DEFAULT_SETTINGS.graphics;
 }
