@@ -397,7 +397,7 @@ describe('loadout building is safe for every combination', () => {
       }
     }
     expect(checked).toBeGreaterThan(1000);
-  });
+  }, 30_000); // exhaustive: grows with every weapon, attachment and perk
 
   it('the order of picks never changes the weapons (canonical order)', () => {
     const a = buildLoadout({
