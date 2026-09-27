@@ -408,6 +408,7 @@ body {
 .scoreboard,
 .results {
   position: absolute;
+  z-index: 5; /* above the in-world name tags and damage numbers */
   top: 50%;
   left: 50%;
   width: min(760px, calc(100vw - 32px));
@@ -2290,4 +2291,49 @@ body.headshot-flash::after {
   font-size: 10px;
   letter-spacing: 0.08em;
   opacity: 0.75;
+}
+
+/* Domination: "+2 kill" / "+1 node" under each team's score when it rises. */
+.sb-gains {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.sb-gain {
+  white-space: nowrap;
+  font:
+    700 15px system-ui,
+    sans-serif;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 90%);
+  animation: sb-gain 1.6s ease-out forwards;
+}
+@keyframes sb-gain {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.sb-source {
+  margin: -2px 0 6px;
+  font-size: 12px;
+  color: #8b949e;
 }

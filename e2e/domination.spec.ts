@@ -14,6 +14,12 @@ test('choosing Domination joins a Domination match with points A, B and C', asyn
     .poll(async () => (await status(page)).match?.points.map((p) => p.id).join(''))
     .toBe('ABC');
   await expect(page.getByTestId('points')).toContainText('A');
+  // The scoreboard explains team points: kills (2 each) vs held nodes.
+  await page.keyboard.down('Tab');
+  await expect(page.getByTestId('score-source').first()).toHaveText(
+    /^\d+ kills? = \d+ pts · nodes = \d+ pts$/,
+  );
+  await page.keyboard.up('Tab');
   // The choice is remembered for next time.
   const saved = await page.evaluate(() => localStorage.getItem('sentinel.settings.v1'));
   expect(JSON.parse(saved!)).toMatchObject({ mode: 'domination' });

@@ -1,10 +1,43 @@
 import { modes } from '@sentinel/content';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { MatchHud } from '../store.ts';
 import { useStatus } from './Hud.tsx';
+import { gainLabel, splitScore } from './scoreSplit.ts';
 
 const TEAM_NAMES = ['Aegis Directive', 'Ember Syndicate'];
 const TEAM_CLASS = ['team-a', 'team-b'];
+
+/** Kills of a team; `scores[i]` belongs to team `myTeam` for i = 0, the other team for 1. */
+function teamKills(m: MatchHud, i: number): number {
+  const team = i === 0 ? m.myTeam : 1 - m.myTeam;
+  return m.players.filter((p) => p.team === team).reduce((n, p) => n + p.kills, 0);
+}
+
+const perKillOf = (m: MatchHud) => modes[m.mode]?.capture?.scorePerKill ?? 1;
+
+/**
+ * Domination only: a short "+2 kill" / "+1 node" popup under a team's score each time it
+ * goes up, so a big number after one kill is explained (node points add up over time).
+ */
+function ScoreGain({ m, i }: { m: MatchHud; i: number }) {
+  const now = { score: m.scores[i]!, kills: teamKills(m, i) };
+  const prev = useRef(now);
+  const [shown, setShown] = useState<{ text: string; key: number } | null>(null);
+  useEffect(() => {
+    const text = gainLabel(prev.current, now, perKillOf(m));
+    prev.current = now;
+    if (!text) return;
+    setShown({ text, key: Date.now() });
+    const t = setTimeout(() => setShown(null), 1600);
+    return () => clearTimeout(t);
+  }, [now.score]);
+  const team = i === 0 ? m.myTeam : 1 - m.myTeam;
+  return shown ? (
+    <span class={`sb-gain ${TEAM_CLASS[team]}`} key={shown.key}>
+      {TEAM_NAMES[team]!.split(' ')[0]} {shown.text}
+    </span>
+  ) : null;
+}
 
 function clock(seconds: number): string {
   const s = Math.max(0, Math.ceil(seconds));
@@ -34,6 +67,13 @@ export function MatchUi() {
   return (
     <>
       <ScoreBar m={m} />
+      {m.points.length > 0 && (
+        // Outside the score bar: its clip-path would cut the popups off.
+        <div class="sb-gains">
+          <ScoreGain m={m} i={0} />
+          <ScoreGain m={m} i={1} />
+        </div>
+      )}
       {m.phase === 'warmup' && (
         <Banner title="Warm-up" sub={`Match starts in ${Math.ceil(m.secondsLeft)} s`} />
       )}
@@ -122,6 +162,7 @@ function Table({ m }: { m: MatchHud }) {
           <div class={`sb-team-name ${TEAM_CLASS[team]}`}>
             {TEAM_NAMES[team]} <span>{m.scores[i]}</span>
           </div>
+          {m.points.length > 0 && <ScoreSource m={m} i={i} />}
           <table>
             <thead>
               <tr>
@@ -148,6 +189,17 @@ function Table({ m }: { m: MatchHud }) {
           </table>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Domination: where a team's points came from (kills vs held nodes). */
+function ScoreSource({ m, i }: { m: MatchHud; i: number }) {
+  const kills = teamKills(m, i);
+  const { fromKills, fromNodes } = splitScore(m.scores[i]!, kills, perKillOf(m));
+  return (
+    <div class="sb-source" data-testid="score-source">
+      {kills} {kills === 1 ? 'kill' : 'kills'} = {fromKills} pts · nodes = {fromNodes} pts
     </div>
   );
 }
