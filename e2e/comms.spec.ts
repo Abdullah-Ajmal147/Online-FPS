@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { deploy } from './helpers.ts';
+import news from '../packages/content/src/news.json' with { type: 'json' };
 
 /** Phase 8 task 7: patch notes and a feedback form that reaches the admin page. */
 test('Comms screen: patch notes, and feedback reaches the admin page', async ({
@@ -9,7 +10,8 @@ test('Comms screen: patch notes, and feedback reaches the admin page', async ({
   test.setTimeout(60_000); // several screens and an admin page, rendered in software
   await page.goto('/?server=http://localhost:2567');
   await page.getByTestId('nav-comms').click();
-  await expect(page.getByTestId('patch-notes')).toContainText('Domination');
+  // The newest patch notes are shown first (whatever the latest release is).
+  await expect(page.getByTestId('patch-notes')).toContainText(news.patches[0]!.title);
   const text = `The B node beam flickers ${Date.now()}`;
   await expect(page.getByTestId('feedback-send')).toBeDisabled();
   await page.getByTestId('feedback-idea').click();
