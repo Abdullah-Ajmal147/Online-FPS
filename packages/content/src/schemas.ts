@@ -16,8 +16,8 @@ export const ModeSchema = z.object({
       radius: z.number().positive().max(15),
       /** Seconds for an uncontested team to capture a neutral point. */
       seconds: z.number().positive().max(60),
-      /** Score per second for each point a team holds. */
-      scorePerSecond: z.number().positive().max(10),
+      /** Each point a team holds scores 1 every this many seconds (5: a match lasts minutes). */
+      scoreIntervalSeconds: z.number().int().min(1).max(60),
       /** Score per kill (usually small: points decide the match). */
       scorePerKill: z.number().int().min(0).max(10),
     })

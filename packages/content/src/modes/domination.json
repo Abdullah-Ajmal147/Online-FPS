@@ -5,11 +5,11 @@
   "playersPerTeam": 6,
   "timeLimitSeconds": 600,
   "scoreLimit": 200,
-  "description": "Hold relay nodes A, B and C. Every node you hold scores each second.",
+  "description": "Hold relay nodes A, B and C. Every node you hold scores 1 point every 5 seconds.",
   "capture": {
     "radius": 4,
     "seconds": 5,
-    "scorePerSecond": 1,
-    "scorePerKill": 1
+    "scorePerKill": 1,
+    "scoreIntervalSeconds": 5
   }
 }

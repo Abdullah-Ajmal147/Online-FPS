@@ -58,7 +58,7 @@ function ScoreBar({ m }: { m: MatchHud }) {
       </span>
       <span class={`sb-score ${TEAM_CLASS[enemy]}`}>{m.scores[1]}</span>
       <div class="sb-limit">
-        first to {m.scoreLimit}
+        first to {m.scoreLimit} {m.points.length > 0 ? 'points' : 'kills'}
         {m.private && (
           <span class="private-tag" data-testid="private-tag">
             PRIVATE

@@ -212,7 +212,7 @@ describe('Domination (Phase 8)', () => {
   }
   const point = (m: Domination, id: string) => m.points().find((p) => p.id === id)!;
 
-  it('a lone team captures a point in 5 s, then scores 1 per second for it', () => {
+  it('a lone team captures a point in 5 s, then scores 1 point every 5 s for it', () => {
     const { a, b, mode, put, run } = setup();
     put(a, 'A');
     put(b, null);
@@ -221,9 +221,31 @@ describe('Domination (Phase 8)', () => {
     run(0.6);
     expect(point(mode, 'A').owner).toBe(0);
     const before = mode.teamScores()[0];
-    run(10);
-    expect(mode.teamScores()[0] - before).toBeGreaterThanOrEqual(9);
+    run(20);
+    const gained = mode.teamScores()[0] - before;
+    expect(gained).toBeGreaterThanOrEqual(3);
+    expect(gained).toBeLessThanOrEqual(5);
     expect(mode.teamScores()[1]).toBe(0);
+  });
+
+  // Owner report (private Domination): "one kill, but the score shows 200". Nodes scored every
+  // second, so a team holding them reached 200 in about a minute. A match must last minutes.
+  it('holding all three nodes still takes more than 5 minutes to reach 200', () => {
+    const { sim, mode } = setup();
+    const map = maps['relay-yard']!;
+    const holders = map.points.map(() => sim.addPlayer({ team: 0 }));
+    holders.forEach((p, i) => {
+      const pos = map.points[i]!.position;
+      p.sim = { ...p.sim, move: { ...p.sim.move, position: [pos[0], pos[1], pos[2]] } };
+    });
+    let seconds = 0;
+    const step = () => {
+      for (let i = 0; i < TICK_RATE; i++) mode.tick(sim);
+      seconds++;
+    };
+    while (mode.winnerByScore() === null && seconds < 1200) step();
+    expect(seconds).toBeGreaterThan(5 * 60);
+    expect(mode.winnerByScore()).toBe(0);
   });
 
   it('a contested point does not move; an enemy must first neutralise, then capture', () => {

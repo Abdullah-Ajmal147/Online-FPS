@@ -37,7 +37,7 @@ export function primerSteps(s: Pick<Settings, 'bindings' | 'mode'>): PrimerStep[
     {
       id: 'objective',
       text: mode.capture
-        ? 'Stand on nodes A, B and C to capture them. Held nodes score every second.'
+        ? 'Stand on nodes A, B and C to capture them. Each held node scores every 5 seconds.'
         : `First team to ${mode.scoreLimit} kills wins. Tab shows the scoreboard.`,
       seconds: 7,
     },

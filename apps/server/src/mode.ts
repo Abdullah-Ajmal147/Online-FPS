@@ -67,8 +67,8 @@ export class TeamDeathmatch implements GameMode {
 
 /**
  * Domination (Phase 8): three capture points. A team alone on a point pushes its control
- * meter toward its side (neutralising an enemy point first); each held point scores every
- * second; kills score a little. Data: modes/domination.json and each map's `points`.
+ * meter toward its side (neutralising an enemy point first); each held point scores 1 every
+ * few seconds (data); kills score a little. Data: modes/domination.json and each map's `points`.
  */
 export class Domination implements GameMode {
   private scores: [number, number] = [0, 0];
@@ -129,9 +129,10 @@ export class Domination implements GameMode {
       else if ((pt.owner === 0 && pt.control <= 0) || (pt.owner === 1 && pt.control >= 0))
         pt.owner = -1;
     }
-    if (++this.ticks % TICK_RATE === 0) {
+    // Every held point scores 1 each interval (whole points: no float drift towards the limit).
+    if (++this.ticks % (rules.scoreIntervalSeconds * TICK_RATE) === 0) {
       for (const pt of this.state) {
-        if (pt.owner >= 0) this.scores[pt.owner as 0 | 1] += rules.scorePerSecond;
+        if (pt.owner >= 0) this.scores[pt.owner as 0 | 1] += 1;
       }
     }
     sim.objectives = this.state;
