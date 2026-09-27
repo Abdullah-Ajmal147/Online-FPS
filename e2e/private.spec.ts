@@ -41,6 +41,9 @@ test('private match: invite-only, strangers kept out, friends can switch team', 
   bad.searchParams.set('with', 'not-a-real-token');
   await deploy(snoop, bad.pathname + bad.search);
   expect((await status(snoop)).match?.private).toBe(false);
+  // Done with those two: close them so the friend's join isn't starved of CPU (every page
+  // draws a 3D match in software, and CI runners are small).
+  for (const p of [stranger, snoop]) await p.context().close();
 
   // The invited friend gets in, on the host's team.
   const friend = await page();
