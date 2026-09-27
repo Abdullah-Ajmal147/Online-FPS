@@ -27,15 +27,15 @@ async function headOffsets(page: Page, query: string): Promise<number[]> {
 }
 
 const POSES = {
-  standing: 'weapons=rifle,sidearm',
-  'aiming up': 'weapons=rifle&pitch=0.8',
+  standing: 'weapons=ar,sidearm',
+  'aiming up': 'weapons=ar&pitch=0.8',
   'aiming down': 'weapons=marksman&pitch=-0.8',
-  crouched: 'weapons=rifle,shotgun&crouch=1',
+  crouched: 'weapons=ar,shotgun&crouch=1',
   'crouch-walking': 'weapons=smg&crouch=1&speed=2.5',
-  jogging: 'weapons=rifle&speed=5',
+  jogging: 'weapons=ar&speed=5',
   sprinting: 'weapons=smg&speed=7.5',
-  strafing: 'weapons=rifle&speed=4&dir=1.57',
-  'walking backwards': 'weapons=rifle&speed=3&dir=3.14',
+  strafing: 'weapons=ar&speed=4&dir=1.57',
+  'walking backwards': 'weapons=ar&speed=3&dir=3.14',
 };
 
 test('soldier models: the drawn head sits on the head hitbox in every pose', async ({ page }) => {
@@ -49,7 +49,7 @@ test('first-person arms and weapon models render without errors', async ({ page 
   test.setTimeout(90_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  for (const weapon of ['rifle', 'sidearm']) {
+  for (const weapon of ['kestrel-ar', 'wren-sp']) {
     await page.goto(`/lab.html?view=fp&weapon=${weapon}&ads=1`);
     await page.waitForFunction(
       () => (window as unknown as { __labReady?: boolean }).__labReady,

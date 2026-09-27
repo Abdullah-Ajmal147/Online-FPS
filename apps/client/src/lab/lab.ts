@@ -205,7 +205,7 @@ if (view === 'bench') {
     const m = createSoldierModel(assets, i % 2, i % 2);
     scene.add(m.root);
     const r = new SoldierRig(assets, m);
-    r.setWeapon((['rifle', 'smg', 'shotgun', 'marksman', 'sidearm'] as const)[i % 5]!);
+    r.setWeapon((['ar', 'smg', 'shotgun', 'marksman', 'sidearm'] as const)[i % 5]!);
     return r;
   });
   const frames = 600;
@@ -249,7 +249,7 @@ if (view === 'stress') {
     const m = createSoldierModel(assets, i % 2, i % 2);
     scene.add(m.root);
     const r = new SoldierRig(assets, m);
-    r.setWeapon('rifle');
+    r.setWeapon('ar');
     return r;
   });
   const t2 = performance.now();
@@ -322,21 +322,21 @@ if (view === 'fp') {
   scene.add(fpCamera);
   const vm = new Viewmodel(fpCamera);
   await new Promise((r) => setTimeout(r, 200));
-  const cls = params.get('weapon') ?? 'rifle';
+  const wid = params.get('weapon') ?? 'kestrel-ar';
   // Tuning: ?left=x,y,z&twist=x,y,z override the hold of that weapon for this page.
-  const { HOLDS, MODEL_FOR_CLASS } = await import('../game/soldier/holds.ts');
-  const hold = HOLDS[MODEL_FOR_CLASS[cls as keyof typeof MODEL_FOR_CLASS]];
+  const { HOLDS, modelFor } = await import('../game/soldier/holds.ts');
+  const w = Object.values(weaponCatalog).find((x) => x.id === wid)!;
+  const hold = HOLDS[modelFor(w)];
   const vec = (k: string) =>
     params.get(k)?.split(',').map(Number) as [number, number, number] | undefined;
   hold.left = vec('left') ?? hold.left;
   hold.leftTwist = vec('twist') ?? hold.leftTwist;
-  const w = Object.values(weaponCatalog).find((x) => x.class === cls)!;
   vm.setLoadout(w, w);
   vm.setTeam(Number(params.get('team') ?? 0));
   const ads = Number(params.get('ads') ?? 0);
   for (let i = 0; i < 3; i++)
     vm.update(1 / 60, { slot: 0, ads, reloading: 0, switching: 0, speed: 0, grounded: true });
-  lines.push(`fp: ${cls} ads ${ads}`);
+  lines.push(`fp: ${wid} ads ${ads}`);
 }
 
 const cam = (params.get('cam') ?? '0,1.1,4.2').split(',').map(Number);

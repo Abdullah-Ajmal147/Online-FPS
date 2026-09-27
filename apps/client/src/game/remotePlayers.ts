@@ -3,9 +3,9 @@ import { movement } from '@sentinel/content';
 import type { RemotePose } from '@sentinel/shared';
 import type { Weapon } from '@sentinel/content';
 import { createSoldierModel, loadSoldierAssets, type SoldierAssets } from './soldier/assets.ts';
-import { MODEL_FOR_CLASS, type WeaponModelId } from './soldier/holds.ts';
+import { modelFor, WEAPON_MODEL_IDS, type WeaponModelId } from './soldier/holds.ts';
 
-const WEAPON_MODELS: WeaponModelId[] = ['rifle', 'smg', 'shotgun', 'marksman', 'sidearm'];
+const WEAPON_MODELS: readonly WeaponModelId[] = WEAPON_MODEL_IDS;
 import { SoldierRig } from './soldier/rig.ts';
 
 /** Faction colours from docs/GAME_DESIGN.md: Aegis Directive blue, Ember Syndicate orange. */
@@ -205,9 +205,9 @@ export class RemotePlayers {
   }
 
   /** Which weapon a player holds (from their snapshot). */
-  setWeapon(id: number, weaponClass: Weapon['class'] | undefined): void {
+  setWeapon(id: number, weapon: Pick<Weapon, 'id' | 'class'> | undefined): void {
     const d = this.drawn.get(id);
-    if (d) this.setWeaponOf(d, weaponClass ? MODEL_FOR_CLASS[weaponClass] : null);
+    if (d) this.setWeaponOf(d, weapon ? modelFor(weapon) : null);
   }
 
   /** A player fired: their weapon kicks. */

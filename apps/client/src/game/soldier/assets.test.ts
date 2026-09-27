@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { weaponCatalog } from '@sentinel/content';
 import { describe, expect, it } from 'vitest';
-import { HOLDS, MODEL_FOR_CLASS } from './holds.ts';
+import { HOLDS, modelFor } from './holds.ts';
 
 /**
  * The contract between tools/assets (the pipeline) and the soldier code: every clip, bone and
@@ -67,7 +67,7 @@ describe('soldier assets', () => {
 
   it('every weapon class in the catalog has a model and a hold', () => {
     for (const w of Object.values(weaponCatalog)) {
-      const id = MODEL_FOR_CLASS[w.class];
+      const id = modelFor(w);
       expect(HOLDS[id], w.id).toBeDefined();
       expect(statSync(join(ASSETS, `weapons/${id}.glb`)).size, w.id).toBeGreaterThan(1000);
     }

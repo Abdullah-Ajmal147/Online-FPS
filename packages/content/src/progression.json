@@ -13,7 +13,9 @@
     { "level": 4, "weapons": ["thresher-12"] },
     { "level": 5, "perks": ["steady-hands"] },
     { "level": 6, "weapons": ["halberd-mr"] },
+    { "level": 7, "weapons": ["varga-47"] },
     { "level": 8, "perks": ["flak-vest"] },
+    { "level": 9, "weapons": ["marlowe-sawnoff"] },
     { "level": 10, "perks": ["deep-pockets"] }
   ],
   "weaponLevels": {

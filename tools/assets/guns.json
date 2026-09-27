@@ -1,7 +1,9 @@
 {
-  "rifle": { "source": "_Assault_Rifle__fpLucho45C.glb", "length": 0.88 },
+  "ak": { "source": "_Assault_Rifle__fpLucho45C.glb", "length": 0.88 },
+  "ar": { "source": "_Assault_Rifle__Bgvuu4CUMV.glb", "length": 0.9 },
   "smg": { "source": "_Submachine_Gun__7ehatxr7FY.glb", "length": 0.6 },
   "shotgun": { "source": "_Shotgun__DcNE0HVdW8.glb", "length": 1.0 },
+  "sawnoff": { "source": "_Shotgun_Sawed_Off__29FXKu7G91.glb", "length": 0.62 },
   "marksman": { "source": "_Sniper_Rifle__i65hEldsw6.glb", "length": 1.12 },
   "sidearm": { "source": "_Pistol__52kQzphmeF.glb", "length": 0.2 }
 }

@@ -1,15 +1,38 @@
 import type { Weapon } from '@sentinel/content';
 
-/** Weapon models (tools/assets/guns.json), one per weapon class. */
-export type WeaponModelId = 'rifle' | 'smg' | 'shotgun' | 'marksman' | 'sidearm';
+/** Weapon models (tools/assets/guns.json). */
+export const WEAPON_MODEL_IDS = [
+  'ak',
+  'ar',
+  'smg',
+  'shotgun',
+  'sawnoff',
+  'marksman',
+  'sidearm',
+] as const;
+export type WeaponModelId = (typeof WEAPON_MODEL_IDS)[number];
 
-export const MODEL_FOR_CLASS: Record<Weapon['class'], WeaponModelId> = {
-  rifle: 'rifle',
+/** The model per weapon (content id); a weapon not listed uses its class's model. */
+const MODEL_FOR_WEAPON: Record<string, WeaponModelId> = {
+  'kestrel-ar': 'ar',
+  'varga-47': 'ak',
+  'vireo-smg': 'smg',
+  'thresher-12': 'shotgun',
+  'marlowe-sawnoff': 'sawnoff',
+  'halberd-mr': 'marksman',
+  'wren-sp': 'sidearm',
+};
+const MODEL_FOR_CLASS: Record<Weapon['class'], WeaponModelId> = {
+  rifle: 'ar',
   smg: 'smg',
   shotgun: 'shotgun',
   marksman: 'marksman',
   sidearm: 'sidearm',
 };
+
+export function modelFor(weapon: Pick<Weapon, 'id' | 'class'>): WeaponModelId {
+  return MODEL_FOR_WEAPON[weapon.id] ?? MODEL_FOR_CLASS[weapon.class];
+}
 
 /**
  * How a soldier holds each weapon. Weapon space: -Z = barrel, +Y = up, +X = right, origin at the
@@ -34,7 +57,16 @@ export interface Hold {
 }
 
 export const HOLDS: Record<WeaponModelId, Hold> = {
-  rifle: {
+  ak: {
+    at: [0.13, 0.12, 0.33],
+    right: [0.02, -0.05, 0.19],
+    left: [-0.02, -0.04, -0.12],
+    leftTwist: [0, 0, 0],
+    muzzle: [0, 0.03, -0.44],
+    kick: 0.04,
+    fp: { sightDrop: -0.004, z: -0.46 },
+  },
+  ar: {
     at: [0.13, 0.12, 0.33],
     right: [0.02, -0.05, 0.19],
     left: [-0.02, -0.04, -0.12],
@@ -60,6 +92,15 @@ export const HOLDS: Record<WeaponModelId, Hold> = {
     muzzle: [0, 0.03, -0.5],
     kick: 0.07,
     fp: { sightDrop: 0.0, z: -0.52 },
+  },
+  sawnoff: {
+    at: [0.12, 0.11, 0.28],
+    right: [0.02, -0.05, 0.14],
+    left: [-0.02, -0.05, -0.1],
+    leftTwist: [0, 0, 0],
+    muzzle: [0, 0.03, -0.31],
+    kick: 0.08,
+    fp: { sightDrop: 0.0, z: -0.4 },
   },
   marksman: {
     at: [0.13, 0.12, 0.4],

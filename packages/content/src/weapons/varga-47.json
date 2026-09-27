@@ -1,0 +1,54 @@
+{
+  "id": "varga-47",
+  "name": "Varga 47",
+  "class": "rifle",
+  "slot": 0,
+  "fireMode": "auto",
+  "rpm": 560,
+  "damage": {
+    "head": 48,
+    "torso": 27,
+    "limbs": 21
+  },
+  "falloff": {
+    "start": 28,
+    "end": 50,
+    "minMultiplier": 0.8
+  },
+  "maxRange": 150,
+  "magazine": 30,
+  "reserve": 90,
+  "reloadTime": 2.5,
+  "equipTime": 0.5,
+  "adsTime": 0.28,
+  "spread": {
+    "hip": 0.75,
+    "ads": 0,
+    "moving": 0.5,
+    "airborne": 2.8,
+    "perShot": 0.14,
+    "max": 1.3,
+    "recoveryPerSecond": 9
+  },
+  "recoil": {
+    "pattern": [
+      [0.3, 0.03],
+      [0.3, -0.06],
+      [0.29, 0.08],
+      [0.28, 0.1],
+      [0.27, -0.05],
+      [0.26, -0.12],
+      [0.24, -0.12],
+      [0.23, 0.06],
+      [0.22, 0.13],
+      [0.21, 0.1],
+      [0.21, -0.06],
+      [0.21, -0.13]
+    ],
+    "adsMultiplier": 0.72,
+    "recoveryPerSecond": 11,
+    "sprayRecovery": 0.12
+  },
+  "moveSpeedMultiplier": 0.93,
+  "adsMoveSpeedMultiplier": 0.58
+}

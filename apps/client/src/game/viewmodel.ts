@@ -2,7 +2,7 @@ import type { Weapon } from '@sentinel/content';
 import * as THREE from 'three/webgpu';
 import { loadSoldierAssets, type SoldierAssets } from './soldier/assets.ts';
 import { FirstPersonArms } from './soldier/fpArms.ts';
-import { HOLDS, MODEL_FOR_CLASS } from './soldier/holds.ts';
+import { HOLDS, modelFor, WEAPON_MODEL_IDS, type WeaponModelId } from './soldier/holds.ts';
 
 /**
  * First-person weapon. Hangs off the camera; kicks back on each shot, moves to the centre when
@@ -19,8 +19,9 @@ export class Viewmodel {
   private readonly flash: THREE.Mesh;
   private readonly camera: THREE.Camera;
   /** Real models, one per weapon class (null until loaded). */
-  private real: Record<Weapon['class'], THREE.Group> | null = null;
-  private classes: [Weapon['class'], Weapon['class']] = ['rifle', 'sidearm'];
+  private real: Record<WeaponModelId, THREE.Group> | null = null;
+  /** Current loadout (primary, secondary); null until the server confirms one. */
+  private loadout: [Weapon, Weapon] | null = null;
   private assets: SoldierAssets | null = null;
   private arms: FirstPersonArms | null = null;
   private armsTeam = -1;
@@ -60,9 +61,8 @@ export class Viewmodel {
    * x 0, y -0.092), the sight line is exactly at eye height.
    */
   private buildReal(assets: SoldierAssets): void {
-    const real = {} as Record<Weapon['class'], THREE.Group>;
-    for (const cls of Object.keys(this.models) as Weapon['class'][]) {
-      const id = MODEL_FOR_CLASS[cls];
+    const real = {} as Record<WeaponModelId, THREE.Group>;
+    for (const id of WEAPON_MODEL_IDS) {
       const src = assets.weapons.get(id);
       if (!src) return; // a model is missing: keep the simple shapes for all
       const g = new THREE.Group();
@@ -96,11 +96,23 @@ export class Viewmodel {
         muzzleY: sight - 0.02 + gun.position.y,
       };
       this.root.add(g);
-      real[cls] = g;
+      real[id] = g;
     }
     for (const g of Object.values(this.models)) g.visible = false;
     this.real = real;
-    this.guns = [real[this.classes[0]], real[this.classes[1]]];
+    this.pickGuns();
+  }
+
+  /** The drawn guns for the loadout: real models per weapon, else simple shapes per class. */
+  private pickGuns(): void {
+    if (!this.loadout) {
+      if (this.real) this.guns = [this.real.ar, this.real.sidearm];
+      return;
+    }
+    const [p, s] = this.loadout;
+    this.guns = this.real
+      ? [this.real[modelFor(p)], this.real[modelFor(s)]]
+      : [this.models[p.class], this.models[s.class]];
   }
 
   /** Our team (the arms wear its uniform). */
@@ -110,9 +122,8 @@ export class Viewmodel {
 
   /** Show the models for this loadout (called when the server confirms our loadout). */
   setLoadout(primary: Weapon, secondary: Weapon): void {
-    this.classes = [primary.class, secondary.class];
-    const set = this.real ?? this.models;
-    this.guns = [set[primary.class], set[secondary.class]];
+    this.loadout = [primary, secondary];
+    this.pickGuns();
   }
 
   onShot(): void {

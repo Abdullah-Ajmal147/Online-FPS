@@ -653,7 +653,7 @@ export async function startGame(
       let buf = remoteBuffers.get(e.id);
       if (!buf) remoteBuffers.set(e.id, (buf = new RemoteBuffer()));
       buf.push(snap.serverTick, e);
-      remotePlayers.setWeapon(e.id, weaponCatalog[e.weapon]?.class);
+      remotePlayers.setWeapon(e.id, weaponCatalog[e.weapon]);
       // A remote player fired since the last snapshot: muzzle flash, tracer, 3D sound.
       const lastShots = remoteShots.get(e.id);
       if (lastShots !== undefined && lastShots !== e.shotCount && e.alive)

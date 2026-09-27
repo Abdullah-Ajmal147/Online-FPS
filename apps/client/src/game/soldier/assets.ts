@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { WEAPON_MODEL_IDS } from './holds.ts';
 import { bodyMeshOf, dress, soldierMaterials, type DressedParts } from './outfit.ts';
 
 /**
@@ -17,7 +18,6 @@ export interface SoldierAssets {
 
 const BASE = `${import.meta.env.BASE_URL}assets/`;
 const BODY_FILES = ['characters/soldier-m.glb', 'characters/soldier-f.glb'];
-export const WEAPON_MODEL_IDS = ['rifle', 'smg', 'shotgun', 'marksman', 'sidearm'] as const;
 
 let loading: Promise<SoldierAssets> | null = null;
 
