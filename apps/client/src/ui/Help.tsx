@@ -105,6 +105,10 @@ export function HelpGuide({
               Hold {k('Tab')} for the scoreboard. Every match earns XP, which unlocks weapons and
               perks (see Progress).
             </li>
+            <li>
+              After a match: awards for the best players (headshots, streak, longest shot, captures,
+              grenades), and a vote for the next map with {k('Digit1')} {k('Digit2')} {k('Digit3')}.
+            </li>
           </ol>
           <p class="muted">
             The first match shows short tips on screen. To see them again: Settings → Game →

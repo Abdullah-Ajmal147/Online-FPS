@@ -40,6 +40,8 @@ export const MessageType = {
   Chat: 11,
   /** Client → server, empty: move me to the other team (private matches only; v13). */
   SwitchTeam: 12,
+  /** Client → server, 1 byte: my vote for the next map (option index; results screen, v17). */
+  VoteMap: 13,
 } as const;
 
 export type { SequencedInput, OwnState };
@@ -673,6 +675,23 @@ export interface MatchInfo {
   players: ScoreboardRow[];
   /** End-of-match awards (v16): filled when the match has ended, empty otherwise. */
   awards: MatchAward[];
+  /** Map vote on the results screen (v17): map ids on offer and votes so far; null = none. */
+  vote: { options: string[]; counts: number[] } | null;
+}
+
+/** Most maps offered in one vote. */
+export const MAX_VOTE_OPTIONS = 4;
+
+export function encodeVoteMap(option: number): Uint8Array {
+  return new BinaryWriter(1).u8(option).finish();
+}
+
+/** Strict: exactly one byte, a valid option index (the room checks it against its vote). */
+export function decodeVoteMap(bytes: Uint8Array): number {
+  const r = new BinaryReader(bytes);
+  const option = r.u8();
+  if (r.remaining !== 0 || option >= MAX_VOTE_OPTIONS) throw new RangeError('bad VoteMap');
+  return option;
 }
 
 /** Award kinds, in wire order (u8 index). */
@@ -729,6 +748,14 @@ export function encodeMatchInfo(m: MatchInfo): Uint8Array {
       .u8(a.player)
       .u16(Math.min(0xffff, Math.max(0, Math.round(a.value))));
   }
+  const vote = m.vote;
+  if (
+    vote &&
+    (vote.options.length > MAX_VOTE_OPTIONS || vote.counts.length !== vote.options.length)
+  )
+    throw new RangeError('bad vote');
+  w.u8(vote ? vote.options.length : 0);
+  if (vote) vote.options.forEach((id, i) => w.string(id).u8(Math.min(255, vote.counts[i]!)));
   return w.finish();
 }
 
@@ -773,6 +800,16 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
     if (!kind) throw new RangeError('bad award kind');
     awards.push({ kind, player: r.u8(), value: r.u16() });
   }
+  const optionCount = r.u8();
+  if (optionCount > MAX_VOTE_OPTIONS) throw new RangeError('too many vote options');
+  let vote: MatchInfo['vote'] = null;
+  if (optionCount > 0) {
+    vote = { options: [], counts: [] };
+    for (let i = 0; i < optionCount; i++) {
+      vote.options.push(r.string());
+      vote.counts.push(r.u8());
+    }
+  }
   return {
     phase: phase as MatchPhaseId,
     secondsLeft,
@@ -785,5 +822,6 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
     points,
     players,
     awards,
+    vote,
   };
 }

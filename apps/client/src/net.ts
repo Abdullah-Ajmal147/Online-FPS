@@ -11,6 +11,7 @@ import {
   decodePing,
   decodeSnapshot,
   encodeChatSend,
+  encodeVoteMap,
   encodeInputCmd,
   encodePing,
   encodeSetLoadout,
@@ -200,6 +201,11 @@ export class Connection {
   /** Private matches: ask to move to the other team (the server decides). */
   switchTeam(): void {
     this.room?.sendBytes(MessageType.SwitchTeam, new Uint8Array(0));
+  }
+
+  /** Results screen: vote for the next map (option index). */
+  voteMap(option: number): void {
+    this.room?.sendBytes(MessageType.VoteMap, encodeVoteMap(option));
   }
 }
 

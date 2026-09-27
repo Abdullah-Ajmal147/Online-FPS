@@ -66,7 +66,14 @@ import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/sha
 import { loadoutChoice, type GraphicsPreset, type Settings } from '../settings.ts';
 import { ensureGuest, refreshProfile } from '../profile.ts';
 import { isMuted, rememberRecentPlayers } from '../social.ts';
-import { setStatus, type CombatHud, type KillFeedEntry, getStatus, chatBridge } from '../store.ts';
+import {
+  setStatus,
+  type CombatHud,
+  type KillFeedEntry,
+  getStatus,
+  chatBridge,
+  voteBridge,
+} from '../store.ts';
 import { Effects } from './effects.ts';
 import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
@@ -464,6 +471,14 @@ export async function startGame(
     setStatus({ chat: [...getStatus().chat.slice(-29), entry] });
   };
   chatBridge.send = (team, text) => conn.sendChat(team, text);
+  /** Our map vote this results screen (null: not voted; reset when the vote closes). */
+  let myVote: number | null = null;
+  voteBridge.vote = (option) => {
+    myVote = option;
+    conn.voteMap(option);
+    const m = getStatus().match;
+    if (m?.vote) setStatus({ match: { ...m, vote: { ...m.vote, mine: option } } });
+  };
   chatBridge.opened = () => input.releaseAll();
 
   const PHASES = ['warmup', 'countdown', 'live', 'ended'] as const;
@@ -496,6 +511,7 @@ export async function startGame(
     lastPhase = info.phase;
     const mine = myTeam();
     const mvp = info.players.find((p) => p.id === info.mvp);
+    if (!info.vote) myVote = null; // the vote closed with the results screen
     pointMarkers.update(info.points);
     // Domination: a node changed hands (not at the start of a match, when all reset).
     for (const p of info.points) {
@@ -528,6 +544,16 @@ export async function startGame(
                 ? 'win'
                 : 'loss',
         mvp: mvp ? (mvp.id === myId ? `${mvp.name} (you)` : mvp.name) : null,
+        vote: info.vote
+          ? {
+              options: info.vote.options.map((id, i) => ({
+                id,
+                name: maps[id]?.name ?? id,
+                votes: info.vote!.counts[i] ?? 0,
+              })),
+              mine: myVote,
+            }
+          : null,
         awards: info.awards.map((a) => ({
           kind: a.kind,
           ...AWARD_TEXT[a.kind](a.value),

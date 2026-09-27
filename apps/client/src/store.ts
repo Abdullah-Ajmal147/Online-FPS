@@ -36,6 +36,9 @@ export interface ChatEntry {
 /**
  * The chat UI talks to the running game through this (main.ts wires it once the game starts).
  */
+/** Results screen → game: vote for the next map (option index). */
+export const voteBridge: { vote: (option: number) => void } = { vote: () => undefined };
+
 export const chatBridge: { send: (team: boolean, text: string) => void; opened: () => void } = {
   send: () => undefined,
   /** Called when the chat box opens: stop any held movement keys. */
@@ -95,6 +98,8 @@ export interface MatchHud {
   /** 'win' | 'loss' | 'draw' once ended. */
   result: 'win' | 'loss' | 'draw' | null;
   mvp: string | null;
+  /** Map vote on the results screen: maps on offer with their votes, and ours (index). */
+  vote: { options: { id: string; name: string; votes: number }[]; mine: number | null } | null;
   /** End-of-match awards: who won each, and what for (shown on the results screen). */
   awards: { kind: string; title: string; name: string; value: string; me: boolean }[];
   players: {

@@ -86,6 +86,34 @@ describe('Match phases', () => {
     }
   });
 
+  it('map vote: offered on the results screen, and the voted map is played next', () => {
+    const { sim, match, run } = setup(1);
+    const [a, b] = [...sim.players.keys()];
+    const options = ['relay-yard', 'saltline-depot', 'alder-street'];
+    match.voteSetup = () => ({ options, defaultNext: 'saltline-depot' });
+    let next: string | null = 'unset';
+    match.onNextMatch = (voted) => (next = voted) ?? 'saltline-depot';
+    expect(match.info().vote).toBeNull(); // not before the match ends
+    run(1 + 1 + 1 + 0.5);
+    expect(match.phase).toBe(MatchPhase.Ended);
+    expect(match.info().vote).toEqual({ options, counts: [0, 0, 0] });
+    match.mapVote!.vote(a!, 2);
+    match.mapVote!.vote(b!, 2);
+    expect(match.info().vote!.counts).toEqual([0, 0, 2]);
+    run(1);
+    expect(match.phase).toBe(MatchPhase.Warmup);
+    expect(next).toBe('alder-street');
+    expect(match.info().vote).toBeNull(); // closed with the results screen
+  });
+
+  it('no map vote when the room plays one map only', () => {
+    const { match, run } = setup(1);
+    match.voteSetup = () => null;
+    run(1 + 1 + 1 + 0.5);
+    expect(match.phase).toBe(MatchPhase.Ended);
+    expect(match.info().vote).toBeNull();
+  });
+
   it('goes warm-up → countdown (frozen) → live → ended (frozen) → warm-up', () => {
     const { sim, match, run } = setup();
     expect(match.phase).toBe(MatchPhase.Warmup);

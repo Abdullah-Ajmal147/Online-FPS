@@ -15,6 +15,17 @@
   ],
   "patches": [
     {
+      "version": "0.9.4",
+      "date": "2026-09-27",
+      "title": "Streaks, awards and map vote",
+      "notes": [
+        "Zoom while aiming: the mouse wheel steps through each weapon's zoom levels (rifles up to 2×, the marksman rifle 4×/6×/8×), and the mouse slows with the zoom for precise headshots.",
+        "Kill-streak rewards, earned without dying: 3 kills a radar sweep that shows your team every enemy, 5 kills a full resupply, 7 kills armor for 10 seconds.",
+        "End-of-match awards: Sharpshooter, Unstoppable, Long shot, Objective and Grenadier.",
+        "Vote for the next map on the results screen (keys 1–3)."
+      ]
+    },
+    {
       "version": "0.9.3",
       "date": "2026-09-27",
       "title": "Help",

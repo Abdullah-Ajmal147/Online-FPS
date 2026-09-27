@@ -10,6 +10,7 @@ import {
 } from '@sentinel/protocol';
 import { TICK_RATE } from '@sentinel/shared';
 import type { GameMode } from './mode.ts';
+import { MapVote } from './mapVote.ts';
 import type { MatchSim, SimPlayer } from './sim.ts';
 
 export interface MatchTimings {
@@ -87,7 +88,14 @@ export class Match {
    * Called when the results screen closes, before the next warm-up: the room rotates the map
    * here. Returns the map id now in play.
    */
-  onNextMatch: (() => string) | null = null;
+  onNextMatch: ((votedMap: string | null) => string) | null = null;
+  /**
+   * Set by the room: the maps to vote on when a match ends, and the rotation's next map
+   * (fallback and tie-breaker). Null or fewer than two options: no vote.
+   */
+  voteSetup: (() => { options: string[]; defaultNext: string } | null) | null = null;
+  /** The map vote on the results screen (null outside it). */
+  mapVote: MapVote | null = null;
   /** Set when a match ends; the room forwards it (log, API). */
   onMatchEnd: ((summary: MatchSummary) => void) | null = null;
 
@@ -136,9 +144,12 @@ export class Match {
         return this.enter(MatchPhase.Live);
       case MatchPhase.Live:
         return this.end(this.mode.winnerAtTime());
-      case MatchPhase.Ended:
-        if (this.onNextMatch) this.mapId = this.onNextMatch();
+      case MatchPhase.Ended: {
+        const voted = this.mapVote?.winner() ?? null;
+        this.mapVote = null;
+        if (this.onNextMatch) this.mapId = this.onNextMatch(voted);
         return this.enter(MatchPhase.Warmup);
+      }
     }
     return false;
   }
@@ -161,6 +172,9 @@ export class Match {
       winner: this.winner,
       mvp: this.mvp,
       awards: this.awards,
+      vote: this.mapVote
+        ? { options: [...this.mapVote.options], counts: this.mapVote.counts() }
+        : null,
       mode: this.mode.def.id,
       private: this.isPrivate,
       points: (this.mode.points?.() ?? []).map((p) => ({
@@ -206,6 +220,9 @@ export class Match {
     this.winner = winner;
     this.mvp = this.pickMvp();
     this.awards = pickAwards([...this.sim.players.values()]);
+    const setup = this.voteSetup?.();
+    this.mapVote =
+      setup && setup.options.length >= 2 ? new MapVote(setup.options, setup.defaultNext) : null;
     this.sim.frozen = true;
     this.matchesPlayed++;
     this.phase = MatchPhase.Ended;

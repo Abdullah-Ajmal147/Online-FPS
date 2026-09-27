@@ -1,6 +1,6 @@
 import { modes } from '@sentinel/content';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { MatchHud } from '../store.ts';
+import { voteBridge, type MatchHud } from '../store.ts';
 import { useStatus } from './Hud.tsx';
 import { gainLabel, splitScore } from './scoreSplit.ts';
 
@@ -239,6 +239,7 @@ function Results({ m }: { m: MatchHud }) {
       ) : (
         <XpPanel />
       )}
+      {m.vote && <MapVotePanel vote={m.vote} />}
       <Table m={m} />
       <div class="results-next">Next match in {Math.ceil(m.secondsLeft)} s</div>
     </div>
@@ -275,6 +276,44 @@ function XpPanel() {
           Level up! Level {last.levelAfter}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Vote for the next map: keys 1–3 (the mouse is still captured by the game on the results
+ * screen), or click when the cursor is free. The server counts the votes.
+ */
+function MapVotePanel({ vote }: { vote: NonNullable<MatchHud['vote']> }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const n = /^Digit([1-9])$/.exec(e.code);
+      if (!n || e.target instanceof HTMLInputElement) return;
+      const option = Number(n[1]) - 1;
+      if (option < vote.options.length) voteBridge.vote(option);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [vote.options.length]);
+  return (
+    <div class="map-vote" data-testid="map-vote">
+      <div class="map-vote-h">Vote for the next map</div>
+      <div class="map-vote-options">
+        {vote.options.map((o, i) => (
+          <button
+            key={o.id}
+            class={`map-vote-option${vote.mine === i ? ' mine' : ''}`}
+            data-testid={`vote-${o.id}`}
+            onClick={() => voteBridge.vote(i)}
+          >
+            <kbd>{i + 1}</kbd>
+            <span class="map-vote-name">{o.name}</span>
+            <span class="map-vote-count">
+              {o.votes} {o.votes === 1 ? 'vote' : 'votes'}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

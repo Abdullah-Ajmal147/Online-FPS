@@ -2480,3 +2480,58 @@ body.headshot-flash::after {
   color: #8b949e;
   font-size: 12px;
 }
+
+/* Map vote on the results screen */
+.map-vote {
+  margin: 4px 0 12px;
+  text-align: center;
+}
+.map-vote-h {
+  margin-bottom: 6px;
+  color: #8b949e;
+  font:
+    700 11px system-ui,
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.map-vote-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.map-vote-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 4%);
+  color: inherit;
+  font:
+    600 14px system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.map-vote-option.mine {
+  border-color: #f2b51c;
+  background: rgb(242 181 28 / 14%);
+}
+.map-vote-option kbd {
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font:
+    700 12px ui-monospace,
+    monospace;
+}
+.map-vote-name {
+  flex: 1;
+  text-align: left;
+}
+.map-vote-count {
+  color: #8b949e;
+  font-size: 12px;
+}

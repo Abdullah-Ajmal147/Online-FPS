@@ -11,6 +11,7 @@ import {
   decodeEvents,
   decodeHello,
   decodeMatchInfo,
+  decodeVoteMap,
   decodeInputCmd,
   decodePing,
   decodeSnapshot,
@@ -18,6 +19,7 @@ import {
   encodeEvents,
   encodeHello,
   encodeMatchInfo,
+  encodeVoteMap,
   encodeInputCmd,
   encodePing,
   encodeSnapshot,
@@ -83,8 +85,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 16 (end-of-match awards in MatchInfo)', () => {
-    expect(PROTOCOL_VERSION).toBe(16);
+  it('is 17 (map vote: MatchInfo.vote and VoteMap)', () => {
+    expect(PROTOCOL_VERSION).toBe(17);
   });
 });
 
@@ -300,6 +302,7 @@ describe('MatchInfo', () => {
         { kind: 'longest' as const, player: 2, value: 48 },
         { kind: 'captures' as const, player: 1, value: 3 },
       ],
+      vote: { options: ['relay-yard', 'saltline-depot', 'alder-street'], counts: [2, 0, 5] },
     };
     expect(decodeMatchInfo(encodeMatchInfo(info))).toEqual(info);
   });
@@ -317,10 +320,20 @@ describe('MatchInfo', () => {
       points: [],
       players: [],
       awards: [],
+      vote: null,
     };
     expect(decodeMatchInfo(encodeMatchInfo(info)).secondsLeft).toBe(5);
     expect(() => decodeMatchInfo(new Uint8Array([9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow(
       RangeError,
     );
+  });
+});
+
+describe('VoteMap', () => {
+  it('is one byte, strictly checked', () => {
+    expect(decodeVoteMap(encodeVoteMap(2))).toBe(2);
+    expect(() => decodeVoteMap(new Uint8Array([9]))).toThrow(RangeError);
+    expect(() => decodeVoteMap(new Uint8Array([1, 0]))).toThrow(RangeError);
+    expect(() => decodeVoteMap(new Uint8Array([]))).toThrow(RangeError);
   });
 });

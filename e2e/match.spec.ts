@@ -40,6 +40,15 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
   const ended = await match();
   expect(ended!.players.reduce((n, p) => n + p.kills, 0)).toBeGreaterThan(0);
 
+  // Map vote: the rotation would go to Saltline Depot next; we vote (key 1) to stay on Relay
+  // Yard, and the server counts it.
+  const vote = page.getByTestId('map-vote');
+  await expect(vote).toContainText('Relay Yard');
+  await expect(vote).toContainText('Saltline Depot');
+  await page.keyboard.press('Digit1');
+  await expect(page.getByTestId('vote-relay-yard')).toHaveClass(/\bmine\b/);
+  await expect(page.getByTestId('vote-relay-yard')).toContainText('1 vote', { timeout: 3_000 });
+
   // The server reported the match to the API; our guest profile now has XP (≥ participation).
   const profile = () =>
     page.evaluate(async () => (await import('/src/store.ts')).getStatus().profile);
@@ -48,9 +57,9 @@ test('full match with bots: join, play a 45 s match, see results, next match sta
     .toBeGreaterThanOrEqual(150);
   expect((await profile())!.matches).toBe(1);
 
-  // After the results, a new match starts on the next map in the rotation, and we can move.
+  // After the results, a new match starts on the voted map, and we can move.
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).not.toBe('ended');
-  await expect.poll(mapName, { timeout: 10_000 }).toBe('Saltline Depot');
+  await expect.poll(mapName, { timeout: 10_000 }).toBe('Relay Yard');
   // Move once the new match is live (warm-up is short here, then the countdown freezes us).
   await expect.poll(async () => (await match())?.phase, { timeout: 20_000 }).toBe('live');
   const pos = () =>

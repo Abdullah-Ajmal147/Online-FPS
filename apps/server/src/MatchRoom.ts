@@ -33,6 +33,8 @@ import {
   decodeSetLoadout,
   encodeChat,
   decodeSnapshotAck,
+  decodeVoteMap,
+  MAX_VOTE_OPTIONS,
   encodeEvents,
   encodeHello,
   encodeMatchInfo,
@@ -259,7 +261,16 @@ export class MatchRoom extends Room {
       this.mapId,
     );
     this.match.isPrivate = this.isPrivateMatch;
-    this.match.onNextMatch = () => this.rotateMap();
+    this.match.onNextMatch = (voted) => this.rotateMap(voted);
+    // Map vote on the results screen: the whole rotation (at most MAX_VOTE_OPTIONS), when the
+    // room has more than one map.
+    this.match.voteSetup = () =>
+      this.rotation.length < 2
+        ? null
+        : {
+            options: this.rotation.slice(0, MAX_VOTE_OPTIONS),
+            defaultNext: this.rotation[(this.rotationIndex + 1) % this.rotation.length]!,
+          };
     this.match.onMatchEnd = (summary) => {
       // Phase 3 task 9: one JSON line per match, for logs and (Phase 4) the API.
       counters.matches.inc();
@@ -351,6 +362,23 @@ export class MatchRoom extends Room {
     });
 
     // Private matches: switch to the other team (at most every 2 s, only if it has room).
+    // Map vote (results screen only): one byte, the option index. Bots never vote.
+    this.onMessageBytes(MessageType.VoteMap, (client: Client, bytes: Uint8Array) => {
+      const seat = this.seats.get(client.sessionId);
+      const vote = this.match.mapVote;
+      if (!seat) return;
+      let option: number;
+      try {
+        option = decodeVoteMap(bytes);
+      } catch {
+        if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
+        return;
+      }
+      // Counted now; everyone sees it in the next MatchInfo (2 Hz), so spamming votes can't
+      // make the room broadcast more.
+      vote?.vote(seat.playerId, option);
+    });
+
     this.onMessageBytes(MessageType.SwitchTeam, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
       const now = performance.now();
@@ -549,10 +577,16 @@ export class MatchRoom extends Room {
     }
   }
 
-  /** Next map in the rotation (between matches): rebuild the world, tell every client. */
-  private rotateMap(): string {
+  /**
+   * Next map (between matches): the vote's winner, else the next in the rotation. Rebuild the
+   * world and tell every client.
+   */
+  private rotateMap(voted: string | null = null): string {
     if (this.rotation.length < 2) return this.mapId;
-    this.rotationIndex = (this.rotationIndex + 1) % this.rotation.length;
+    const votedIndex = voted ? this.rotation.indexOf(voted) : -1;
+    this.rotationIndex =
+      votedIndex >= 0 ? votedIndex : (this.rotationIndex + 1) % this.rotation.length;
+    if (this.rotation[this.rotationIndex] === this.mapId) return this.mapId; // voted to stay
     const next = maps[this.rotation[this.rotationIndex]!];
     if (!next) return this.mapId;
     this.mapId = next.id;
@@ -596,6 +630,7 @@ export class MatchRoom extends Room {
     if (seat) {
       this.match.playerLeaving(seat.playerId); // keeps their stats in this match's result
       this.sim.removePlayer(seat.playerId);
+      this.match.mapVote?.remove(seat.playerId);
     }
     this.seats.delete(client.sessionId);
     this.lag?.forget(client.sessionId);
