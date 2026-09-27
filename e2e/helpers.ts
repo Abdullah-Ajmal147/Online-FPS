@@ -1,4 +1,4 @@
-import { expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /** The game's status store, read in the page. */
 export const status = (page: Page) =>
@@ -8,7 +8,13 @@ export const status = (page: Page) =>
  * Open the game and press DEPLOY (the main menu joins nothing by itself), then wait until the
  * match connection is up. The click captures the mouse, so the menu closes, like for a player.
  */
-export async function deploy(page: Page, url = '/'): Promise<void> {
+export async function deploy(
+  page: Page,
+  url = '/',
+  opts: { soldierModels?: boolean } = {},
+): Promise<void> {
+  // Dev builds under automation draw simple soldiers unless asked (see soldier/assets.ts).
+  if (opts.soldierModels) await soldierModels(page);
   // A page error here would otherwise only show up as a timeout below.
   page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}\n${e.stack ?? ''}`));
   page.on('console', (m) => {
@@ -53,16 +59,9 @@ export async function pause(page: Page): Promise<void> {
   await expect(page.getByTestId('menu')).toBeVisible();
 }
 
-/**
- * A browser context for one of several players in the same test. Several players drawing
- * eleven animated soldier models each in one software-rendered browser is more than the test
- * machine can do in time, so these keep the simple soldiers (dev-only hook; the models have
- * their own tests in soldiers.spec.ts).
- */
-export async function playerContext(browser: Browser): Promise<BrowserContext> {
-  const context = await browser.newContext();
-  await context.addInitScript(() => {
-    (window as unknown as { __sentinelSimpleSoldiers: boolean }).__sentinelSimpleSoldiers = true;
+/** Draw the real soldier models in this page (automated tests use simple shapes otherwise). */
+export async function soldierModels(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    (window as unknown as { __sentinelSoldierModels: boolean }).__sentinelSoldierModels = true;
   });
-  return context;
 }

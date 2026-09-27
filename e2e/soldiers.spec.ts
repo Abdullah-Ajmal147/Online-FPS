@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { deploy } from './helpers.ts';
 
 /**
  * Soldier models (the dev-only model lab, /lab.html): "hit where you see". The server's
@@ -58,5 +59,26 @@ test('first-person arms and weapon models render without errors', async ({ page 
       },
     );
   }
+  expect(errors).toEqual([]);
+});
+
+test('a bot match with the soldier models: models drawn, no page errors', async ({ page }) => {
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await deploy(page, '/?server=http://localhost:2569', { soldierModels: true });
+  // Bots are near and drawn; give the models time to load and replace the simple shapes.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __sentinelRemotes: () => number[][] }).__sentinelRemotes()
+              .length,
+        ),
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThan(0);
+  await page.waitForTimeout(8000);
   expect(errors).toEqual([]);
 });

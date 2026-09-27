@@ -22,13 +22,15 @@ export const WEAPON_MODEL_IDS = ['rifle', 'smg', 'shotgun', 'marksman', 'sidearm
 let loading: Promise<SoldierAssets> | null = null;
 
 export function loadSoldierAssets(): Promise<SoldierAssets> {
-  // Test hook (dev builds only): browser tests that run several players in one software-
-  // rendered browser keep the simple soldiers; the models have their own tests.
+  // Browser tests (dev builds under automation) draw the simple soldiers unless a test asks for
+  // the models: CI machines render in software on two cores, where eleven animated models slow
+  // the page so much that timing-based gameplay checks fail. The models have their own tests.
+  const w = window as { __sentinelSimpleSoldiers?: boolean; __sentinelSoldierModels?: boolean };
   if (
     import.meta.env.DEV &&
-    (window as { __sentinelSimpleSoldiers?: boolean }).__sentinelSimpleSoldiers
+    (w.__sentinelSimpleSoldiers || (navigator.webdriver && !w.__sentinelSoldierModels))
   )
-    return Promise.reject(new Error('simple soldiers requested (test)'));
+    return Promise.reject(new Error('simple soldiers (automated test)'));
   loading ??= (async () => {
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     const get = (f: string) => loader.loadAsync(BASE + f);

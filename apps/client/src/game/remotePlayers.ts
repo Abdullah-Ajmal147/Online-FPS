@@ -61,7 +61,12 @@ export class RemotePlayers {
       .then((a) => {
         this.assets = a;
       })
-      .catch((e: unknown) => console.warn('[soldiers] models unavailable, using simple shapes', e));
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        // Automated tests ask for simple soldiers on purpose: not worth a warning.
+        if (msg.includes('automated test')) console.info('[soldiers] simple shapes (test)');
+        else console.warn('[soldiers] models unavailable, using simple shapes', e);
+      });
   }
 
   /**

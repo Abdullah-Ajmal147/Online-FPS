@@ -7,6 +7,8 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { hitboxes } from '@sentinel/shared';
 import { movement } from '@sentinel/content';
 
+// The lab always draws the models (automated tests otherwise get simple soldiers).
+(window as { __sentinelSoldierModels?: boolean }).__sentinelSoldierModels = true;
 const params = new URLSearchParams(location.search);
 const info = document.getElementById('info')!;
 const renderer = new THREE.WebGPURenderer({ antialias: true });

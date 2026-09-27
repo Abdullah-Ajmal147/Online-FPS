@@ -1,13 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { deploy, pause, playerContext, status } from './helpers.ts';
+import { deploy, pause, status } from './helpers.ts';
 
 const myTeam = (p: Page) =>
   p.evaluate(async () => (await import('/src/store.ts')).getStatus().match?.myTeam ?? null);
 
 /** Phase 6 exit test: three people join a party by link and land on the same team. */
 test('three friends join by one invite link and play on the same team', async ({ browser }) => {
-  test.setTimeout(90_000);
-  const host = await (await playerContext(browser)).newPage();
+  test.setTimeout(150_000); // three players join one after another
+  const host = await (await browser.newContext()).newPage();
   await deploy(host, '/?server=http://localhost:2572');
   // The invite link (Squad screen) from the game's state.
   await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
@@ -18,7 +18,7 @@ test('three friends join by one invite link and play on the same team', async ({
 
   const friends: Page[] = [];
   for (let i = 0; i < 2; i++) {
-    const page = await (await playerContext(browser)).newPage();
+    const page = await (await browser.newContext()).newPage();
     await deploy(page, link);
     friends.push(page);
   }
@@ -53,15 +53,15 @@ async function say(p: Page, key: 'Enter' | 'KeyT', text: string) {
 test('chat: filtered by the server, team chat stays in the team, mute hides a player', async ({
   browser,
 }) => {
-  test.setTimeout(90_000);
-  const host = await (await playerContext(browser)).newPage();
+  test.setTimeout(150_000); // three players join one after another
+  const host = await (await browser.newContext()).newPage();
   await deploy(host, '/?server=http://localhost:2572');
   // The invite link (Squad screen) from the game's state.
   await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
   const link = (await status(host)).invite!;
-  const mate = await (await playerContext(browser)).newPage();
+  const mate = await (await browser.newContext()).newPage();
   await deploy(mate, link);
-  const enemy = await (await playerContext(browser)).newPage();
+  const enemy = await (await browser.newContext()).newPage();
   await deploy(enemy, '/?server=http://localhost:2572');
   await expect.poll(() => myTeam(mate)).toBe(await myTeam(host));
   await expect.poll(() => myTeam(enemy)).not.toBe(await myTeam(host));
@@ -91,11 +91,11 @@ test('report → admin shadow-ban → the player is matched in a separate pool',
   const admin = {
     authorization: `Basic ${Buffer.from('admin:e2e-admin-password').toString('base64')}`,
   };
-  const host = await (await playerContext(browser)).newPage();
+  const host = await (await browser.newContext()).newPage();
   await deploy(host, '/?server=http://localhost:2572');
   await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
   const hostCode = (await status(host)).profile!.code;
-  const mate = await (await playerContext(browser)).newPage();
+  const mate = await (await browser.newContext()).newPage();
   await deploy(mate, (await status(host)).invite!);
 
   // The teammate reports the host from the pause menu (Squad screen).
