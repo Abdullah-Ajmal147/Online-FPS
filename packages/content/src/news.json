@@ -19,8 +19,8 @@
       "date": "2026-09-27",
       "title": "Domination fix",
       "notes": [
-        "Domination ended far too fast: held nodes scored every second, so a team could reach 200 in about a minute. Each held node now scores 1 point every 5 seconds; a match lasts minutes and kills matter.",
-        "The score bar says what the target is: \"first to 200 points\" or \"first to 75 kills\"."
+        "Domination: held nodes score 1 point every 10 seconds (was every second, then 5), and kills score 2. Standing on nodes alone no longer races to 200 in a few minutes.",
+        "The score bar says what the target is (\"first to 200 points\" / \"first to 75 kills\") and, in Domination, how points are made."
       ]
     },
     {

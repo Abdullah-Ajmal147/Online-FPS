@@ -1,3 +1,4 @@
+import { modes } from '@sentinel/content';
 import { useEffect, useState } from 'preact/hooks';
 import type { MatchHud } from '../store.ts';
 import { useStatus } from './Hud.tsx';
@@ -59,6 +60,12 @@ function ScoreBar({ m }: { m: MatchHud }) {
       <span class={`sb-score ${TEAM_CLASS[enemy]}`}>{m.scores[1]}</span>
       <div class="sb-limit">
         first to {m.scoreLimit} {m.points.length > 0 ? 'points' : 'kills'}
+        {m.points.length > 0 && (
+          <span class="sb-rule">
+            node +1 / {modes[m.mode]?.capture?.scoreIntervalSeconds ?? 10} s · kill +
+            {modes[m.mode]?.capture?.scorePerKill ?? 0}
+          </span>
+        )}
         {m.private && (
           <span class="private-tag" data-testid="private-tag">
             PRIVATE

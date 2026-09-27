@@ -212,7 +212,7 @@ describe('Domination (Phase 8)', () => {
   }
   const point = (m: Domination, id: string) => m.points().find((p) => p.id === id)!;
 
-  it('a lone team captures a point in 5 s, then scores 1 point every 5 s for it', () => {
+  it('a lone team captures a point in 5 s, then scores 1 point per interval for it', () => {
     const { a, b, mode, put, run } = setup();
     put(a, 'A');
     put(b, null);
@@ -221,7 +221,8 @@ describe('Domination (Phase 8)', () => {
     run(0.6);
     expect(point(mode, 'A').owner).toBe(0);
     const before = mode.teamScores()[0];
-    run(20);
+    const every = dom.capture!.scoreIntervalSeconds;
+    run(every * 4);
     const gained = mode.teamScores()[0] - before;
     expect(gained).toBeGreaterThanOrEqual(3);
     expect(gained).toBeLessThanOrEqual(5);
@@ -269,9 +270,10 @@ describe('Domination (Phase 8)', () => {
     const { mode } = setup();
     mode.onKill(0, 1);
     mode.onKill(1, 1); // team kill / suicide: nothing
-    expect(mode.teamScores()).toEqual([1, 0]);
+    const perKill = dom.capture!.scorePerKill;
+    expect(mode.teamScores()).toEqual([perKill, 0]);
     expect(mode.winnerByScore()).toBeNull();
-    for (let i = 0; i < 199; i++) mode.onKill(0, 1);
+    for (let i = 1; i < Math.ceil(dom.scoreLimit / perKill); i++) mode.onKill(0, 1);
     expect(mode.winnerByScore()).toBe(0);
   });
 
