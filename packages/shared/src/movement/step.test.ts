@@ -50,6 +50,15 @@ describe('ground movement', () => {
     expect(Math.abs(sim.state.position[2])).toBeLessThan(1e-3);
   });
 
+  it('steers while sprinting: turning the view turns the run within a fraction of a second', async () => {
+    const sim = await createSim([0, 0, 15], { map: flatMap() });
+    sim.run(TPS / 2, { buttons: Forward | Sprint, yaw: 0 }); // full sprint towards -Z
+    sim.run(TPS / 5, { buttons: Forward | Sprint, yaw: 16384 }); // quarter turn left: -X
+    const [vx, , vz] = sim.state.velocity;
+    expect(vx).toBeLessThan(-0.95 * tuning.sprintSpeed);
+    expect(Math.abs(vz)).toBeLessThan(0.05 * tuning.sprintSpeed);
+  });
+
   it('can walk at a shallow angle (small sideways component is not lost)', async () => {
     const yaw = 200; // ≈ 1.1° left of -Z
     const sim = await createSim([0, 0, 15], { map: flatMap(), yaw });

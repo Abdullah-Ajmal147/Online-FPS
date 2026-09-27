@@ -3,7 +3,7 @@ import { Button, MAX_PITCH, TICK_DT, pitchToRadians } from '@sentinel/shared';
 import { DEFAULT_SETTINGS } from '../settings.ts';
 import { advanceFixedStep, MAX_FRAME_SECONDS } from '../game/fixedStep.ts';
 import { verticalFovDegrees } from '../camera.ts';
-import { buttonsFromKeys } from './keys.ts';
+import { buttonsFromKeys, keyTurn } from './keys.ts';
 import { applyLook } from './look.ts';
 
 const B = DEFAULT_SETTINGS.bindings;
@@ -85,5 +85,20 @@ describe('verticalFovDegrees', () => {
 
   it('shrinks as the screen gets wider', () => {
     expect(verticalFovDegrees(90, 21 / 9)).toBeLessThan(verticalFovDegrees(90, 16 / 9));
+  });
+});
+
+describe('keyTurn', () => {
+  const b = DEFAULT_SETTINGS.bindings;
+  it('turns left with ArrowLeft and right with ArrowRight at 180°/s', () => {
+    expect(keyTurn(new Set(['ArrowLeft']), b, 1)).toBeCloseTo(Math.PI, 10);
+    expect(keyTurn(new Set(['ArrowRight']), b, 0.5)).toBeCloseTo(-Math.PI / 2, 10);
+  });
+  it('works while running (W + Shift held) and cancels when both are held', () => {
+    expect(keyTurn(new Set(['KeyW', 'ShiftLeft', 'ArrowLeft']), b, 1)).toBeCloseTo(Math.PI, 10);
+    expect(keyTurn(new Set(['ArrowLeft', 'ArrowRight']), b, 1)).toBe(0);
+  });
+  it('turn keys are not movement buttons', () => {
+    expect(buttonsFromKeys(new Set(['ArrowLeft', 'ArrowRight']), b, false)).toBe(0);
   });
 });

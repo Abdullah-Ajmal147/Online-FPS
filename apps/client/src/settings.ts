@@ -15,6 +15,8 @@ export const ACTIONS = [
   'tactical',
   'primary',
   'secondary',
+  'turnLeft',
+  'turnRight',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -31,6 +33,8 @@ export const ACTION_LABELS: Record<Action, string> = {
   tactical: 'Smoke grenade',
   primary: 'Primary weapon',
   secondary: 'Sidearm',
+  turnLeft: 'Turn left',
+  turnRight: 'Turn right',
 };
 
 export const GRAPHICS_PRESETS = ['low', 'medium', 'high'] as const;
@@ -110,6 +114,9 @@ export const DEFAULT_SETTINGS: Settings = {
     tactical: 'KeyQ',
     primary: 'Digit1',
     secondary: 'Digit2',
+    // Turning with keys: works when the OS switches a laptop touchpad off while keys are held.
+    turnLeft: 'ArrowLeft',
+    turnRight: 'ArrowRight',
   },
 };
 

@@ -316,8 +316,8 @@ function PlayScreen({
         </div>
       </div>
       <p class="controls-hint">
-        WASD move · Mouse aim/fire · Shift sprint · C crouch/slide · G frag · Q smoke · Enter chat ·
-        Esc pause
+        WASD move · Mouse aim/fire · ← → turn · Shift sprint · C crouch/slide · G frag · Q smoke ·
+        Enter chat · Esc pause
       </p>
     </section>
   );

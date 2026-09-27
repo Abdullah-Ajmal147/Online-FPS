@@ -1,6 +1,12 @@
-import { Button, pitchFromRadians, yawFromRadians, type PlayerInput } from '@sentinel/shared';
+import {
+  Button,
+  TICK_DT,
+  pitchFromRadians,
+  yawFromRadians,
+  type PlayerInput,
+} from '@sentinel/shared';
 import type { Settings } from '../settings.ts';
-import { buttonsFromKeys } from './keys.ts';
+import { buttonsFromKeys, keyTurn } from './keys.ts';
 import { applyLook, type Look } from './look.ts';
 
 /**
@@ -84,6 +90,12 @@ export class InputCapture {
   sample(): PlayerInput {
     const s = this.settings();
     const sprintHeld = this.held.has(s.bindings.sprint);
+    // Called once per simulation tick, so the key turn advances by one tick (TICK_DT) here.
+    const turn = keyTurn(this.held, s.bindings, TICK_DT);
+    if (turn !== 0) {
+      const yaw = (this.look.yaw + turn) % (2 * Math.PI);
+      this.look = { ...this.look, yaw: yaw < 0 ? yaw + 2 * Math.PI : yaw };
+    }
     return {
       buttons:
         buttonsFromKeys(this.held, s.bindings, s.toggleSprint ? this.sprintLatched : sprintHeld) |
