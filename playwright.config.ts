@@ -19,7 +19,8 @@ export default defineConfig({
   timeout: 30_000,
   // Each page draws 3D in software (no GPU in headless Chrome), with sound: more than ~4 at once
   // oversubscribes a 14-core machine (load 25+) and tests start missing their timings.
-  workers: process.env.CI ? 2 : 4,
+  // CI: one test at a time per runner (five shards run side by side); see ci.yml.
+  workers: process.env.CI ? 1 : 4,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: 'http://localhost:5173' },
