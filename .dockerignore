@@ -5,3 +5,7 @@ data
 playwright-report
 test-results
 **/.vite
+assets-src
+# The asset pipeline (sharp, gltf-transform) is a dev tool; its output is already in
+# apps/client/public/assets.
+tools/assets

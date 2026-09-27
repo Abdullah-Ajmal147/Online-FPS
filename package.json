@@ -18,7 +18,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "bots": "pnpm --filter @sentinel/bots start",
-    "size": "node scripts/size-budget.mjs"
+    "size": "node scripts/size-budget.mjs",
+    "assets": "pnpm --filter @sentinel/assets assets"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

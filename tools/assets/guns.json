@@ -1,0 +1,7 @@
+{
+  "rifle": { "source": "_Assault_Rifle__fpLucho45C.glb", "length": 0.88 },
+  "smg": { "source": "_Submachine_Gun__7ehatxr7FY.glb", "length": 0.6 },
+  "shotgun": { "source": "_Shotgun__DcNE0HVdW8.glb", "length": 1.0 },
+  "marksman": { "source": "_Sniper_Rifle__i65hEldsw6.glb", "length": 1.12 },
+  "sidearm": { "source": "_Pistol__52kQzphmeF.glb", "length": 0.2 }
+}

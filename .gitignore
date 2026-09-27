@@ -11,3 +11,4 @@ test-results/
 data/
 dist-crazygames/
 /_*.mjs
+/assets-src/
