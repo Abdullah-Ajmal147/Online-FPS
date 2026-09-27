@@ -500,6 +500,23 @@ Done so far:
 Learned: changing Vite's `optimizeDeps` while the dev server runs leaves stale pre-bundles
 (504 "Outdated Optimize Dep", blank page) until it is restarted.
 
+## v2 work, 2026-09-27
+
+- New map **Alder Street** (harbour town): enterable two-storey brick houses (doors, windows on
+  both floors, stairs, pitched tile roofs), cobbled main street with cars, fountain square (B),
+  back alleys (A, C). Generated from `tools/maps/alder-street.mjs` (one half, mirrored: fair).
+- **Map choice** on the Play screen (Any / each map); Quick Play rooms matched per map.
+- New guns **Varga 47** (AK-style rifle, level 7) and **Marlowe Sawn-off** (secondary shotgun,
+  level 9); Kestrel AR on its own modern model; weapon models chosen per weapon.
+- **Sniper scope** (4×, scope view) and a **headshot moment** (zoom punch, flash, sound).
+- Graphics: surface themes per map (yard / depot / town), light from the sky and bloom on
+  Medium/High, container trim, name tags no longer overlap, sniper grip fixed.
+- Tests: automated browsers default to the Low preset and simple soldiers (CI renders in
+  software); CI runs 5 shards, one test at a time each.
+
+Learned: overlapping wall openings (a door under a window) need column-wise cutting; edits by
+exact-text replace fail silently after Prettier reflows a file — always assert the match.
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:
