@@ -35,11 +35,10 @@ const NATIVE_SPEED: Record<string, number> = {
   Sprint_Loop: 6.2,
   Crouch_Fwd_Loop: 1.25,
 };
-const ARM_OR_HAND = /^(clavicle|upperarm|lowerarm|hand|index|middle|ring|pinky|thumb)_/;
 const FINGER = /^(index|middle|ring|pinky|thumb)_/;
 
 interface PreparedClips {
-  /** Locomotion without arm tracks (the arms follow the weapon). */
+  /** Locomotion without finger tracks (the fingers keep the grip pose). */
   loco: Map<string, THREE.AnimationClip>;
   /** Static finger grip, from the pistol pose. */
   grip: THREE.AnimationClip;
@@ -68,7 +67,9 @@ function prepareClips(assets: SoldierAssets): PreparedClips {
       new THREE.AnimationClip(
         name,
         c.duration,
-        c.tracks.filter((t) => !ARM_OR_HAND.test(boneOf(t))),
+        // Fingers come from the grip pose. Arms stay: the weapon IK overrides them, and they
+        // are the natural fallback while a soldier has no weapon drawn yet.
+        c.tracks.filter((t) => !FINGER.test(boneOf(t))),
       ),
     );
   }
@@ -88,7 +89,7 @@ function prepareClips(assets: SoldierAssets): PreparedClips {
       }),
   );
   const fall = clip('Jump_Loop');
-  fall.tracks = fall.tracks.filter((t) => !ARM_OR_HAND.test(boneOf(t)));
+  fall.tracks = fall.tracks.filter((t) => !FINGER.test(boneOf(t)));
   prepared = { loco, grip, fall, death: clip('Death01'), handOffset: null };
   return prepared;
 }
@@ -422,7 +423,7 @@ export class SoldierRig {
     this.weapon?.removeFromParent();
   }
 
-  update(pose: RemotePose, dt: number, detail: boolean): void {
+  update(pose: RemotePose, dt: number): void {
     const [x, y, z] = pose.position;
     this.root.position.set(x, y, z);
     // The model faces +Z; yaw 0 faces -Z.
@@ -523,7 +524,8 @@ export class SoldierRig {
       rotateWorld(pelvis, qHips.setFromAxisAngle(UP, this.legYaw), this.upperChain);
       rotateWorld(spine1, qHips.setFromAxisAngle(UP, -this.legYaw), this.spineChain);
     }
-    if (!detail) return; // far away: legs only, no arm IK
+    // Always, at every distance: the head must sit on its hitbox for long shots too, and the
+    // arms hold the weapon (the whole pass costs ~0.07 ms per soldier).
     this.aimUpperBody(pose, dt);
   }
 

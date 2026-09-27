@@ -175,7 +175,6 @@ if (view === 'hold') {
           team: 0,
         },
         dt,
-        true,
       );
     }
   }
@@ -184,7 +183,7 @@ if (view === 'hold') {
     const dx = x - rig.root.position.x;
     rig.root.position.x += dx;
     rig.root.position.z = 0;
-    rig.update({ position: [x, 0, 0], yaw, pitch, crouching: crouch, alive, team: 0 }, 0, true);
+    rig.update({ position: [x, 0, 0], yaw, pitch, crouching: crouch, alive, team: 0 }, 0);
   }
   lines.push(`hold: pitch ${pitch} speed ${speed} crouch ${crouch}`);
   const hh = (crouch ? movement.crouchHeight : movement.standingHeight) * 0.9;
@@ -208,7 +207,6 @@ if (view === 'bench') {
     r.setWeapon((['rifle', 'smg', 'shotgun', 'marksman', 'sidearm'] as const)[i % 5]!);
     return r;
   });
-  const detail = params.get('detail') !== '0';
   const frames = 600;
   const t0 = performance.now();
   for (let f = 0; f < frames; f++) {
@@ -224,12 +222,11 @@ if (view === 'bench') {
           team: i % 2,
         },
         1 / 60,
-        detail,
       );
     });
   }
   const ms = (performance.now() - t0) / frames;
-  lines.push(`bench: 11 soldiers, ${ms.toFixed(3)} ms per frame (detail ${detail})`);
+  lines.push(`bench: 11 soldiers, ${ms.toFixed(3)} ms per frame`);
 }
 
 if (view === 'stress') {
@@ -271,7 +268,6 @@ if (view === 'stress') {
           team: i % 2,
         },
         1 / 60,
-        true,
       ),
     );
   step(0);

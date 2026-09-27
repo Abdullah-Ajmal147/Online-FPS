@@ -1099,7 +1099,6 @@ export async function startGame(
     // Remote players: drawn in the past, between two snapshots we already have.
     if (serverNow !== null && !replaying) {
       const renderTick = serverNow - interpDelay.ticks;
-      remotePlayers.viewer.copy(camera.position);
       remotePlayers.beginFrame();
       for (const [id, buf] of remoteBuffers) {
         const pose = buf.sample(renderTick);

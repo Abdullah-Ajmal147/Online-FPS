@@ -28,7 +28,10 @@ export function loadSoldierAssets(): Promise<SoldierAssets> {
   const w = window as { __sentinelSimpleSoldiers?: boolean; __sentinelSoldierModels?: boolean };
   if (
     import.meta.env.DEV &&
-    (w.__sentinelSimpleSoldiers || (navigator.webdriver && !w.__sentinelSoldierModels))
+    (w.__sentinelSimpleSoldiers ||
+      (navigator.webdriver &&
+        !w.__sentinelSoldierModels &&
+        !new URLSearchParams(location.search).has('models')))
   )
     return Promise.reject(new Error('simple soldiers (automated test)'));
   loading ??= (async () => {

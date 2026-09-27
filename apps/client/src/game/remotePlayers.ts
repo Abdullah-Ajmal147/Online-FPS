@@ -40,13 +40,9 @@ interface Drawn {
 export class RemotePlayers {
   /** Soldiers cast shadows only where shadows are redrawn every frame (High). */
   static castShadows = true;
-  /** Beyond this distance soldiers animate legs only (no aim or arm IK): too small to see. */
-  static detailDistance = 35;
 
   private drawn = new Map<number, Drawn>();
   private assets: SoldierAssets | null = null;
-  /** Camera position, for the level of detail. */
-  readonly viewer = new THREE.Vector3();
 
   /** Model soldiers built this frame (swapping 11 at once would be one long frame). */
   private builtThisFrame = 0;
@@ -131,8 +127,7 @@ export class RemotePlayers {
     const flashing = performance.now() < d.flashUntil;
     if (d.rig) {
       d.rig.visible = true;
-      const near = d.rig.root.position.distanceTo(this.viewer) < RemotePlayers.detailDistance;
-      d.rig.update(pose, frameSeconds, near);
+      d.rig.update(pose, frameSeconds);
       for (const m of d.rig.model.flashMats) m.emissiveIntensity = flashing ? 1.2 : 0;
       return;
     }
