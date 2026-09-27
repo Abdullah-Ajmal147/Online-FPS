@@ -517,6 +517,49 @@ Learned: changing Vite's `optimizeDeps` while the dev server runs leaves stale p
 Learned: overlapping wall openings (a door under a window) need column-wise cutting; edits by
 exact-text replace fail silently after Prettier reflows a file — always assert the match.
 
+## v2 work, 2026-09-27 (continued)
+
+Owner reports and requests, all shipped (patches 0.9.1–0.9.4):
+
+- **Domination scoring** (report: "one kill, but 200"): held nodes scored every second. Now
+  1 point per node every 10 s, kills 2 (`scoreIntervalSeconds` in mode data). The score bar
+  states the rule, "+2 kill" / "+1 node" pops up when a team scores, and the scoreboard splits
+  each team's points into kills and nodes. Checked live: no spawn is near a node.
+- **Can't turn while running**: not a game bug (a sim test proves sprint steers); laptops turn
+  the touchpad off while keys are held. Arrow keys turn (rebindable, 180°/s).
+- **Mantle** (Jump at 0.5–1.3 m cover while moving forward) and **tactical sprint**
+  (double-tap sprint: 9 m/s for 3 s, 4 s cooldown), in the shared sim with replay and
+  reconciliation tests; PROTOCOL_VERSION 14. Netcode review: the push keeps the direction it
+  started in, autostep is off while mantling; toggle sprint handles double taps.
+- **Help screen** in the main menu: basics, the player's own controls, modes and scoring,
+  movement, weapons and unlocks, XP, streaks, ten common problems, and a line to the
+  developer (feedback form). Every number comes from content data.
+- **Zoom while aiming**: the wheel steps through each weapon's `zoomLevels` (rifles up to 2×,
+  marksman 4/6/8×); mouse look slows by 1/magnification.
+- **Kill-streak rewards** (server-decided, `streaks.json`): 3 kills radar sweep for the team,
+  5 resupply, 7 armor (0.7× damage, 10 s). Radar is an earned exception to server-side
+  visibility, rounded to 2 m (ADR 0012). PROTOCOL_VERSION 15.
+- **End-of-match awards**: Sharpshooter, Unstoppable, Long shot, Objective (Domination
+  captures, now credited to everyone on a node when it flips), Grenadier. PROTOCOL_VERSION 16.
+- **Map vote** on the results screen (keys 1–3): most votes wins, ties keep the rotation.
+  Strict one-byte `VoteMap` message, in the NETCODE audit. PROTOCOL_VERSION 17.
+- **Moderation fix**: the join waits up to 5 s for a player's moderation status (was 1.5 s:
+  on a slow API a shadow-banned player joined the normal pool).
+
+Learned:
+
+- CI runners render in software and are slow: tests fail on waits, not logic. Close pages a
+  test no longer needs; give room-creating steps 60 s. A shadow-ban covers the player's IP,
+  and every test browser is 127.0.0.1: a test that bans must lift it in `finally`, or its
+  retry inherits the ban.
+- Adding a test file reshuffles Playwright shards; a new failure in an old test after that
+  is usually the new neighbours, but check it once serially before calling it flaky.
+- Editing shared files while the local browser suite runs makes Vite reload the test pages
+  ("execution context was destroyed"): don't edit during a run.
+- A headless bot client (`tools/bots`) is the reliable way to measure the live server (speeds,
+  corrections); remember matches freeze between rounds.
+- Server log `warn` goes to stdout, which Playwright doesn't show for its web servers.
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:
@@ -529,9 +572,10 @@ Needs the owner:
 Now possible on the live server: two humans + 10 bots over the internet, 10 bot matches on
 the real server, a restore-from-backup drill there.
 
-Technical, not blocked: overlapping name tags; the ~30 s first match after a server restart
+Technical, not blocked: the ~30 s first match after a server restart
 (bot navigation is not the cause: 0.36 s, now built at startup); cross-browser determinism
 (Firefox/WebKit); WebGPU path never seen running; rewind cap tuning for high ping; reload and
-weapon-switch animations for other players (not in snapshots today).
+weapon-switch animations for other players (not in snapshots today); votes are per seat (a
+guest with several tabs votes once per tab).
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
