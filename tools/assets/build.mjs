@@ -204,4 +204,28 @@ for (const [id, spec] of Object.entries(GUNS)) {
   await write(doc, `weapons/${id}.glb`);
 }
 
+// ---- Map surfaces: ambientCG textures (CC0), one set per map material ----------------------
+// Colour (sRGB), normal (OpenGL convention, as glTF/three.js expect) and roughness, as WebP.
+const SURFACES = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'surfaces.json'), 'utf8'),
+);
+for (const [surface, spec] of Object.entries(SURFACES)) {
+  const dir = join(SRC, 'textures', spec.source);
+  const out = join(OUT, 'textures', surface);
+  mkdirSync(out, { recursive: true });
+  let bytes = 0;
+  for (const [map, suffix, quality] of [
+    ['color', 'Color', 82],
+    ['normal', 'NormalGL', 90],
+    ['rough', 'Roughness', 80],
+  ]) {
+    const file = join(out, `${map}.webp`);
+    let img = sharp(join(dir, `${spec.source}_1K-JPG_${suffix}.jpg`)).resize(spec.size, spec.size);
+    if (map === 'rough') img = img.greyscale();
+    await img.webp({ quality }).toFile(file);
+    bytes += statSync(file).size;
+  }
+  console.log(`${('textures/' + surface).padEnd(28)} ${(bytes / 1024).toFixed(0).padStart(6)} KB`);
+}
+
 void Document;

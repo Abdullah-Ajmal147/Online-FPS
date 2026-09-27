@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => ({
       'three/addons/utils/SkeletonUtils.js',
       'three/addons/utils/BufferGeometryUtils.js',
       'three/addons/geometries/RoundedBoxGeometry.js',
+      'three/addons/objects/SkyMesh.js',
       '@colyseus/sdk',
       // Dependencies of our packages, not of the client itself: named through the package that
       // has them, or Vite can't find them here and reloads the page on first use instead.

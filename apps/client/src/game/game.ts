@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
 import {
   MAP_ROTATION,
   modes,
@@ -39,6 +40,7 @@ import {
   currentSpread,
   directionFromAngles,
   expandMap,
+  type Solid,
   eyePosition,
   initPhysics,
   rayPlayer,
@@ -52,7 +54,7 @@ import {
 import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees } from '../camera.ts';
 import { InputCapture } from '../input/capture.ts';
-import { buildMapMeshes } from '../map.ts';
+import { buildMapMeshes, loadSurfaces, type Surfaces } from '../map.ts';
 import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
@@ -107,6 +109,9 @@ export async function startGame(
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
+  // Filmic tone mapping: bright sun and sky roll off like a real camera instead of clipping.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.58; // the physical sky is scaled for ~0.5; lights doubled
   await renderer.init();
   const backend = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
     ? 'WebGPU'
@@ -123,6 +128,11 @@ export async function startGame(
   sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35, far: 100 });
   scene.add(sun);
+  // A real sky: sun, atmospheric haze and clouds, drawn at the far plane (always behind the map).
+  const sky = new SkyMesh();
+  sky.scale.setScalar(200);
+  sky.frustumCulled = false;
+  scene.add(sky);
 
   // Shadows are set once, before the first frame: three's WebGPU shadow node does not survive
   // having its shadow map switched off/on or resized later (null depth texture crash).
@@ -223,21 +233,42 @@ export async function startGame(
       weapon: createWeaponState(simCtx.loadout),
     };
   };
-  function loadMap(id: string): void {
-    const next = maps[id];
-    if (!next) throw new Error(`unknown map "${id}"`);
-    map = next;
-    const solids = expandMap(map);
+  // Real map surfaces load in the background from the start; until they are here the map is
+  // drawn in flat colours, then redrawn once (in the menu, before any match: no mid-fight hitch).
+  let surfaces: Surfaces | null = null;
+  let mapSolids: Solid[] = [];
+  function showMap(): void {
     if (mapMeshes) {
       scene.remove(mapMeshes);
       mapMeshes.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });
     }
-    const oldWorld = moveCtx?.world;
-    mapMeshes = buildMapMeshes(solids);
+    mapMeshes = buildMapMeshes(mapSolids, surfaces);
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
+    sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
+  }
+  loadSurfaces()
+    .then(async (s) => {
+      surfaces = s;
+      // Set the materials up off the main path before they are first drawn.
+      const onePerMaterial = mapSolids.filter(
+        (x, i, all) => all.findIndex((y) => y.material === x.material) === i,
+      );
+      const probe = buildMapMeshes(onePerMaterial, s);
+      await renderer.compileAsync(probe, camera, scene).catch(() => undefined);
+      if (mapSolids.length) showMap();
+    })
+    .catch((e: unknown) => console.warn('[map] surface textures unavailable, flat colours', e));
+  function loadMap(id: string): void {
+    const next = maps[id];
+    if (!next) throw new Error(`unknown map "${id}"`);
+    map = next;
+    const solids = expandMap(map);
+    mapSolids = solids;
+    const oldWorld = moveCtx?.world;
+    showMap();
     grenadeView.clear();
     pointMarkers.setMap(map, modes['domination']?.capture?.radius ?? 4);
     applyLighting(map.lighting);
@@ -270,6 +301,10 @@ export async function startGame(
     sun.color.set(l.sun);
     sun.intensity = l.sunIntensity;
     sun.position.set(...l.sunPosition);
+    sky.sunPosition.value.set(...l.sunPosition).normalize();
+    sky.turbidity.value = l.turbidity;
+    sky.rayleigh.value = l.rayleigh;
+    sky.cloudCoverage.value = l.clouds;
   }
 
   // Main-menu backdrop until we join: the first map of the rotation, seen from above.
@@ -951,6 +986,7 @@ export async function startGame(
       camera.lookAt(0, 1, 0);
       viewmodel.root.visible = false;
       effects.update(frame);
+      sky.position.copy(camera.position);
       renderer.render(scene, camera);
       return;
     }
@@ -1077,6 +1113,7 @@ export async function startGame(
     if (!replaying) updateAimAndTags();
     feedback.update(camera, frame);
     effects.update(frame);
+    sky.position.copy(camera.position);
     renderer.render(scene, camera);
 
     // HUD values that change every frame: ammo/reload. Push to the store only when changed.
@@ -1188,6 +1225,10 @@ const LIGHTING: Record<
     sun: number;
     sunIntensity: number;
     sunPosition: [number, number, number];
+    /** Sky: haze (2 clear – 10 hazy), blue scattering, cloud cover 0–1. */
+    turbidity: number;
+    rayleigh: number;
+    clouds: number;
   }
 > = {
   day: {
@@ -1196,10 +1237,13 @@ const LIGHTING: Record<
     fogFar: 160,
     hemiSky: 0xe8f3ff,
     hemiGround: 0x5a5048,
-    hemiIntensity: 1.7,
+    hemiIntensity: 3.2,
     sun: 0xfff4e0,
-    sunIntensity: 2.6,
+    sunIntensity: 5.4,
     sunPosition: [20, 40, 15],
+    turbidity: 2.5,
+    rayleigh: 1.2,
+    clouds: 0.35,
   },
   dusk: {
     sky: 0xe39a6b,
@@ -1207,10 +1251,13 @@ const LIGHTING: Record<
     fogFar: 150,
     hemiSky: 0xffd2b0,
     hemiGround: 0x4a4050,
-    hemiIntensity: 1.7,
+    hemiIntensity: 3.2,
     sun: 0xff9a5c,
-    sunIntensity: 2.2,
+    sunIntensity: 4.6,
     sunPosition: [35, 14, -20],
+    turbidity: 6,
+    rayleigh: 2.4,
+    clouds: 0.5,
   },
 };
 

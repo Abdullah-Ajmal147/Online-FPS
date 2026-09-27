@@ -1,0 +1,8 @@
+{
+  "floor": { "source": "Asphalt026C", "size": 1024 },
+  "wall": { "source": "Concrete031", "size": 512 },
+  "prop": { "source": "CorrugatedSteel005", "size": 512 },
+  "ramp": { "source": "DiamondPlate008C", "size": 512 },
+  "stairs": { "source": "MetalWalkway009", "size": 512 },
+  "platform": { "source": "MetalPlates013", "size": 512 }
+}
