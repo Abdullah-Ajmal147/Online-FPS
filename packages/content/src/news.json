@@ -15,6 +15,19 @@
   ],
   "patches": [
     {
+      "version": "0.9",
+      "date": "2026-09-27",
+      "title": "Alder Street and a real arsenal",
+      "notes": [
+        "New map: Alder Street, a harbour town. Walk into the houses, hold the upstairs windows, fight over the fountain square.",
+        "Choose your map on the Play screen (or Any map).",
+        "Real soldiers: Aegis and Ember uniforms, full-body animation, and the head you see is the head you hit.",
+        "New guns: Varga 47 (hard-hitting rifle, level 7) and Marlowe Sawn-off (secondary shotgun, level 9). Every gun has a real model.",
+        "Halberd MR: a real 4x scope. Headshot kills now land with a flash and their own sound.",
+        "Maps look real: textured streets, walls and containers under a proper sky; Saltline Depot got its own look."
+      ]
+    },
+    {
       "version": "0.8",
       "date": "2026-09-26",
       "title": "Domination",
