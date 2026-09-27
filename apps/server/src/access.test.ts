@@ -54,4 +54,23 @@ describe('access fetcher', () => {
     expect(() => parseAccess('x')).toThrow();
     expect(parseAccess({ level: 3, weaponKills: { a: -1, b: 2 } }).weaponKills).toEqual({ b: 2 });
   });
+
+  it('waits for a slow API (2 s) instead of letting a shadow-banned player into the normal pool', async () => {
+    const slow = createAccessFetcher({
+      url: 'http://api',
+      secret: 's',
+      fetchImpl: ((_url: string, init?: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('timeout')));
+          setTimeout(
+            () =>
+              resolve(
+                new Response(JSON.stringify({ level: 1, weaponKills: {}, status: 'shadow' })),
+              ),
+            2000,
+          );
+        })) as typeof fetch,
+    });
+    expect((await slow(GUEST, 'aaaaaaaaaaaaaaaa'))!.status).toBe('shadow');
+  }, 10_000);
 });

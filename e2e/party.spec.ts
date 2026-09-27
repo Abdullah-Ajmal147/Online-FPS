@@ -87,7 +87,7 @@ test('report → admin shadow-ban → the player is matched in a separate pool',
   browser,
   request,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000); // two players, a report, a leave and a rejoin: slow on CI runners
   const admin = {
     authorization: `Basic ${Buffer.from('admin:e2e-admin-password').toString('base64')}`,
   };

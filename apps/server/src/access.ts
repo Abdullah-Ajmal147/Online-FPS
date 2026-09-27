@@ -24,6 +24,14 @@ export function parseAccess(raw: unknown): Access {
 }
 
 /**
+ * How long a join waits for the API's answer. Generous on purpose: joining is a one-time wait,
+ * while giving up means the player joins with unknown moderation status (a shadow-banned
+ * player with no recent answer cached would land in the normal pool). 1.5 s was too short on
+ * a loaded machine (CI saw exactly that).
+ */
+export const ACCESS_TIMEOUT_MS = 5000;
+
+/**
  * Asks the API what a player has unlocked (level, weapon kills), signed with the server secret.
  * Returns null when it can't tell (no guest, API slow or down, bad answer): callers fall back
  * to a new player's unlocks on join (fail closed) and keep what they had on a refresh.
@@ -61,7 +69,7 @@ export function createAccessFetcher(opts: {
       const q = new URLSearchParams({ guest: guestId ?? '', ip: ipHashValue });
       const res = await doFetch(`${opts.url}/access?${q.toString()}`, {
         headers: serviceHeaders(opts.secret, 'access', `${guestId ?? ''}|${ipHashValue}`),
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 1500),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? ACCESS_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
       const access = parseAccess(await res.json());
