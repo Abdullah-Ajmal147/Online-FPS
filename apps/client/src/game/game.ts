@@ -309,6 +309,40 @@ export async function startGame(
     sky.turbidity.value = l.turbidity;
     sky.rayleigh.value = l.rayleigh;
     sky.cloudCoverage.value = l.clouds;
+    bakeSkyLight();
+  }
+
+  // Light from the sky: the sky (without its sun disc: no hard hot spots) rendered once into a
+  // pre-filtered environment map. Metal reflects it and every surface gets the sky's own
+  // colour as ambient light; the flat hemisphere light only fills in under it.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  let skyLight: THREE.RenderTarget | null = null;
+  function bakeSkyLight(): void {
+    const skyScene = new THREE.Scene();
+    const s = new SkyMesh();
+    s.scale.setScalar(50);
+    for (const k of [
+      'turbidity',
+      'rayleigh',
+      'mieCoefficient',
+      'mieDirectionalG',
+      'cloudCoverage',
+    ] as const)
+      s[k].value = sky[k].value;
+    s.sunPosition.value.copy(sky.sunPosition.value);
+    s.showSunDisc.value = 0;
+    skyScene.add(s);
+    try {
+      const next = pmrem.fromScene(skyScene, 0.02);
+      skyLight?.dispose();
+      skyLight = next;
+      scene.environment = next.texture;
+      scene.environmentIntensity = SKY_LIGHT;
+      hemi.intensity *= HEMI_UNDER_SKY_LIGHT;
+    } catch (e) {
+      console.warn('[lighting] sky light unavailable', e);
+    }
+    s.geometry.dispose();
   }
 
   // Main-menu backdrop until we join: the first map of the rotation, seen from above.
@@ -1215,6 +1249,10 @@ async function webgpuAvailable(timeoutMs = 2000): Promise<boolean> {
   }
 }
 
+/** How strong the sky's own light is, and how much of the flat fill light remains with it. */
+const SKY_LIGHT = 0.12;
+const HEMI_UNDER_SKY_LIGHT = 0.6;
+
 /** Sky, fog and light per map lighting preset (map data picks one). */
 const LIGHTING: Record<
   GameMap['lighting'],
@@ -1258,8 +1296,8 @@ const LIGHTING: Record<
     sun: 0xffb07c,
     sunIntensity: 4.6,
     sunPosition: [35, 14, -20],
-    turbidity: 6,
-    rayleigh: 2.4,
+    turbidity: 3.5,
+    rayleigh: 3,
     clouds: 0.5,
   },
 };
