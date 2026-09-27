@@ -6,6 +6,7 @@ test('Comms screen: patch notes, and feedback reaches the admin page', async ({
   page,
   request,
 }) => {
+  test.setTimeout(60_000); // several screens and an admin page, rendered in software
   await page.goto('/?server=http://localhost:2567');
   await page.getByTestId('nav-comms').click();
   await expect(page.getByTestId('patch-notes')).toContainText('Domination');
