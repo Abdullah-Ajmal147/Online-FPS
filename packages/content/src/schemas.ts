@@ -225,6 +225,11 @@ export const WeaponSchema = z
     reloadTime: z.number().positive().max(4.25),
     equipTime: z.number().positive().max(4.25),
     adsTime: z.number().positive().max(4.25),
+    /**
+     * Magnifications while aiming down sights, lowest first (1.25 = 1.25×). The mouse wheel
+     * steps through them while aiming. Visual only: the view zooms, the shot is the same.
+     */
+    zoomLevels: z.array(z.number().min(1).max(12)).min(1).max(4),
     spread: z.object({
       hip: Degrees,
       ads: Degrees,

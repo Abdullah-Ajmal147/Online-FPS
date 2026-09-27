@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Button, MAX_PITCH, TICK_DT, pitchToRadians } from '@sentinel/shared';
 import { DEFAULT_SETTINGS } from '../settings.ts';
 import { advanceFixedStep, MAX_FRAME_SECONDS } from '../game/fixedStep.ts';
-import { verticalFovDegrees } from '../camera.ts';
+import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { buttonsFromKeys, keyTurn } from './keys.ts';
 import { applyLook } from './look.ts';
 
@@ -100,5 +100,15 @@ describe('keyTurn', () => {
   });
   it('turn keys are not movement buttons', () => {
     expect(buttonsFromKeys(new Set(['ArrowLeft', 'ArrowRight']), b, false)).toBe(0);
+  });
+});
+
+describe('zoomedFovDegrees', () => {
+  it('is the same view at 1×, and makes things m times bigger at m×', () => {
+    expect(zoomedFovDegrees(90, 1)).toBeCloseTo(90, 10);
+    // 2× at 90°: tan(45°) = 1 → tan(half) = 0.5 → 53.13°.
+    expect(zoomedFovDegrees(90, 2)).toBeCloseTo(53.13, 2);
+    const tanHalf = (deg: number) => Math.tan((deg * Math.PI) / 360);
+    expect(tanHalf(90) / tanHalf(zoomedFovDegrees(90, 8))).toBeCloseTo(8, 10);
   });
 });

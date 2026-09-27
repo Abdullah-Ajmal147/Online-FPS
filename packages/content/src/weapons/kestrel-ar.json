@@ -21,6 +21,7 @@
   "reloadTime": 2.2,
   "equipTime": 0.45,
   "adsTime": 0.25,
+  "zoomLevels": [1.25, 1.6, 2],
   "spread": {
     "hip": 0.6,
     "ads": 0,

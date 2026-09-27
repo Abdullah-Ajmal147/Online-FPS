@@ -27,7 +27,11 @@ export function primerSteps(s: Pick<Settings, 'bindings' | 'mode'>): PrimerStep[
       keys: [b.forward, b.back, b.left, b.right],
     },
     { id: 'shoot', text: 'Aim with the mouse · left click to fire', mouse: [0] },
-    { id: 'ads', text: 'Hold right click to aim down sights', mouse: [2] },
+    {
+      id: 'ads',
+      text: 'Hold right click to aim down sights · mouse wheel zooms in and out',
+      mouse: [2],
+    },
     { id: 'reload', text: `${k(b.reload)} to reload`, keys: [b.reload] },
     {
       id: 'grenades',

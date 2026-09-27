@@ -5,14 +5,23 @@
   "slot": 0,
   "fireMode": "semi",
   "rpm": 240,
-  "damage": { "head": 90, "torso": 45, "limbs": 38 },
-  "falloff": { "start": 60, "end": 100, "minMultiplier": 0.9 },
+  "damage": {
+    "head": 90,
+    "torso": 45,
+    "limbs": 38
+  },
+  "falloff": {
+    "start": 60,
+    "end": 100,
+    "minMultiplier": 0.9
+  },
   "maxRange": 200,
   "magazine": 12,
   "reserve": 48,
   "reloadTime": 2.5,
   "equipTime": 0.55,
   "adsTime": 0.3,
+  "zoomLevels": [4, 6, 8],
   "spread": {
     "hip": 1.8,
     "ads": 0,

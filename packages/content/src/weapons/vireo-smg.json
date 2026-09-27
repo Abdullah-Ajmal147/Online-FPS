@@ -5,14 +5,23 @@
   "slot": 0,
   "fireMode": "auto",
   "rpm": 850,
-  "damage": { "head": 32, "torso": 20, "limbs": 16 },
-  "falloff": { "start": 12, "end": 30, "minMultiplier": 0.6 },
+  "damage": {
+    "head": 32,
+    "torso": 20,
+    "limbs": 16
+  },
+  "falloff": {
+    "start": 12,
+    "end": 30,
+    "minMultiplier": 0.6
+  },
   "maxRange": 100,
   "magazine": 32,
   "reserve": 128,
   "reloadTime": 1.9,
   "equipTime": 0.35,
   "adsTime": 0.18,
+  "zoomLevels": [1.2, 1.5],
   "spread": {
     "hip": 0.45,
     "ads": 0,

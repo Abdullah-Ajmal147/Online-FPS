@@ -1097,8 +1097,9 @@ function SettingsScreen({
             ))}
           </div>
           <p class="hint">
-            Mouse: left fire, right aim, wheel swap. Slide: sprint, then crouch. Double-tap sprint:
-            tactical sprint. Jump at a ledge: mantle. T: team chat. F3: network stats.{' '}
+            Mouse: left fire, right aim, wheel swap (zoom while aiming). Slide: sprint, then crouch.
+            Double-tap sprint: tactical sprint. Jump at a ledge: mantle. T: team chat. F3: network
+            stats.{' '}
             <button class="link" onClick={() => onSettings(DEFAULT_SETTINGS)}>
               Reset to defaults
             </button>

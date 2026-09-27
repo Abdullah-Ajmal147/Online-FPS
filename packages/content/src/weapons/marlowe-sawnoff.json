@@ -5,8 +5,16 @@
   "slot": 1,
   "fireMode": "semi",
   "rpm": 240,
-  "damage": { "head": 18, "torso": 15, "limbs": 12 },
-  "falloff": { "start": 4, "end": 12, "minMultiplier": 0.15 },
+  "damage": {
+    "head": 18,
+    "torso": 15,
+    "limbs": 12
+  },
+  "falloff": {
+    "start": 4,
+    "end": 12,
+    "minMultiplier": 0.15
+  },
   "maxRange": 30,
   "pellets": 8,
   "pelletSpread": 4.2,
@@ -15,6 +23,7 @@
   "reloadTime": 2.1,
   "equipTime": 0.35,
   "adsTime": 0.18,
+  "zoomLevels": [1.1, 1.25],
   "spread": {
     "hip": 1,
     "ads": 0.5,

@@ -24,6 +24,10 @@ export class InputCapture {
   private mouseButtons = 0;
   /** Selected weapon slot (keys 1/2, mouse wheel). */
   weaponSlot: 0 | 1 = 0;
+  /** Zoom steps asked for with the wheel while aiming (+ in, − out); the game consumes them. */
+  zoomSteps = 0;
+  /** Mouse-look multiplier set by the game: zoomed in, the view turns slower (same feel). */
+  lookScale = 1;
   private listeners: (() => void)[] = [];
 
   constructor(
@@ -39,7 +43,12 @@ export class InputCapture {
     this.on(document, 'mousemove', (e) => {
       if (!this.locked) return;
       const m = e as MouseEvent;
-      this.look = applyLook(this.look, m.movementX, m.movementY, this.settings().sensitivity);
+      this.look = applyLook(
+        this.look,
+        m.movementX,
+        m.movementY,
+        this.settings().sensitivity * this.lookScale,
+      );
     });
     if (import.meta.env.DEV) {
       // Dev/test only (stripped from production builds): lets Playwright aim and shoot
@@ -48,6 +57,8 @@ export class InputCapture {
         setLook: (yaw: number, pitch: number) => (this.look = { yaw, pitch }),
         setMouse: (fire: boolean, aim: boolean) =>
           (this.mouseButtons = (fire ? Button.Fire : 0) | (aim ? Button.Aim : 0)),
+        /** The mouse wheel while aiming (+ in, − out). */
+        zoom: (steps: number) => (this.zoomSteps += steps),
       };
     }
     this.on(document, 'mousedown', (e) => {
@@ -65,8 +76,11 @@ export class InputCapture {
       if (this.locked) e.preventDefault();
     });
     this.on(document, 'wheel', (e) => {
-      if (!this.locked || (e as WheelEvent).deltaY === 0) return;
-      this.weaponSlot = this.weaponSlot === 0 ? 1 : 0;
+      const dy = (e as WheelEvent).deltaY;
+      if (!this.locked || dy === 0) return;
+      // Aiming: the wheel zooms (up = in). Otherwise it swaps weapons.
+      if (this.mouseButtons & Button.Aim) this.zoomSteps += dy < 0 ? 1 : -1;
+      else this.weaponSlot = this.weaponSlot === 0 ? 1 : 0;
     });
     this.on(document, 'pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;

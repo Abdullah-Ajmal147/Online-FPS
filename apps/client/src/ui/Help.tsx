@@ -135,6 +135,10 @@ export function HelpGuide({
                 <td>Mouse wheel</td>
               </tr>
               <tr>
+                <td>Zoom in / out (while aiming)</td>
+                <td>Mouse wheel up / down</td>
+              </tr>
+              <tr>
                 <td>Chat to everyone / team</td>
                 <td>
                   {k('Enter')} / {k('KeyT')}
@@ -262,6 +266,7 @@ export function HelpGuide({
                 <th>Damage per hit (body / head)</th>
                 <th>Fire rate</th>
                 <th>Magazine</th>
+                <th>Zoom</th>
                 <th>Unlocks</th>
               </tr>
             </thead>
@@ -277,6 +282,7 @@ export function HelpGuide({
                   </td>
                   <td>{w.rpm} rpm</td>
                   <td>{w.magazine}</td>
+                  <td>{w.zoomLevels.map((z) => `${z}×`).join(' ')}</td>
                   <td>
                     {unlockLevel('weapons', w.id) <= 1
                       ? 'from the start'
@@ -291,7 +297,9 @@ export function HelpGuide({
               Headshots do the most damage on every weapon. Damage drops a little at long range.
             </li>
             <li>
-              Hip fire is for close range; aiming down sights tightens your spread. Snipers zoom in.
+              Hip fire is for close range; aiming down sights tightens your spread. While aiming,
+              the mouse wheel zooms in and out (the Zoom column), and the mouse slows down with the
+              zoom so small head adjustments are easy.
             </li>
             <li>
               Everyone carries a {equipment.frag.name.toLowerCase()} ({k(b.lethal)}) and a{' '}

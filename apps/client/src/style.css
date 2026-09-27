@@ -2394,3 +2394,25 @@ body.headshot-flash::after {
 .help-faq .faq p {
   margin: 8px 0 0;
 }
+
+/* Zoom level while aiming ("2×"), under the crosshair. */
+.zoom-level {
+  position: fixed;
+  left: 50%;
+  top: calc(50% + 34px);
+  transform: translateX(-50%);
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 45%);
+  color: #fff;
+  font:
+    700 12px ui-monospace,
+    monospace;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s linear;
+}
+.zoom-level.on {
+  opacity: 0.85;
+}

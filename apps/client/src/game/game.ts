@@ -54,7 +54,7 @@ import {
   type SimState,
 } from '@sentinel/shared';
 import { gameAudio } from '../audio/index.ts';
-import { verticalFovDegrees } from '../camera.ts';
+import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
 import { Connection } from '../net.ts';
@@ -206,6 +206,13 @@ export async function startGame(
   scopeEl.className = 'scope-overlay';
   scopeEl.dataset.testid = 'scope';
   canvas.after(scopeEl); // over the 3D view, under the HUD (health, ammo stay readable)
+  // Zoom level while aiming ("2×"), just under the crosshair.
+  const zoomEl = document.createElement('div');
+  zoomEl.className = 'zoom-level';
+  zoomEl.dataset.testid = 'zoom-level';
+  scopeEl.after(zoomEl);
+  /** Chosen zoom level per weapon slot (index into the weapon's zoomLevels). */
+  const zoomIndex: [number, number] = [0, 0];
 
   const camera = new THREE.PerspectiveCamera(70, 1, 0.02, 250);
   camera.rotation.order = 'YXZ'; // yaw first, then pitch: no roll creeping in
@@ -1138,17 +1145,32 @@ export async function startGame(
     applyGraphics();
     const spec = simCtx.loadout[w.slot];
     const ads = adsFraction(w, spec);
-    // Aiming zooms in a little; a marksman scope 4× (FOV × 0.25), with the scope view drawn
-    // over the screen once the rifle is nearly up (the rifle model is hidden behind it).
+    // Aiming zooms by the weapon's current zoom level (the wheel steps through its levels
+    // while aiming); a marksman scope draws the scope view over the screen once the rifle is
+    // nearly up (the rifle model is hidden behind it).
+    const levels = spec.def.zoomLevels;
+    const slotZoom = zoomIndex[w.slot];
+    zoomIndex[w.slot] = Math.max(0, Math.min(levels.length - 1, slotZoom + input.zoomSteps));
+    input.zoomSteps = 0;
+    const level = levels[zoomIndex[w.slot]]!;
+    const magnification = 1 + (level - 1) * ads;
     const marksman = spec.def.class === 'marksman';
-    const zoom = marksman ? 0.75 : 0.18;
     const scoped = marksman && ads > 0.85 && hud.alive;
     scopeEl.classList.toggle('on', scoped);
     document.body.classList.toggle('scoped', scoped);
+    const showZoom = hud.alive && ads > 0.5 && levels.length > 1;
+    zoomEl.classList.toggle('on', showZoom);
+    if (showZoom) zoomEl.textContent = `${level}×`;
+    // Magnification m narrows the view so things look m times bigger: tan(fov/2) / m.
+    const baseFov = settings().fov;
+    const zoomedFov = zoomedFovDegrees(baseFov, magnification);
+    // Mouse look slows by the same factor, so a small hand movement still covers the same
+    // part of the (bigger) target: precise headshots when zoomed in.
+    input.lookScale = 1 / magnification;
     // Headshot kill: a quick zoom punch (0.45 s), never enough to lose the target.
     const hsT = (performance.now() - headshotAt) / 450;
     const punch = hsT >= 0 && hsT < 1 ? Math.sin(Math.PI * hsT) * 0.1 : 0;
-    const vfov = verticalFovDegrees(settings().fov * (1 - zoom * ads) * (1 - punch), camera.aspect);
+    const vfov = verticalFovDegrees(zoomedFov * (1 - punch), camera.aspect);
     if (Math.abs(camera.fov - vfov) > 0.01) {
       camera.fov = vfov;
       camera.updateProjectionMatrix();
