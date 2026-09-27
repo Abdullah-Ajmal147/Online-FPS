@@ -50,6 +50,7 @@ import {
 import { DIFFICULTIES } from './bots/brain.ts';
 import { BotController, prewarmNav } from './bots/controller.ts';
 import { FakeLag, presetFromEnv } from './fakeLag.ts';
+import { InputQueue } from './inputQueue.ts';
 import { Match, type MatchSummary } from './match.ts';
 import { createMode } from './mode.ts';
 import { mapRotationFromEnv } from './mapRotation.ts';
@@ -64,6 +65,8 @@ import { counters, liveRooms, log, tickWindow } from './ops.ts';
 const RELOAD_REQUIRED_CODE = 426; // "Upgrade Required"
 /** Malformed messages tolerated per client before we disconnect it. */
 const MAX_BAD_MESSAGES = 20;
+/** Close code for a connection whose player was taken over by a newer one (another tab). */
+export const REPLACED_CODE = 4410;
 /** Normal traffic is 60 inputs + 1 ping per second; a 15-input catch-up burst still fits. */
 const MAX_MESSAGES_PER_SECOND = 150;
 /** Pings closer together than this are ignored (the client pings once a second). */
@@ -461,14 +464,18 @@ export class MatchRoom extends Room {
       allowJoin?: unknown;
     },
   ): void {
+    const auth = client.auth as
+      { guestId?: string | null; access?: Access; ip?: string | null } | undefined;
+    // The same player again (another tab or device, same guest): the new connection takes over
+    // their player, and the old one is closed. One seat per guest, so a second tab can't be
+    // an extra body to farm kills on, an extra vote, or a second chat voice.
+    if (auth?.guestId && this.takeOverSeat(client, auth.guestId)) return;
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
     // Joining through a friend's invite puts you on their team if it has room for a human.
     const team =
       this.partyTeam(options?.with) ?? (this.bots ? this.bots.teamForHuman() : undefined);
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
-    const auth = client.auth as
-      { guestId?: string | null; access?: Access; ip?: string | null } | undefined;
-    const guestId = this.uniqueGuest(auth?.guestId ?? null);
+    const guestId = auth?.guestId ?? null;
     const access = auth?.access ?? NEW_PLAYER;
     const player = this.sim.addPlayer({
       name: sanitizeName(options?.name),
@@ -509,18 +516,45 @@ export class MatchRoom extends Room {
       name: player.name,
       guest: player.guestId !== null,
     });
+    this.welcome(client, player.id, player.team);
+  }
+
+  private welcome(client: Client, playerId: number, team: number): void {
     client.sendBytes(
       MessageType.Hello,
       encodeHello({
         protocolVersion: PROTOCOL_VERSION,
         serverTickRate: TICK_RATE,
-        playerId: player.id,
-        team: player.team,
+        playerId,
+        team,
         mapId: this.mapId,
         inviteToken: this.seats.get(client.sessionId)?.inviteToken ?? '',
       }),
     );
     this.sendMatchInfo();
+  }
+
+  /**
+   * If this guest already has a seat here, move it to the new connection: same player (id,
+   * team, stats, streak, position), a fresh input queue (the new tab counts its own input
+   * seqs), and the old connection is closed with REPLACED_CODE. Returns false if not seated.
+   */
+  private takeOverSeat(client: Client, guestId: string): boolean {
+    const entry = [...this.seats].find(([, s]) => s.guestId === guestId);
+    if (!entry) return false;
+    const [oldSession, seat] = entry;
+    const player = this.sim.players.get(seat.playerId);
+    if (!player) return false;
+    this.seats.delete(oldSession);
+    this.lag?.forget(oldSession);
+    this.seats.set(client.sessionId, { ...seat, ackServerTick: 0, badMessages: 0 });
+    player.queue = new InputQueue();
+    // The old tab: closed with a reason it shows ("joined from another tab"); it never
+    // reconnects by itself, so two tabs can't keep taking the seat from each other.
+    this.clients.find((c) => c.sessionId === oldSession)?.leave(REPLACED_CODE);
+    log.info('player rejoined from another connection', { room: this.roomId, player: player.id });
+    this.welcome(client, player.id, player.team);
+    return true;
   }
 
   /**
@@ -617,13 +651,6 @@ export class MatchRoom extends Room {
         inviteToken: this.seats.get(client.sessionId)?.inviteToken ?? '',
       }),
     );
-  }
-
-  /** One seat per guest earns XP: a second tab with the same guest plays without progression. */
-  private uniqueGuest(guestId: string | null): string | null {
-    if (!guestId) return null;
-    for (const p of this.sim.players.values()) if (p.guestId === guestId) return null;
-    return guestId;
   }
 
   override onLeave(client: Client): void {

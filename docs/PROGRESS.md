@@ -543,6 +543,9 @@ Owner reports and requests, all shipped (patches 0.9.1–0.9.4):
   captures, now credited to everyone on a node when it flips), Grenadier. PROTOCOL_VERSION 16.
 - **Map vote** on the results screen (keys 1–3): most votes wins, ties keep the rotation.
   Strict one-byte `VoteMap` message, in the NETCODE audit. PROTOCOL_VERSION 17.
+- **One seat per player**: the same guest joining a match again (another tab or device) takes
+  over their player (same id, team and stats); the old tab is closed with a reason (code 4410) and doesn't reconnect by itself. A second tab can no longer be an extra body to farm
+  kills on, an extra map vote, or a second chat voice.
 - **Moderation fix**: the join waits up to 5 s for a player's moderation status (was 1.5 s:
   on a slow API a shadow-banned player joined the normal pool).
 
@@ -575,7 +578,6 @@ the real server, a restore-from-backup drill there.
 Technical, not blocked: the ~30 s first match after a server restart
 (bot navigation is not the cause: 0.36 s, now built at startup); cross-browser determinism
 (Firefox/WebKit); WebGPU path never seen running; rewind cap tuning for high ping; reload and
-weapon-switch animations for other players (not in snapshots today); votes are per seat (a
-guest with several tabs votes once per tab).
+weapon-switch animations for other players (not in snapshots today).
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->

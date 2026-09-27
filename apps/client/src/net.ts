@@ -164,7 +164,11 @@ export class Connection {
         clearInterval(this.pingTimer);
         this.room = undefined;
         const text =
-          code === 4403 ? 'removed from the match (banned)' : 'disconnected from the match';
+          code === 4403
+            ? 'removed from the match (banned)'
+            : code === 4410
+              ? 'you joined this match from another tab or device: playing there now'
+              : 'disconnected from the match';
         setStatus({ net: { state: 'error', text } });
         handlers.onDisconnect();
       });
