@@ -361,11 +361,9 @@ export class MatchRoom extends Room {
       });
     });
 
-    // Private matches: switch to the other team (at most every 2 s, only if it has room).
     // Map vote (results screen only): one byte, the option index. Bots never vote.
     this.onMessageBytes(MessageType.VoteMap, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
-      const vote = this.match.mapVote;
       if (!seat) return;
       let option: number;
       try {
@@ -374,11 +372,14 @@ export class MatchRoom extends Room {
         if (++seat.badMessages > MAX_BAD_MESSAGES) client.leave(4400);
         return;
       }
-      // Counted now; everyone sees it in the next MatchInfo (2 Hz), so spamming votes can't
-      // make the room broadcast more.
-      vote?.vote(seat.playerId, option);
+      // Through the fake-lag path like every reliable message; the vote is looked up when it
+      // "arrives" (it may land after the results screen closed: then it's ignored). Everyone
+      // sees it in the next MatchInfo (2 Hz), so spamming votes can't make the room
+      // broadcast more.
+      this.inboundReliable(client, () => this.match.mapVote?.vote(seat.playerId, option));
     });
 
+    // Private matches: switch to the other team (at most every 2 s, only if it has room).
     this.onMessageBytes(MessageType.SwitchTeam, (client: Client, bytes: Uint8Array) => {
       const seat = this.seats.get(client.sessionId);
       const now = performance.now();

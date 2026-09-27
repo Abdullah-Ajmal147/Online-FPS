@@ -849,6 +849,44 @@ describe('MatchSim: kill-streak rewards', () => {
     expect(before - shooter.health).toBe(Math.round(20 * 0.7));
   });
 
+  it('a kill scored after dying counts as a kill but not towards a streak (review M1)', () => {
+    const { sim, shooter, target, other, killOnce } = setup();
+    killOnce();
+    killOnce();
+    const kill = (sim as unknown as { kill: (...a: unknown[]) => void }).kill.bind(sim);
+    kill(shooter, other, 0, false); // the shooter dies first in a same-tick trade…
+    place(target, [0, 0, 0]);
+    target.alive = true;
+    kill(target, shooter, 0, false); // …and their shot still lands
+    expect(shooter.kills).toBe(3);
+    expect(shooter.streak).toBe(0);
+    for (let i = 0; i < RESPAWN_TICKS; i++) sim.step();
+    expect(shooter.alive).toBe(true);
+    expect(shooter.streak).toBe(0); // the next life starts clean: 3 more kills for the radar
+  });
+
+  it('a respawn without a death (countdown, team switch) clears streak and armor (review M2)', () => {
+    const { sim, shooter, killOnce } = setup();
+    for (let i = 0; i < 7; i++) killOnce();
+    expect(shooter.armorUntil).toBeGreaterThan(sim.tick);
+    sim.respawnAll(); // warm-up → countdown
+    expect(shooter.streak).toBe(0);
+    expect(shooter.armorUntil).toBe(0);
+    shooter.streak = 2;
+    sim.switchTeam(shooter.id, 1);
+    expect(shooter.streak).toBe(0);
+  });
+
+  it('radar dots are rounded to 2 m and never sent to the other team (review M3)', () => {
+    const { shooter, target, other, events, killOnce } = setup();
+    place(other, [-12.7, 0, -8.9]);
+    for (let i = 0; i < 3; i++) killOnce();
+    const radar = events.filter((e) => e.type === 'radar');
+    expect(radar.some((e) => e.to === target.id || e.to === other.id)).toBe(false);
+    expect((radar[0]!.event as { enemies: [number, number][] }).enemies).toEqual([[-12, -8]]);
+    expect(radar.map((e) => e.to)).toContain(shooter.id);
+  });
+
   it('a death resets the streak (and the armor); the best streak of the match is kept', () => {
     const { sim, shooter, other, killOnce } = setup();
     for (let i = 0; i < 7; i++) killOnce();

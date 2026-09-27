@@ -14,7 +14,13 @@ import {
   type Movement,
   type Weapon,
 } from '@sentinel/content';
-import { NO_WEAPON, type EntityState, type GameEvent, type Snapshot } from '@sentinel/protocol';
+import {
+  MAX_RADAR_ENEMIES,
+  NO_WEAPON,
+  type EntityState,
+  type GameEvent,
+  type Snapshot,
+} from '@sentinel/protocol';
 import {
   MAX_PLAYERS_PER_MATCH,
   MAX_REWIND_MS,
@@ -651,8 +657,12 @@ export class MatchSim {
     victim.armorUntil = 0;
     if (killer) {
       killer.kills++;
-      killer.streak++;
-      killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
+      // A streak is kills in one life: a kill scored after dying (a same-tick trade, a frag
+      // going off after its thrower died) still counts as a kill, but not towards a streak.
+      if (killer.alive) {
+        killer.streak++;
+        killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
+      }
       if (headshot) killer.headshots++;
       if (weapon === KILL_SOURCE_FRAG) killer.fragKills++;
       const id = weaponCatalog[weapon]?.id;
@@ -670,7 +680,7 @@ export class MatchSim {
         headshot,
       },
     });
-    if (killer) this.streakReward(killer);
+    if (killer?.alive) this.streakReward(killer);
   }
 
   /**
@@ -690,9 +700,11 @@ export class MatchSim {
       const enemies: [number, number][] = [];
       for (const q of this.players.values()) {
         if (q.team !== p.team && q.alive) {
-          enemies.push([q.sim.move.position[0], q.sim.move.position[2]]);
+          // Rounded to 2 m: enough for a radar dot, not an exact spot to pre-aim (ADR 0012).
+          enemies.push([roundTo(q.sim.move.position[0], 2), roundTo(q.sim.move.position[2], 2)]);
         }
       }
+      enemies.length = Math.min(enemies.length, MAX_RADAR_ENEMIES);
       for (const q of this.players.values()) {
         if (q.team === p.team) {
           this.events.push({ to: q.id, event: { type: 'radar', by: p.id, enemies } });
@@ -751,6 +763,10 @@ export class MatchSim {
     p.frags = equipment.frag.perLife;
     p.smokes = equipment.smoke.perLife;
     p.throwArmed = false;
+    // Every life starts without a streak or armor (after a death, a team switch, or the
+    // countdown's respawn from warm-up into the live match).
+    p.streak = 0;
+    p.armorUntil = 0;
     p.alive = true;
     p.health = MAX_HEALTH;
     p.respawnTicks = 0;
@@ -1051,3 +1067,5 @@ function asLoadout(l: Loadout | readonly [Weapon, Weapon] | undefined): Loadout 
   if ('weapons' in l) return l;
   return buildLoadout({ primary: l[0].id, secondary: l[1].id });
 }
+
+const roundTo = (v: number, step: number) => Math.round(v / step) * step;

@@ -518,7 +518,7 @@ const EV_EXPLOSION = 4;
 const EV_RADAR = 5;
 const EV_REWARD = 6;
 /** Most enemies in one radar event (a team is at most 6; room to spare, bounded decode). */
-const MAX_RADAR_ENEMIES = 16;
+export const MAX_RADAR_ENEMIES = 16;
 
 export function encodeEvents(events: GameEvent[]): Uint8Array {
   const w = new BinaryWriter(1 + events.length * 8);

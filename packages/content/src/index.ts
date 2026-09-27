@@ -134,9 +134,17 @@ export const perkCatalog: readonly Perk[] = (perksJson as unknown[])
   .sort(byId);
 
 /** Kill-streak rewards, fewest kills first (index = wire code in reward events). */
-export const streakRewards: readonly StreakReward[] = (streaksJson as unknown[])
-  .map((s) => StreakRewardSchema.parse(s))
-  .sort((a, b) => a.kills - b.kills);
+export const streakRewards: readonly StreakReward[] = (() => {
+  const list = (streaksJson as unknown[])
+    .map((s) => StreakRewardSchema.parse(s))
+    .sort((a, b) => a.kills - b.kills);
+  // One reward per kill count and per kind: the server grants the first match only.
+  if (new Set(list.map((s) => s.kills)).size !== list.length)
+    throw new Error('streaks.json: two rewards at the same kill count');
+  if (new Set(list.map((s) => s.reward)).size !== list.length)
+    throw new Error('streaks.json: a reward kind appears twice');
+  return list;
+})();
 
 export const MAX_ATTACHMENTS = 3;
 const SLOT_ORDER: readonly Attachment['slot'][] = ['optic', 'barrel', 'magazine', 'grip', 'stock'];
