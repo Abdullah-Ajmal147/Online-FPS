@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/node_modules/**',
       'playwright-report/**',
       'test-results/**',
+      '_*.mjs', // local scratch scripts (git-ignored too)
     ],
   },
   js.configs.recommended,
