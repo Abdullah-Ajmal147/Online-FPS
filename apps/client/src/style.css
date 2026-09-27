@@ -2442,3 +2442,41 @@ body.headshot-flash::after {
     monospace;
   letter-spacing: 0.06em;
 }
+
+/* End-of-match awards */
+.awards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.award {
+  min-width: 128px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 4%);
+  text-align: center;
+}
+.award-me {
+  border-color: #f2b51c;
+  background: rgb(242 181 28 / 12%);
+}
+.award-title {
+  color: #f2b51c;
+  font:
+    700 11px system-ui,
+    sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.award-name {
+  margin-top: 2px;
+  font:
+    700 15px system-ui,
+    sans-serif;
+}
+.award-value {
+  color: #8b949e;
+  font-size: 12px;
+}

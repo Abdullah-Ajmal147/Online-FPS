@@ -671,7 +671,23 @@ export interface MatchInfo {
   /** Capture points (objective modes; empty otherwise). */
   points: CapturePointState[];
   players: ScoreboardRow[];
+  /** End-of-match awards (v16): filled when the match has ended, empty otherwise. */
+  awards: MatchAward[];
 }
+
+/** Award kinds, in wire order (u8 index). */
+export const AWARD_KINDS = ['headshots', 'streak', 'longest', 'captures', 'frags'] as const;
+export type AwardKind = (typeof AWARD_KINDS)[number];
+
+export interface MatchAward {
+  kind: AwardKind;
+  /** Player id. */
+  player: number;
+  /** Headshots, streak length, metres, captures or frag kills. */
+  value: number;
+}
+
+const MAX_AWARDS = AWARD_KINDS.length;
 
 export interface CapturePointState {
   /** 'A', 'B', 'C'… */
@@ -705,6 +721,13 @@ export function encodeMatchInfo(m: MatchInfo): Uint8Array {
       .u16(p.deaths)
       .string(p.name)
       .string(p.code);
+  }
+  if (m.awards.length > MAX_AWARDS) throw new RangeError('too many awards');
+  w.u8(m.awards.length);
+  for (const a of m.awards) {
+    w.u8(AWARD_KINDS.indexOf(a.kind))
+      .u8(a.player)
+      .u16(Math.min(0xffff, Math.max(0, Math.round(a.value))));
   }
   return w.finish();
 }
@@ -742,6 +765,14 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
       code: r.string(),
     });
   }
+  const awardCount = r.u8();
+  if (awardCount > MAX_AWARDS) throw new RangeError('too many awards');
+  const awards: MatchAward[] = [];
+  for (let i = 0; i < awardCount; i++) {
+    const kind = AWARD_KINDS[r.u8()];
+    if (!kind) throw new RangeError('bad award kind');
+    awards.push({ kind, player: r.u8(), value: r.u16() });
+  }
   return {
     phase: phase as MatchPhaseId,
     secondsLeft,
@@ -753,5 +784,6 @@ export function decodeMatchInfo(bytes: Uint8Array): MatchInfo {
     private: priv === 1,
     points,
     players,
+    awards,
   };
 }

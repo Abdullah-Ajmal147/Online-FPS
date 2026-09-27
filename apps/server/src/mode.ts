@@ -1,7 +1,7 @@
 import type { Mode } from '@sentinel/content';
 import { DRAW } from '@sentinel/protocol';
 import { TICK_RATE, type Vec3 } from '@sentinel/shared';
-import type { MatchSim } from './sim.ts';
+import type { MatchSim, SimPlayer } from './sim.ts';
 
 /**
  * Game-mode rules, pluggable so Domination (Phase 5+) can be added without touching the match
@@ -113,10 +113,7 @@ export class Domination implements GameMode {
       const on: [number, number] = [0, 0];
       for (const p of sim.players.values()) {
         if (!p.alive) continue;
-        const [x, y, z] = p.sim.move.position;
-        const [px, py, pz] = pt.position;
-        if (Math.hypot(x - px, z - pz) <= rules.radius && Math.abs(y - py) <= rules.radius)
-          on[p.team as 0 | 1]++;
+        if (onPoint(p, pt.position, rules.radius)) on[p.team as 0 | 1]++;
       }
       // Alone on the point: move the meter (a second teammate speeds it up a little).
       const team = on[0] > 0 && on[1] === 0 ? 0 : on[1] > 0 && on[0] === 0 ? 1 : -1;
@@ -124,10 +121,17 @@ export class Domination implements GameMode {
         const speed = perTick * Math.min(1.5, 1 + 0.25 * (on[team as 0 | 1] - 1));
         pt.control = Math.max(-1, Math.min(1, pt.control + (team === 0 ? speed : -speed)));
       }
+      const before = pt.owner;
       if (pt.control >= 1) pt.owner = 0;
       else if (pt.control <= -1) pt.owner = 1;
       else if ((pt.owner === 0 && pt.control <= 0) || (pt.owner === 1 && pt.control >= 0))
         pt.owner = -1;
+      // Captured: everyone of that team standing on it gets the credit (objective award).
+      if (pt.owner >= 0 && pt.owner !== before) {
+        for (const p of sim.players.values()) {
+          if (p.alive && p.team === pt.owner && onPoint(p, pt.position, rules.radius)) p.captures++;
+        }
+      }
     }
     // Every held point scores 1 each interval (whole points: no float drift towards the limit).
     if (++this.ticks % (rules.scoreIntervalSeconds * TICK_RATE) === 0) {
@@ -161,4 +165,10 @@ export class Domination implements GameMode {
 /** The GameMode implementation for a mode id. */
 export function createMode(def: Mode): GameMode {
   return def.capture ? new Domination(def) : new TeamDeathmatch(def);
+}
+
+/** Inside a capture point's ring (and not on a floor far above or below it). */
+function onPoint(p: SimPlayer, point: Vec3, radius: number): boolean {
+  const [x, y, z] = p.sim.move.position;
+  return Math.hypot(x - point[0], z - point[2]) <= radius && Math.abs(y - point[1]) <= radius;
 }

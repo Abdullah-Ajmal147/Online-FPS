@@ -1,6 +1,13 @@
 import { aimSummary, flagsFor } from './anticheat.ts';
 import { randomUUID } from 'node:crypto';
-import { MatchPhase, NO_WINNER, type MatchInfo, type MatchPhaseId } from '@sentinel/protocol';
+import {
+  MatchPhase,
+  NO_WINNER,
+  type AwardKind,
+  type MatchAward,
+  type MatchInfo,
+  type MatchPhaseId,
+} from '@sentinel/protocol';
 import { TICK_RATE } from '@sentinel/shared';
 import type { GameMode } from './mode.ts';
 import type { MatchSim, SimPlayer } from './sim.ts';
@@ -71,6 +78,8 @@ export class Match {
   phase: MatchPhaseId = MatchPhase.Warmup;
   winner = NO_WINNER;
   mvp = 0;
+  /** End-of-match awards (set when the match ends, cleared at the next warm-up). */
+  awards: MatchAward[] = [];
   matchesPlayed = 0;
   private phaseEndsAt: number;
   private liveStartedAt = 0;
@@ -151,6 +160,7 @@ export class Match {
       teamScores: this.mode.teamScores(),
       winner: this.winner,
       mvp: this.mvp,
+      awards: this.awards,
       mode: this.mode.def.id,
       private: this.isPrivate,
       points: (this.mode.points?.() ?? []).map((p) => ({
@@ -168,6 +178,7 @@ export class Match {
       case MatchPhase.Warmup:
         this.winner = NO_WINNER;
         this.mvp = 0;
+        this.awards = [];
         this.sim.frozen = false;
         this.phaseEndsAt = this.sim.tick + this.ticks(this.timings.warmupSeconds);
         break;
@@ -194,6 +205,7 @@ export class Match {
   private end(winner: number): boolean {
     this.winner = winner;
     this.mvp = this.pickMvp();
+    this.awards = pickAwards([...this.sim.players.values()]);
     this.sim.frozen = true;
     this.matchesPlayed++;
     this.phase = MatchPhase.Ended;
@@ -299,4 +311,35 @@ export class Match {
   private ticks(seconds: number): number {
     return Math.round(seconds * TICK_RATE);
   }
+}
+
+/**
+ * End-of-match awards: for each kind, the player with the highest value, if they reached the
+ * minimum (a 1-kill "streak" is no award). Ties go to more kills, then the lower id.
+ */
+export function pickAwards(players: readonly SimPlayer[]): MatchAward[] {
+  const kinds: { kind: AwardKind; value: (p: SimPlayer) => number; min: number }[] = [
+    { kind: 'headshots', value: (p) => p.headshots, min: 2 },
+    { kind: 'streak', value: (p) => p.bestStreak, min: 3 },
+    { kind: 'longest', value: (p) => Math.round(p.longestKill), min: 10 },
+    { kind: 'captures', value: (p) => p.captures, min: 1 },
+    { kind: 'frags', value: (p) => p.fragKills, min: 1 },
+  ];
+  const awards: MatchAward[] = [];
+  for (const k of kinds) {
+    let best: SimPlayer | null = null;
+    for (const p of players) {
+      const v = k.value(p);
+      if (v < k.min) continue;
+      const bv = best ? k.value(best) : -1;
+      if (
+        !best ||
+        v > bv ||
+        (v === bv && (p.kills > best.kills || (p.kills === best.kills && p.id < best.id)))
+      )
+        best = p;
+    }
+    if (best) awards.push({ kind: k.kind, player: best.id, value: k.value(best) });
+  }
+  return awards;
 }

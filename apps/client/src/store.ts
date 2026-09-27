@@ -95,6 +95,8 @@ export interface MatchHud {
   /** 'win' | 'loss' | 'draw' once ended. */
   result: 'win' | 'loss' | 'draw' | null;
   mvp: string | null;
+  /** End-of-match awards: who won each, and what for (shown on the results screen). */
+  awards: { kind: string; title: string; name: string; value: string; me: boolean }[];
   players: {
     id: number;
     name: string;

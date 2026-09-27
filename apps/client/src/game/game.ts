@@ -24,6 +24,7 @@ import {
   type ChatLine,
   type MatchInfo,
   type Snapshot,
+  type AwardKind,
 } from '@sentinel/protocol';
 import {
   Button,
@@ -90,6 +91,15 @@ export interface Game {
 }
 
 const TEAM_NAMES = ['Aegis', 'Ember'];
+
+/** Titles and value text of the end-of-match awards. */
+const AWARD_TEXT: Record<AwardKind, (v: number) => { title: string; value: string }> = {
+  headshots: (v) => ({ title: 'Sharpshooter', value: `${v} headshots` }),
+  streak: (v) => ({ title: 'Unstoppable', value: `${v} kills without dying` }),
+  longest: (v) => ({ title: 'Long shot', value: `${v} m kill` }),
+  captures: (v) => ({ title: 'Objective', value: `${v} ${v === 1 ? 'capture' : 'captures'}` }),
+  frags: (v) => ({ title: 'Grenadier', value: `${v} frag ${v === 1 ? 'kill' : 'kills'}` }),
+};
 const RAD_PER_UNIT = (2 * Math.PI) / 65536;
 
 /**
@@ -518,6 +528,12 @@ export async function startGame(
                 ? 'win'
                 : 'loss',
         mvp: mvp ? (mvp.id === myId ? `${mvp.name} (you)` : mvp.name) : null,
+        awards: info.awards.map((a) => ({
+          kind: a.kind,
+          ...AWARD_TEXT[a.kind](a.value),
+          name: info.players.find((p) => p.id === a.player)?.name ?? '?',
+          me: a.player === myId,
+        })),
         players: info.players.map((p) => ({ ...p, me: p.id === myId })),
       },
     });

@@ -159,6 +159,10 @@ export interface SimPlayer {
   streak: number;
   /** This match: the longest streak (end-of-match awards). */
   bestStreak: number;
+  /** This match: the longest shot that killed, metres (awards). */
+  longestKill: number;
+  /** This match: objective captures this player took part in (Domination; awards). */
+  captures: number;
   /** Armor reward: damage taken is reduced until this tick. */
   armorUntil: number;
   /** This match: kills by headshot, by frag, and per weapon id (progression, challenges). */
@@ -355,6 +359,8 @@ export class MatchSim {
       deaths: 0,
       streak: 0,
       bestStreak: 0,
+      longestKill: 0,
+      captures: 0,
       armorUntil: 0,
       headshots: 0,
       fragKills: 0,
@@ -532,6 +538,8 @@ export class MatchSim {
     // hit (one event, one kill) no matter how many pellets land.
     const cone = shot.spread + spec.pelletSpread;
     const byVictim = new Map<SimPlayer, Record<HitZone, number>>();
+    /** Nearest pellet/bullet distance per victim (longest-kill award). */
+    const nearest = new Map<SimPlayer, number>();
     for (let i = 0; i < spec.pellets; i++) {
       // Random spread inside the cone (server-only randomness; the client shows its own guess).
       const r = cone * Math.sqrt(this.random());
@@ -562,6 +570,7 @@ export class MatchSim {
       if (best) {
         const damage = damageAt(weapon.damage[best.zone], best.distance, weapon.falloff);
         result.hit = { victim: best.victim.id, zone: best.zone, damage, distance: best.distance };
+        nearest.set(best.victim, Math.min(nearest.get(best.victim) ?? Infinity, best.distance));
         let sum = byVictim.get(best.victim);
         if (!sum) byVictim.set(best.victim, (sum = { head: 0, torso: 0, limbs: 0 }));
         sum[best.zone] += damage;
@@ -585,7 +594,11 @@ export class MatchSim {
       // pellet in the head is not a headshot).
       const zone: HitZone =
         z.head >= z.torso && z.head >= z.limbs ? 'head' : z.torso >= z.limbs ? 'torso' : 'limbs';
+      const wasAlive = victim.alive;
       this.damage(victim, shooter, z.head + z.torso + z.limbs, zone, weaponIndex(weapon.id));
+      if (wasAlive && !victim.alive && victim !== shooter) {
+        shooter.longestKill = Math.max(shooter.longestKill, nearest.get(victim) ?? 0);
+      }
     }
   }
 
@@ -761,6 +774,8 @@ export class MatchSim {
       p.headshots = 0;
       p.streak = 0;
       p.bestStreak = 0;
+      p.longestKill = 0;
+      p.captures = 0;
       p.fragKills = 0;
       p.weaponKills.clear();
       p.aim = newAimStats();

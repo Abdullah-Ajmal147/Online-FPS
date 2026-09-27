@@ -221,6 +221,17 @@ function Results({ m }: { m: MatchHud }) {
         {m.scores[0]} – {m.scores[1]}
       </div>
       {m.mvp && <div class="results-mvp">MVP: {m.mvp}</div>}
+      {m.awards.length > 0 && (
+        <div class="awards" data-testid="awards">
+          {m.awards.map((a) => (
+            <div class={`award${a.me ? ' award-me' : ''}`} key={a.kind}>
+              <div class="award-title">{a.title}</div>
+              <div class="award-name">{a.name}</div>
+              <div class="award-value">{a.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
       {m.private && m.players.filter((p) => !p.bot).length < 4 ? (
         <div class="xp-panel xp-pending" data-testid="private-no-xp">
           Private match: XP counts with 4 or more real players.

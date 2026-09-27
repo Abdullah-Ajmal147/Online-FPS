@@ -83,8 +83,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 15 (radar and kill-streak reward events)', () => {
-    expect(PROTOCOL_VERSION).toBe(15);
+  it('is 16 (end-of-match awards in MatchInfo)', () => {
+    expect(PROTOCOL_VERSION).toBe(16);
   });
 });
 
@@ -295,6 +295,11 @@ describe('MatchInfo', () => {
         { id: 1, team: 0, bot: false, kills: 12, deaths: 4, name: 'Ayesha', code: 'a1b2c3d4e5' },
         { id: 2, team: 1, bot: true, kills: 9, deaths: 7, name: 'Bot Heron', code: '' },
       ],
+      awards: [
+        { kind: 'headshots' as const, player: 1, value: 6 },
+        { kind: 'longest' as const, player: 2, value: 48 },
+        { kind: 'captures' as const, player: 1, value: 3 },
+      ],
     };
     expect(decodeMatchInfo(encodeMatchInfo(info))).toEqual(info);
   });
@@ -311,6 +316,7 @@ describe('MatchInfo', () => {
       private: false,
       points: [],
       players: [],
+      awards: [],
     };
     expect(decodeMatchInfo(encodeMatchInfo(info)).secondsLeft).toBe(5);
     expect(() => decodeMatchInfo(new Uint8Array([9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow(

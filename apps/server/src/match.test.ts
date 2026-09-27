@@ -4,9 +4,9 @@ import { DRAW, MatchPhase, NO_WINNER } from '@sentinel/protocol';
 import { TICK_RATE, initPhysics, type Rapier } from '@sentinel/shared';
 import { DIFFICULTIES } from './bots/brain.ts';
 import { BotController } from './bots/controller.ts';
-import { Match, type MatchSummary } from './match.ts';
+import { Match, pickAwards, type MatchSummary } from './match.ts';
 import { Domination, TeamDeathmatch } from './mode.ts';
-import { MatchSim } from './sim.ts';
+import { MatchSim, type SimPlayer } from './sim.ts';
 
 let rapier: Rapier;
 beforeAll(async () => {
@@ -229,6 +229,17 @@ describe('Domination (Phase 8)', () => {
     expect(mode.teamScores()[1]).toBe(0);
   });
 
+  it('the players on a node when it is captured get the capture credit (objective award)', () => {
+    const { a, b, put, run } = setup();
+    put(a, 'A');
+    put(b, null);
+    run(5.1);
+    expect(a.captures).toBe(1);
+    expect(b.captures).toBe(0);
+    run(10); // holding it is not capturing it again
+    expect(a.captures).toBe(1);
+  });
+
   // Owner report (private Domination): "one kill, but the score shows 200". Nodes scored every
   // second, so a team holding them reached 200 in about a minute. A match must last minutes.
   it('holding all three nodes still takes more than 5 minutes to reach 200', () => {
@@ -306,4 +317,43 @@ describe('Domination (Phase 8)', () => {
     expect(everOwned.size).toBeGreaterThanOrEqual(3);
     expect(match.info().points.map((p) => p.id)).toEqual(['A', 'B', 'C']);
   }, 120_000);
+});
+
+describe('end-of-match awards', () => {
+  type P = Pick<
+    SimPlayer,
+    'id' | 'kills' | 'headshots' | 'bestStreak' | 'longestKill' | 'captures' | 'fragKills'
+  >;
+  const player = (id: number, stats: Partial<P>): SimPlayer =>
+    ({
+      id,
+      kills: 0,
+      headshots: 0,
+      bestStreak: 0,
+      longestKill: 0,
+      captures: 0,
+      fragKills: 0,
+      ...stats,
+    }) as SimPlayer;
+
+  it('each award goes to the best player who reached its minimum; ties go to more kills', () => {
+    const awards = pickAwards([
+      player(1, { kills: 9, headshots: 4, bestStreak: 5, longestKill: 22.4 }),
+      player(2, { kills: 12, headshots: 4, bestStreak: 2, longestKill: 61.7, fragKills: 2 }),
+      player(3, { kills: 3, headshots: 1, captures: 3 }),
+    ]);
+    expect(awards).toEqual([
+      { kind: 'headshots', player: 2, value: 4 }, // tie on 4: more kills wins
+      { kind: 'streak', player: 1, value: 5 },
+      { kind: 'longest', player: 2, value: 62 },
+      { kind: 'captures', player: 3, value: 3 },
+      { kind: 'frags', player: 2, value: 2 },
+    ]);
+  });
+
+  it('no award below its minimum (a 2-kill streak, a 1-headshot match, a point-blank kill)', () => {
+    expect(
+      pickAwards([player(1, { kills: 2, headshots: 1, bestStreak: 2, longestKill: 4 })]),
+    ).toEqual([]);
+  });
 });

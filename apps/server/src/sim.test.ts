@@ -200,6 +200,8 @@ describe('MatchSim: shooting', () => {
     expect(events).toContain('kill');
     expect(shooter.kills).toBe(1);
     expect(target.deaths).toBe(1);
+    expect(shooter.longestKill).toBeGreaterThan(9); // 10 m apart (eye to torso)
+    expect(shooter.longestKill).toBeLessThan(11);
     const life = target.lifeId;
     for (let i = 0; i < RESPAWN_TICKS; i++) sim.step();
     expect(target.alive).toBe(true);
