@@ -479,6 +479,27 @@ Learned: gltf-transform's quantization folds a scale into skins' inverse bind ma
 the bones' own transforms. Dropping a clip must also drop its samplers' keyframe data, or
 prune keeps it (2.9 MB → 420 KB).
 
+## Phase 10 — Real world (v2, started 2026-09-26)
+
+Owner brief: study Counter-Strike and the other big shooters, make everything look real, keep
+it fast; plan v2 and start. Research and phases: `docs/V2_ROADMAP.md`; art direction ADR 0011;
+tasks `docs/phases/phase-10.md`; pitch deck for friends and pro players (artifact).
+
+Done so far:
+
+- Maps: real CC0 surfaces (cracked asphalt yard, concrete panel walls, painted corrugated
+  containers, diamond-plate ramps, grating stairs, rusted platforms) with colour, normal and
+  roughness maps, at true scale (world-space UVs); the map is one mesh per material (was one
+  per box). Textures load in the background; the map is redrawn once they are here, with the
+  materials compiled first.
+- Physical sky (sun, haze, clouds) per lighting preset, filmic tone mapping.
+- Browser tests: dev builds under automation draw simple soldiers unless a test asks for the
+  models (CI renders in software on two cores; 11 animated models made timing checks fail).
+  The models keep their own tests, including a full bot match.
+
+Learned: changing Vite's `optimizeDeps` while the dev server runs leaves stale pre-bundles
+(504 "Outdated Optimize Dep", blank page) until it is restarted.
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:
