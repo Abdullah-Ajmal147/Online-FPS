@@ -1,5 +1,7 @@
 import * as THREE from 'three/webgpu';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { pass } from 'three/tsl';
 import {
   MAP_ROTATION,
   modes,
@@ -198,6 +200,24 @@ export async function startGame(
   const camera = new THREE.PerspectiveCamera(70, 1, 0.02, 250);
   camera.rotation.order = 'YXZ'; // yaw first, then pitch: no roll creeping in
   scene.add(camera); // the viewmodel hangs off the camera
+
+  // High preset: bloom, a soft glow around the brightest light (sun glints on metal, muzzle
+  // flashes, the sky at the horizon), taken from the scene before tone mapping. Built the
+  // first time High is used; Low/Medium render directly (it costs 1–2 ms of GPU time).
+  let bloomPipeline: THREE.RenderPipeline | null = null;
+  function draw(): void {
+    sky.position.copy(camera.position);
+    if (!GRAPHICS[settings().graphics].bloom) {
+      renderer.render(scene, camera);
+      return;
+    }
+    if (!bloomPipeline) {
+      const scenePass = pass(scene, camera);
+      const color = scenePass.getTextureNode('output');
+      bloomPipeline = new THREE.RenderPipeline(renderer, color.add(bloom(color, 0.25, 0.2, 3)));
+    }
+    bloomPipeline.render();
+  }
   const resize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.fov = verticalFovDegrees(settings().fov, camera.aspect);
@@ -1024,8 +1044,7 @@ export async function startGame(
       camera.lookAt(0, 1, 0);
       viewmodel.root.visible = false;
       effects.update(frame);
-      sky.position.copy(camera.position);
-      renderer.render(scene, camera);
+      draw();
       return;
     }
 
@@ -1150,8 +1169,7 @@ export async function startGame(
     if (!replaying) updateAimAndTags();
     feedback.update(camera, frame);
     effects.update(frame);
-    sky.position.copy(camera.position);
-    renderer.render(scene, camera);
+    draw();
 
     // HUD values that change every frame: ammo/reload. Push to the store only when changed.
     const mag = w.ammo[w.slot];
@@ -1308,9 +1326,33 @@ const LIGHTING: Record<
  */
 const GRAPHICS: Record<
   GraphicsPreset,
-  { shadowMapSize: number; dynamicShadows: boolean; antialias: boolean; maxPixelRatio: number }
+  {
+    shadowMapSize: number;
+    dynamicShadows: boolean;
+    antialias: boolean;
+    maxPixelRatio: number;
+    bloom: boolean;
+  }
 > = {
-  low: { shadowMapSize: 0, dynamicShadows: false, antialias: false, maxPixelRatio: 1 },
-  medium: { shadowMapSize: 1024, dynamicShadows: false, antialias: true, maxPixelRatio: 1.5 },
-  high: { shadowMapSize: 2048, dynamicShadows: true, antialias: true, maxPixelRatio: 2 },
+  low: {
+    shadowMapSize: 0,
+    dynamicShadows: false,
+    antialias: false,
+    maxPixelRatio: 1,
+    bloom: false,
+  },
+  medium: {
+    shadowMapSize: 1024,
+    dynamicShadows: false,
+    antialias: true,
+    maxPixelRatio: 1.5,
+    bloom: false,
+  },
+  high: {
+    shadowMapSize: 2048,
+    dynamicShadows: true,
+    antialias: true,
+    maxPixelRatio: 2,
+    bloom: true,
+  },
 };
