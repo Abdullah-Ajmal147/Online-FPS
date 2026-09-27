@@ -224,6 +224,8 @@ function writeOwn(w: BinaryWriter, own: OwnSnapshot): void {
   for (const v of m.position) w.f32(v);
   for (const v of m.velocity) w.f32(v);
   w.u8(m.slideTicks).u8(m.slideCooldownTicks);
+  w.u8(m.mantleTicks).u16(m.mantleYaw);
+  w.u8(m.tacSprintTicks).u8(m.tacCooldownTicks).u8(m.sprintTapTicks);
   w.u8((m.grounded ? OWN_GROUNDED : 0) | (m.crouching ? OWN_CROUCHING : 0));
   w.u16(m.prevButtons);
   writeWeapon(w, own.sim.weapon);
@@ -240,6 +242,11 @@ function readOwn(r: BinaryReader): OwnSnapshot {
   const velocity: Vec3 = [r.f32(), r.f32(), r.f32()];
   const slideTicks = r.u8();
   const slideCooldownTicks = r.u8();
+  const mantleTicks = r.u8();
+  const mantleYaw = r.u16();
+  const tacSprintTicks = r.u8();
+  const tacCooldownTicks = r.u8();
+  const sprintTapTicks = r.u8();
   const flags = r.u8();
   const prevButtons = r.u16();
   const weapon = readWeapon(r);
@@ -252,6 +259,11 @@ function readOwn(r: BinaryReader): OwnSnapshot {
         velocity,
         slideTicks,
         slideCooldownTicks,
+        mantleTicks,
+        mantleYaw,
+        tacSprintTicks,
+        tacCooldownTicks,
+        sprintTapTicks,
         grounded: (flags & OWN_GROUNDED) !== 0,
         crouching: (flags & OWN_CROUCHING) !== 0,
         prevButtons,
@@ -270,7 +282,7 @@ const clampI16 = (v: number) => Math.max(-0x8000, Math.min(0x7fff, v));
 
 /**
  * Layout: serverTick u32, lastProcessedSeq u32, inputQueueDepth u8, serverTickMicros u16,
- * hasOwn u8, [own: move 29 + weapon 18 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 56–62 bytes], entityCount u8,
+ * hasOwn u8, [own: move 35 + weapon 18 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 62–68 bytes], entityCount u8,
  * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, weapon, shots).
  * then projectileCount u8, projectiles × 8 bytes (id, kind|cloud, x/y/z i16).
  * Full snapshots, no delta compression (ADR 0004); 12 players stay under 10 KB/s.

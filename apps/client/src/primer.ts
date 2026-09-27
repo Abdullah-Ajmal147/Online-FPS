@@ -23,7 +23,7 @@ export function primerSteps(s: Pick<Settings, 'bindings' | 'mode'>): PrimerStep[
   return [
     {
       id: 'move',
-      text: `Move with ${k(b.forward)} ${k(b.left)} ${k(b.back)} ${k(b.right)} · ${k(b.sprint)} to sprint`,
+      text: `Move with ${k(b.forward)} ${k(b.left)} ${k(b.back)} ${k(b.right)} · ${k(b.sprint)} to sprint (tap twice: tactical sprint)`,
       keys: [b.forward, b.back, b.left, b.right],
     },
     { id: 'shoot', text: 'Aim with the mouse · left click to fire', mouse: [0] },

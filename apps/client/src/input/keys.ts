@@ -17,7 +17,7 @@ const ACTION_BUTTON: Partial<Record<Action, number>> = {
 
 /**
  * Turn the set of held keys into the InputCmd button bitfield.
- * With toggle sprint, the sprint key flips `sprintLatched` (tracked by the caller) and the
+ * With toggle sprint, `sprintLatched` comes from SprintToggle (tracked by the caller) and the
  * simulation still just sees a held Sprint bit.
  */
 export function buttonsFromKeys(

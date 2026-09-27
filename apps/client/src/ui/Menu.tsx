@@ -316,8 +316,8 @@ function PlayScreen({
         </div>
       </div>
       <p class="controls-hint">
-        WASD move · Mouse aim/fire · ← → turn · Shift sprint · C crouch/slide · G frag · Q smoke ·
-        Enter chat · Esc pause
+        WASD move · Mouse aim/fire · ← → turn · Shift sprint (×2 tactical) · Space at a ledge:
+        mantle · C crouch/slide · G frag · Q smoke · Enter chat · Esc pause
       </p>
     </section>
   );
@@ -1090,8 +1090,8 @@ function SettingsScreen({
             ))}
           </div>
           <p class="hint">
-            Mouse: left fire, right aim, wheel swap. Slide: sprint, then crouch. T: team chat. F3:
-            network stats.{' '}
+            Mouse: left fire, right aim, wheel swap. Slide: sprint, then crouch. Double-tap sprint:
+            tactical sprint. Jump at a ledge: mantle. T: team chat. F3: network stats.{' '}
             <button class="link" onClick={() => onSettings(DEFAULT_SETTINGS)}>
               Reset to defaults
             </button>

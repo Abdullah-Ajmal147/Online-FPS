@@ -5,8 +5,10 @@ import {
   yawFromRadians,
   type PlayerInput,
 } from '@sentinel/shared';
+import { movement } from '@sentinel/content';
 import type { Settings } from '../settings.ts';
 import { buttonsFromKeys, keyTurn } from './keys.ts';
+import { SprintToggle } from './sprintToggle.ts';
 import { applyLook, type Look } from './look.ts';
 
 /**
@@ -17,7 +19,7 @@ export class InputCapture {
   look: Look;
   locked = false;
   private held = new Set<string>();
-  private sprintLatched = false;
+  private sprintToggle = new SprintToggle(movement.doubleTapWindow);
   /** Mouse buttons: left = fire, right = aim down sights. */
   private mouseButtons = 0;
   /** Selected weapon slot (keys 1/2, mouse wheel). */
@@ -96,10 +98,9 @@ export class InputCapture {
       const yaw = (this.look.yaw + turn) % (2 * Math.PI);
       this.look = { ...this.look, yaw: yaw < 0 ? yaw + 2 * Math.PI : yaw };
     }
+    const sprint = s.toggleSprint ? this.sprintToggle.sample(performance.now()) : sprintHeld;
     return {
-      buttons:
-        buttonsFromKeys(this.held, s.bindings, s.toggleSprint ? this.sprintLatched : sprintHeld) |
-        this.mouseButtons,
+      buttons: buttonsFromKeys(this.held, s.bindings, sprint) | this.mouseButtons,
       yaw: yawFromRadians(this.look.yaw),
       pitch: pitchFromRadians(this.look.pitch),
       weaponSlot: this.weaponSlot,
@@ -119,7 +120,7 @@ export class InputCapture {
     if (this.locked) e.preventDefault();
     if (down) {
       if (e.code === s.bindings.sprint && s.toggleSprint && !e.repeat) {
-        this.sprintLatched = !this.sprintLatched;
+        this.sprintToggle.press(performance.now());
       }
       if (e.code === s.bindings.primary) this.weaponSlot = 0;
       if (e.code === s.bindings.secondary) this.weaponSlot = 1;
@@ -132,7 +133,7 @@ export class InputCapture {
   /** Let go of every held key/button (focus lost, chat opened). */
   releaseAll(): void {
     this.held.clear();
-    this.sprintLatched = false;
+    this.sprintToggle.reset();
     this.mouseButtons = 0;
   }
 

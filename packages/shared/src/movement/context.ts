@@ -23,11 +23,16 @@ export interface MovementContext {
   walkableNormalY: number;
   slideTicks: number;
   slideCooldownTicks: number;
+  tacSprintTicks: number;
+  tacSprintCooldownTicks: number;
+  doubleTapTicks: number;
   /** Reused every tick to avoid garbage in the 60 Hz loop. */
   scratch: {
     standingCapsule: Capsule;
     collision: CharacterCollision;
     desired: { x: number; y: number; z: number };
+    /** Downward ray for ledge probes (origin moved per probe). */
+    ray: InstanceType<Rapier['Ray']>;
   };
 }
 
@@ -58,6 +63,9 @@ export function createMovementContext(
     walkableNormalY: Math.cos(maxSlope),
     slideTicks: Math.round(tuning.slideDuration * TICK_RATE),
     slideCooldownTicks: Math.round(tuning.slideCooldown * TICK_RATE),
+    tacSprintTicks: Math.round(tuning.tacSprintDuration * TICK_RATE),
+    tacSprintCooldownTicks: Math.round(tuning.tacSprintCooldown * TICK_RATE),
+    doubleTapTicks: Math.round(tuning.doubleTapWindow * TICK_RATE),
     scratch: {
       standingCapsule: new rapier.Capsule(
         tuning.standingHeight / 2 - tuning.capsuleRadius,
@@ -65,6 +73,7 @@ export function createMovementContext(
       ),
       collision: new rapier.CharacterCollision(),
       desired: { x: 0, y: 0, z: 0 },
+      ray: new rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 }),
     },
   };
 }

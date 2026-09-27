@@ -60,11 +60,13 @@ export function stepSim(
   );
   const fwdHeld =
     (moveInput.buttons & Button.Forward) !== 0 && (moveInput.buttons & Button.Back) === 0;
+  // Mantling counts as sprinting for the weapon: it is lowered while climbing over.
   const sprinting =
-    (moveInput.buttons & Button.Sprint) !== 0 &&
-    fwdHeld &&
-    !move.crouching &&
-    speed > ctx.movement.tuning.walkSpeed;
+    move.mantleTicks > 0 ||
+    ((moveInput.buttons & Button.Sprint) !== 0 &&
+      fwdHeld &&
+      !move.crouching &&
+      speed > ctx.movement.tuning.walkSpeed);
   const { state: weapon, shot } = stepWeapon(
     prev.weapon,
     input,

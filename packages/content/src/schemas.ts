@@ -151,6 +151,18 @@ export const MovementSchema = z
     slideFriction: z.number().nonnegative(),
     /** Seconds after a slide ends before another can start (stops crouch-spam slides). */
     slideCooldown: z.number().nonnegative().max(4.25),
+    /** Tactical sprint (double-tap sprint): faster than sprint for a while, then a cooldown. */
+    tacSprintSpeed: z.number().positive(),
+    /** Max 4.25 s each: sent as u8 ticks. */
+    tacSprintDuration: z.number().positive().max(4.25),
+    tacSprintCooldown: z.number().nonnegative().max(4.25),
+    /** Two sprint presses within this many seconds are a double tap. */
+    doubleTapWindow: z.number().positive().max(1),
+    /** Mantle: Jump while moving forward at a ledge this high (feet to ledge top) climbs it. */
+    mantleMinHeight: z.number().positive(),
+    mantleMaxHeight: z.number().positive().max(2),
+    /** Forward speed while climbing over, m/s. */
+    mantleSpeed: z.number().positive(),
     stepHeight: z.number().positive(),
     maxSlopeDeg: z.number().min(0).max(89),
     capsuleRadius: z.number().positive(),
@@ -161,6 +173,12 @@ export const MovementSchema = z
   })
   .refine((m) => m.crouchSpeed < m.walkSpeed && m.walkSpeed < m.sprintSpeed, {
     message: 'speeds must satisfy crouch < walk < sprint',
+  })
+  .refine((m) => m.sprintSpeed < m.tacSprintSpeed, {
+    message: 'tactical sprint must be faster than sprint',
+  })
+  .refine((m) => m.stepHeight < m.mantleMinHeight && m.mantleMinHeight < m.mantleMaxHeight, {
+    message: 'mantle heights must satisfy step height < min < max',
   })
   .refine((m) => m.crouchHeight < m.standingHeight && m.standingHeight > 2 * m.capsuleRadius, {
     message:

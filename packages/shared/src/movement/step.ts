@@ -1,4 +1,4 @@
-import { TICK_DT } from '../constants.ts';
+import { TICK_DT, TICK_RATE } from '../constants.ts';
 import { detSinCos } from '../detmath.ts';
 import { Button, sanitizeInput, type PlayerInput } from '../input.ts';
 import type { Vec3 } from '../map/solids.ts';
@@ -6,6 +6,12 @@ import { SKIN, capsuleHeight, type MovementContext, type PlayerBody } from './co
 import type { PlayerState } from './state.ts';
 
 const f = Math.fround;
+/** A mantle hop rises this much above the ledge, so the capsule's bottom clears the edge. */
+const MANTLE_CLEARANCE = 0.15;
+/** Mantle ticks after the top of the hop: time to move over the ledge before air rules. */
+const MANTLE_EXTRA_TICKS = 12;
+/** How far ahead of the capsule's surface we look for a ledge, metres. */
+const LEDGE_PROBES = [0.1, 0.3, 0.5, 0.7];
 const IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
 
 /**
@@ -50,6 +56,11 @@ export function step(
   let slideCooldownTicks = Math.max(0, prev.slideCooldownTicks - 1);
   const hSpeed = Math.sqrt(vx * vx + vz * vz);
   const sprintHeld = (held & Button.Sprint) !== 0 && fwd > 0;
+  let mantleTicks = prev.mantleTicks;
+  let mantleYaw = prev.mantleYaw;
+  let tacSprintTicks = prev.tacSprintTicks;
+  let tacCooldownTicks = Math.max(0, prev.tacCooldownTicks - 1);
+  let sprintTapTicks = Math.max(0, prev.sprintTapTicks - 1);
 
   // --- Crouch / stand. Standing up needs head room. Releasing crouch ends a slide. ---
   if (held & Button.Crouch) {
@@ -58,6 +69,19 @@ export function step(
     slideTicks = 0;
     if (crouching && hasHeadroom(prev.position, ctx, body)) crouching = false;
   }
+
+  // --- Tactical sprint: double-tap sprint (two presses within doubleTapWindow). ---
+  // Lasts while sprint + forward stay held, up to tacSprintDuration; then a cooldown. The
+  // weapon counts it as sprinting (lowered, can't fire), like normal sprint.
+  if (pressed & Button.Sprint) {
+    if (sprintTapTicks > 0 && tacCooldownTicks === 0 && tacSprintTicks === 0 && fwd > 0) {
+      tacSprintTicks = ctx.tacSprintTicks;
+      sprintTapTicks = 0;
+    } else {
+      sprintTapTicks = ctx.doubleTapTicks;
+    }
+  }
+  if (tacSprintTicks > 0 && (!sprintHeld || crouching)) tacSprintTicks = 0;
 
   // --- Slide: press crouch while grounded and sprinting forward at sprint pace. ---
   // Needs Sprint + Forward held and no cooldown, so tapping crouch cannot chain slides.
@@ -77,18 +101,37 @@ export function step(
   const wasSliding = slideTicks > 0;
 
   // --- Jump: on press only (holding jump does not bunny-hop). Cancels a slide. ---
+  // Moving forward at a waist-to-chest-high ledge, the jump becomes a mantle: a hop sized to
+  // just clear the ledge plus a forward push each tick, so the controller carries us up the
+  // wall and over the top. Same ray/shape queries on client and server (deterministic).
   let jumped = false;
   if (prev.grounded && pressed & Button.Jump) {
-    vy = Math.sqrt(2 * t.gravity * t.jumpHeight);
+    const ledge = fwd > 0 && !crouching ? findLedge(prev.position, sinY, cosY, ctx) : null;
+    if (ledge !== null) {
+      vy = Math.sqrt(2 * t.gravity * (ledge + MANTLE_CLEARANCE));
+      mantleTicks = Math.min(255, Math.ceil((vy / t.gravity) * TICK_RATE) + MANTLE_EXTRA_TICKS);
+      mantleYaw = input.yaw; // the push keeps this direction: turning can't steer the climb
+    } else {
+      vy = Math.sqrt(2 * t.gravity * t.jumpHeight);
+    }
     jumped = true;
     slideTicks = 0;
+  } else if (mantleTicks > 0 && (prev.grounded || held & Button.Crouch)) {
+    mantleTicks = 0; // landed on top, or let go (crouch)
   }
 
   // --- Horizontal velocity. ---
   // A jump tick still uses ground rules, so chained hops are pulled back to normal speed.
   // Only a jump straight out of a slide keeps the slide's speed (for that one hop).
   const groundRules = prev.grounded && !(jumped && wasSliding);
-  if (slideTicks > 0 && prev.grounded && !jumped) {
+  if (mantleTicks > 0) {
+    // Mantling: push along the direction the mantle started in (walls clip this each tick;
+    // it is re-applied), where findLedge checked there is room to stand.
+    const [sinM, cosM] = detSinCos(mantleYaw);
+    vx = -sinM * t.mantleSpeed;
+    vz = -cosM * t.mantleSpeed;
+    mantleTicks -= 1;
+  } else if (slideTicks > 0 && prev.grounded && !jumped) {
     // Sliding: no steering, constant friction, ends early if too slow.
     const speed = Math.sqrt(vx * vx + vz * vz);
     const newSpeed = Math.max(0, speed - t.slideFriction * dt);
@@ -100,7 +143,8 @@ export function step(
   } else {
     if (!prev.grounded) slideTicks = 0;
     const sprinting = sprintHeld && !crouching;
-    let target = (crouching ? t.crouchSpeed : sprinting ? t.sprintSpeed : t.walkSpeed) * speedScale;
+    const sprintSpeed = tacSprintTicks > 0 ? t.tacSprintSpeed : t.sprintSpeed;
+    let target = (crouching ? t.crouchSpeed : sprinting ? sprintSpeed : t.walkSpeed) * speedScale;
     if (groundRules) {
       // Accelerate towards the wish velocity; with no input, friction brings us to a stop.
       [vx, vz] = approach(
@@ -119,6 +163,10 @@ export function step(
   }
   // Any slide that ended this tick (ran out, cancelled, released, left the ground) starts the cooldown.
   if (prev.slideTicks > 0 && slideTicks === 0) slideCooldownTicks = ctx.slideCooldownTicks;
+  // Tactical sprint counts down while running; when it ends for any reason, the cooldown starts.
+  if (tacSprintTicks > 0) tacSprintTicks -= 1; // counts the start tick too: exactly the duration
+  if (prev.tacSprintTicks > 0 && tacSprintTicks === 0)
+    tacCooldownTicks = ctx.tacSprintCooldownTicks;
 
   // --- Gravity. ---
   // While grounded we do NOT push down: gravity would sink the capsule into Rapier's skin
@@ -137,6 +185,11 @@ export function step(
   // --- Move the capsule with Rapier's character controller. ---
   const height = capsuleHeight(t, crouching);
   placeCollider(prev.position, height, ctx, body);
+  // No autostep while mantling: the hop alone decides how high we get (ledge + clearance), so
+  // the push can't step us up onto something taller behind the ledge. The controller is
+  // shared by every player, so set it explicitly each tick.
+  if (mantleTicks > 0) ctx.controller.disableAutostep();
+  else ctx.controller.enableAutostep(t.stepHeight, t.capsuleRadius * 0.5, false);
   const desired = ctx.scratch.desired;
   desired.x = vx * dt;
   desired.y = dy;
@@ -169,6 +222,11 @@ export function step(
     crouching,
     slideTicks,
     slideCooldownTicks,
+    mantleTicks,
+    mantleYaw,
+    tacSprintTicks,
+    tacCooldownTicks,
+    sprintTapTicks,
     prevButtons: held,
   };
 }
@@ -236,4 +294,52 @@ function hasHeadroom(feet: Vec3, ctx: MovementContext, body: PlayerBody): boolea
     body.collider,
   );
   return hit === null;
+}
+
+/**
+ * A ledge to mantle in front of the feet: its top height above the feet, or null. Looks
+ * straight down at a few points ahead (nearest first) for a walkable top between
+ * mantleMinHeight and mantleMaxHeight, then checks a standing capsule fits both where we are
+ * (raised to the ledge) and on top of it, so we never mantle into a ceiling or a window frame.
+ */
+function findLedge(feet: Vec3, sinY: number, cosY: number, ctx: MovementContext): number | null {
+  const t = ctx.tuning;
+  const top = feet[1] + t.mantleMaxHeight + 0.05;
+  const range = t.mantleMaxHeight + 0.05 - t.mantleMinHeight;
+  for (const probe of LEDGE_PROBES) {
+    const d = t.capsuleRadius + probe;
+    const x = feet[0] - sinY * d;
+    const z = feet[2] - cosY * d;
+    const ray = ctx.scratch.ray;
+    ray.origin.x = x;
+    ray.origin.y = top;
+    ray.origin.z = z;
+    const hit = ctx.world.castRayAndGetNormal(
+      ray,
+      range,
+      true,
+      ctx.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+    );
+    if (!hit) continue; // nothing this high here: look further ahead
+    // Starting inside something: a wall taller than we can mantle is in the way.
+    if (hit.timeOfImpact <= 0.001) return null;
+    if (hit.normal.y < ctx.walkableNormalY) continue;
+    const ledgeY = top - hit.timeOfImpact;
+    if (ledgeY - feet[1] > t.mantleMaxHeight) return null; // just too tall
+    const standY = ledgeY + SKIN + 0.05 + t.standingHeight / 2;
+    if (!capsuleFree(feet[0], standY, feet[2], ctx) || !capsuleFree(x, standY, z, ctx)) return null;
+    return ledgeY - feet[1];
+  }
+  return null;
+}
+
+function capsuleFree(x: number, y: number, z: number, ctx: MovementContext): boolean {
+  return (
+    ctx.world.intersectionWithShape(
+      { x, y, z },
+      IDENTITY,
+      ctx.scratch.standingCapsule,
+      ctx.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+    ) === null
+  );
 }

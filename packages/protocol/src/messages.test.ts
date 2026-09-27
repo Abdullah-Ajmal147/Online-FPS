@@ -38,6 +38,11 @@ const own: OwnSnapshot = {
       crouching: true,
       slideTicks: 17,
       slideCooldownTicks: 36,
+      mantleTicks: 21,
+      mantleYaw: 40000,
+      tacSprintTicks: 180,
+      tacCooldownTicks: 240,
+      sprintTapTicks: 9,
       prevButtons: 0b10_0110_0001,
     },
     weapon: {
@@ -78,8 +83,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 13 (private matches: MatchInfo.private, SwitchTeam)', () => {
-    expect(PROTOCOL_VERSION).toBe(13);
+  it('is 14 (own state: mantle and tactical sprint ticks)', () => {
+    expect(PROTOCOL_VERSION).toBe(14);
   });
 });
 

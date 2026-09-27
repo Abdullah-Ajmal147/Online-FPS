@@ -17,6 +17,16 @@ export interface PlayerState {
   slideTicks: number;
   /** Ticks until another slide may start; 0 = allowed. */
   slideCooldownTicks: number;
+  /** Ticks left of the current mantle (climb over a ledge); 0 = not mantling. */
+  mantleTicks: number;
+  /** Direction the current mantle pushes (16-bit yaw, fixed when it starts). */
+  mantleYaw: number;
+  /** Ticks left of tactical sprint; 0 = not tactical sprinting. */
+  tacSprintTicks: number;
+  /** Ticks until tactical sprint may start again. */
+  tacCooldownTicks: number;
+  /** Ticks left in which a second sprint press counts as a double tap. */
+  sprintTapTicks: number;
   /** Buttons of the previous tick, to detect presses (jump, slide) instead of holds. */
   prevButtons: number;
 }
@@ -31,6 +41,11 @@ export function createPlayerState(position: Vec3, yaw: number): PlayerState {
     crouching: false,
     slideTicks: 0,
     slideCooldownTicks: 0,
+    mantleTicks: 0,
+    mantleYaw: 0,
+    tacSprintTicks: 0,
+    tacCooldownTicks: 0,
+    sprintTapTicks: 0,
     prevButtons: 0,
   };
 }

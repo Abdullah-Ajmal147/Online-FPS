@@ -3,6 +3,7 @@ import { movement as tuning } from '@sentinel/content';
 import { Button, KNOWN_BUTTONS, MAX_PITCH } from '../input.ts';
 import { createPlayerBody } from './context.ts';
 import type { PlayerState } from './state.ts';
+import type { GameMap } from '@sentinel/content';
 import { createSim, flatMap, horizontalSpeed } from './harness.ts';
 
 const { Forward, Back, Left, Jump, Crouch, Sprint } = Button;
@@ -248,6 +249,204 @@ describe('crouch and slide', () => {
     sim.run(TPS * 2, { buttons: Forward }); // crouch-walk out from under the roof
     sim.run(2, { buttons: 0 });
     expect(sim.state.crouching).toBe(false);
+  });
+});
+
+describe('mantle', () => {
+  // Boxes in front of a player at z = 9 facing -Z (yaw 0).
+  const box = (height: number, depth: number, frontZ = 6.5): GameMap['geometry'][number] => ({
+    kind: 'box',
+    center: [0, height / 2, frontZ - depth / 2],
+    size: [6, height, depth],
+    yawDeg: 0,
+    material: 'wall',
+  });
+  const approach = async (extra: GameMap['geometry']) => {
+    const sim = await createSim([0, 0, 9], { map: flatMap(extra) });
+    sim.run(40, { buttons: Forward }); // walk up to the ledge
+    return sim;
+  };
+
+  it('climbs a 1.25 m ledge in one move (jump + forward)', async () => {
+    const jumper = await approach([box(1.25, 3)]);
+    jumper.run(1, { buttons: Jump }); // no forward: a normal jump, not a mantle
+    expect(jumper.state.mantleTicks).toBe(0);
+
+    const sim = await approach([box(1.25, 3)]);
+    sim.run(1, { buttons: Forward | Jump });
+    expect(sim.state.mantleTicks).toBeGreaterThan(0);
+    sim.run(Math.round(TPS * 0.6), { buttons: Forward });
+    expect(sim.state.position[1]).toBeCloseTo(1.25, 1);
+    expect(sim.state.grounded).toBe(true);
+    expect(sim.state.mantleTicks).toBe(0);
+  });
+
+  it('vaults a waist-high wall and keeps going', async () => {
+    const sim = await approach([box(1, 0.3)]);
+    sim.run(1, { buttons: Forward | Jump });
+    sim.run(TPS, { buttons: Forward });
+    expect(sim.state.position[2]).toBeLessThan(5); // past the wall (its back face is at 6.2)
+    expect(sim.state.position[1]).toBeCloseTo(0, 2);
+  });
+
+  it('does not mantle a 1.6 m wall', async () => {
+    const sim = await approach([box(1.6, 3)]);
+    sim.run(1, { buttons: Forward | Jump });
+    expect(sim.state.mantleTicks).toBe(0);
+    sim.run(TPS, { buttons: Forward });
+    expect(sim.state.position[1]).toBeCloseTo(0, 2);
+  });
+
+  it('does not mantle where there is no room to stand on top (low ceiling)', async () => {
+    const ceiling: GameMap['geometry'][number] = {
+      kind: 'box',
+      center: [0, 2.4, 5],
+      size: [6, 0.2, 3],
+      yawDeg: 0,
+      material: 'platform',
+    };
+    const sim = await approach([box(1, 3), ceiling]);
+    sim.run(1, { buttons: Forward | Jump });
+    expect(sim.state.mantleTicks).toBe(0);
+  });
+
+  it('gives bit-identical mantles in two separate worlds', async () => {
+    const a = await approach([box(1.2, 3)]);
+    const b = await approach([box(1.2, 3)]);
+    for (const sim of [a, b]) {
+      sim.run(1, { buttons: Forward | Jump });
+      sim.run(TPS, { buttons: Forward });
+    }
+    expect(a.state).toEqual(b.state);
+  });
+  it('the mantle itself never lifts the feet more than the clearance above the ledge (review H1)', async () => {
+    // A 1.3 m step 0.6 m deep in front of taller walls. Autostep is off while mantling, so
+    // the push can't carry us up the wall behind. (Once standing on the step, a normal jump
+    // reaches higher anyway: the mantle only reaches steps with room to stand.)
+    for (const wallHeight of [1.75, 1.9]) {
+      const tall: GameMap['geometry'][number] = {
+        kind: 'box',
+        center: [0, wallHeight / 2, 5.9 - 1.5],
+        size: [6, wallHeight, 3],
+        yawDeg: 0,
+        material: 'wall',
+      };
+      const sim = await approach([box(1.3, 0.6), tall]);
+      sim.run(1, { buttons: Forward | Jump });
+      let highest = 0;
+      while (sim.state.mantleTicks > 0) {
+        const feetY = sim.state.position[1]; // after a mantle tick
+        highest = Math.max(highest, feetY);
+        sim.run(1, { buttons: Forward });
+      }
+      expect(highest).toBeGreaterThan(1.25);
+      expect(highest).toBeLessThan(1.3 + 0.15 + 0.06);
+    }
+  });
+
+  it('turning mid-mantle does not steer the climb onto other geometry (review H2)', async () => {
+    // A 1.3 m box ahead and a 1.7 m platform to the left of it.
+    const side: GameMap['geometry'][number] = {
+      kind: 'box',
+      center: [-4.5, 0.85, 5],
+      size: [3, 1.7, 3],
+      yawDeg: 0,
+      material: 'wall',
+    };
+    const sim = await approach([box(1.3, 3), side]);
+    sim.run(1, { buttons: Forward | Jump, yaw: 0 });
+    sim.run(TPS, { buttons: Forward, yaw: 16384 }); // flick a quarter turn left
+    expect(sim.state.position[1]).toBeLessThan(1.4);
+  });
+
+  it('resumes bit-exactly from a copied mid-mantle state (reconciliation)', async () => {
+    const server = await approach([box(1.25, 3)]);
+    server.run(1, { buttons: Forward | Jump });
+    server.run(8, { buttons: Forward });
+    expect(server.state.mantleTicks).toBeGreaterThan(0);
+    const client = await createSim([0, 0, 0], { map: flatMap([box(1.25, 3)]) });
+    for (let k = 0; k < 11; k++) createPlayerBody(client.ctx);
+    client.state = JSON.parse(JSON.stringify(server.state));
+    server.run(TPS, { buttons: Forward, yaw: 3000 });
+    client.run(TPS, { buttons: Forward, yaw: 3000 });
+    expect(client.state).toEqual(server.state);
+  });
+});
+
+describe('tactical sprint', () => {
+  const doubleTap = (sim: Awaited<ReturnType<typeof createSim>>) => {
+    sim.run(1, { buttons: Forward | Sprint });
+    sim.run(3, { buttons: Forward });
+    sim.run(1, { buttons: Forward | Sprint });
+  };
+
+  it('double-tapping sprint runs faster than sprint, for tacSprintDuration', async () => {
+    const sim = await createSim([0, 0, 18], { map: flatMap() });
+    doubleTap(sim);
+    expect(sim.state.tacSprintTicks).toBeGreaterThan(0);
+    sim.run(TPS / 2, { buttons: Forward | Sprint });
+    expect(horizontalSpeed(sim.state)).toBeCloseTo(tuning.tacSprintSpeed, 3);
+    sim.run(Math.round(TPS * tuning.tacSprintDuration), { buttons: Forward | Sprint });
+    expect(sim.state.tacSprintTicks).toBe(0);
+    expect(sim.state.tacCooldownTicks).toBeGreaterThan(0);
+    expect(horizontalSpeed(sim.state)).toBeCloseTo(tuning.sprintSpeed, 3);
+  });
+
+  it('holding sprint (one press) is a normal sprint', async () => {
+    const sim = await createSim([0, 0, 15], { map: flatMap() });
+    sim.run(TPS, { buttons: Forward | Sprint });
+    expect(sim.state.tacSprintTicks).toBe(0);
+    expect(horizontalSpeed(sim.state)).toBeCloseTo(tuning.sprintSpeed, 3);
+  });
+
+  it('presses further apart than the double-tap window do not start it', async () => {
+    const sim = await createSim([0, 0, 15], { map: flatMap() });
+    sim.run(1, { buttons: Forward | Sprint });
+    sim.run(Math.round(TPS * tuning.doubleTapWindow) + 2, { buttons: Forward });
+    sim.run(1, { buttons: Forward | Sprint });
+    expect(sim.state.tacSprintTicks).toBe(0);
+  });
+
+  it('ends when sprint is released and cannot restart during the cooldown', async () => {
+    const sim = await createSim([0, 0, 15], { map: flatMap() });
+    doubleTap(sim);
+    sim.run(10, { buttons: Forward | Sprint });
+    sim.run(1, { buttons: Forward });
+    expect(sim.state.tacSprintTicks).toBe(0);
+    expect(sim.state.tacCooldownTicks).toBeGreaterThan(0);
+    doubleTap(sim);
+    expect(sim.state.tacSprintTicks).toBe(0);
+    sim.run(Math.round(TPS * tuning.tacSprintCooldown), { buttons: Forward });
+    doubleTap(sim);
+    expect(sim.state.tacSprintTicks).toBeGreaterThan(0);
+  });
+  it('resumes bit-exactly from a copied mid-tactical-sprint state (reconciliation)', async () => {
+    const server = await createSim([0, 0, 18], { map: flatMap() });
+    server.run(1, { buttons: Forward | Sprint });
+    server.run(3, { buttons: Forward });
+    server.run(1, { buttons: Forward | Sprint });
+    server.run(20, { buttons: Forward | Sprint });
+    const client = await createSim([5, 0, 5], { map: flatMap() });
+    for (let k = 0; k < 11; k++) createPlayerBody(client.ctx);
+    client.state = JSON.parse(JSON.stringify(server.state));
+    for (let i = 0; i < 400; i++) {
+      const input = { buttons: Forward | (i % 150 < 140 ? Sprint : 0), yaw: (i * 97) & 0xffff };
+      server.run(1, input);
+      client.run(1, input);
+    }
+    expect(client.state).toEqual(server.state);
+  });
+
+  it('slides and jumps out of a tactical sprint never exceed tacSprintSpeed (review M3)', async () => {
+    const sim = await createSim([0, 0, 18], { map: flatMap() });
+    doubleTap(sim);
+    let fastest = 0;
+    for (let i = 0; i < TPS * 4; i++) {
+      const buttons = Forward | Sprint | (i % 40 === 30 ? Crouch : 0) | (i % 25 === 0 ? Jump : 0);
+      sim.run(1, { buttons });
+      fastest = Math.max(fastest, horizontalSpeed(sim.state));
+    }
+    expect(fastest).toBeLessThanOrEqual(tuning.tacSprintSpeed + 1e-4);
   });
 });
 

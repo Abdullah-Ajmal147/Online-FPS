@@ -13,10 +13,10 @@ fluidity (getting over cover, bursts of speed) and a faster loop between fights.
 2. **Hit feedback pass** (client only) — louder, crisper hit markers and sounds, a distinct
    kill confirm, small camera punch when hit, damage direction already exists. Measured with
    the audio test.
-3. **Mantle** (shared sim, needs netcode review) — jumping at waist-to-chest-high cover
+3. **Mantle** — done (0.9.2; netcode-reviewed: fixed push direction, no autostep while mantling) — jumping at waist-to-chest-high cover
    (0.5–1.3 m) with forward input climbs over it in ~0.35 s instead of bumping. Deterministic
    (ray/shape casts in the Rapier world both sides already share); replay test; bots use it.
-4. **Tactical sprint** (shared sim + protocol bump, needs netcode review) — double-tap sprint:
+4. **Tactical sprint** — done (0.9.2, PROTOCOL_VERSION 14) — double-tap sprint:
    9 m/s for up to 3 s, weapon lowered (no firing), then a 4 s cooldown. Numbers as data in
    `movement.json`.
 5. **Third-person reloads and weapon switches** (protocol bump) — snapshot flags so other

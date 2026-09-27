@@ -15,6 +15,17 @@
   ],
   "patches": [
     {
+      "version": "0.9.2",
+      "date": "2026-09-27",
+      "title": "Faster on your feet",
+      "notes": [
+        "Mantle: jump while moving forward at waist-to-chest-high cover (0.5–1.3 m) to climb over it in one move.",
+        "Tactical sprint: double-tap sprint to run at 9 m/s for up to 3 seconds, weapon lowered, then a 4 second cooldown.",
+        "Turn with the arrow keys (rebindable): works when a laptop touchpad switches off while you hold movement keys.",
+        "Domination: \"+2 kill\" and \"+1 node\" pop up when a team scores, and the scoreboard shows points from kills and from nodes."
+      ]
+    },
+    {
       "version": "0.9.1",
       "date": "2026-09-27",
       "title": "Domination fix",

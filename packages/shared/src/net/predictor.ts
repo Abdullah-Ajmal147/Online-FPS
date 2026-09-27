@@ -194,6 +194,11 @@ function sameState(a: SimState, b: OwnState): boolean {
     m.crouching !== o.crouching ||
     m.slideTicks !== o.slideTicks ||
     m.slideCooldownTicks !== o.slideCooldownTicks ||
+    m.mantleTicks !== o.mantleTicks ||
+    m.mantleYaw !== o.mantleYaw ||
+    m.tacSprintTicks !== o.tacSprintTicks ||
+    m.tacCooldownTicks !== o.tacCooldownTicks ||
+    m.sprintTapTicks !== o.sprintTapTicks ||
     m.prevButtons !== o.prevButtons
   ) {
     return false;
