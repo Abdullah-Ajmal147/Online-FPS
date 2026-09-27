@@ -123,6 +123,47 @@ function worldUvs(geo: THREE.BufferGeometry, metres: number): void {
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
+/**
+ * Shipping-container trim for a container-sized prop box: corner posts, top and bottom rails,
+ * and a door end with a centre seam and four locking bars. Built in the box's own frame, then
+ * moved with it (world space, like the box itself). Visual only; collision is the plain box.
+ */
+function containerTrim(solid: Extract<Solid, { shape: 'box' }>): THREE.BufferGeometry[] {
+  const [hx, hy, hz] = solid.halfExtents;
+  const long = hx >= hz ? 'x' : 'z';
+  const L = long === 'x' ? hx : hz; // half length
+  const W = long === 'x' ? hz : hx; // half width
+  if (L * 2 < 2.5 || hy * 2 < 1.4) return []; // crates and spools stay plain
+  const parts: THREE.BufferGeometry[] = [];
+  // In a frame where the length runs along X: size and centre, then swapped if needed.
+  const add = (sx: number, sy: number, sz: number, cx: number, cy: number, cz: number) => {
+    const g = new THREE.BoxGeometry(...(long === 'x' ? [sx, sy, sz] : [sz, sy, sx])).toNonIndexed();
+    g.translate(...((long === 'x' ? [cx, cy, cz] : [cz, cy, cx]) as [number, number, number]));
+    parts.push(g);
+  };
+  const t = 0.07; // trim thickness
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) add(0.16, hy * 2 + 0.02, 0.16, sx * (L - 0.06), 0, sz * (W - 0.06)); // posts
+  for (const sy of [-1, 1])
+    for (const sz of [-1, 1]) add(L * 2, 0.12, t * 2, 0, sy * (hy - 0.05), sz * (W + t * 0.4)); // rails
+  // Door end: seam and four vertical locking bars standing off the face.
+  const face = L + 0.03;
+  add(0.02, hy * 2 - 0.2, 0.05, face, 0, 0);
+  for (const z of [-0.62, -0.38, 0.38, 0.62].map((f) => f * W * 1.6))
+    add(0.05, hy * 2 - 0.3, 0.05, face + 0.02, 0, Math.max(-W + 0.1, Math.min(W - 0.1, z)));
+  const m = new THREE.Matrix4().compose(
+    new THREE.Vector3(...solid.center),
+    new THREE.Quaternion(...solid.rotation),
+    new THREE.Vector3(1, 1, 1),
+  );
+  for (const g of parts) {
+    g.applyMatrix4(m);
+    for (const name of Object.keys(g.attributes))
+      if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+  }
+  return parts;
+}
+
 function paint(geo: THREE.BufferGeometry, color: number): void {
   const c = new THREE.Color(color);
   const count = geo.attributes.position!.count;
@@ -151,6 +192,17 @@ export function buildMapMeshes(solids: readonly Solid[], real?: Surfaces | null)
     let list = parts.get(solid.material);
     if (!list) parts.set(solid.material, (list = []));
     list.push(geo);
+    if (solid.material === 'prop' && solid.shape === 'box') {
+      // Trim a shade darker than the container's paint.
+      const trim = new THREE.Color(
+        CONTAINER_PAINT[(i * 7) % CONTAINER_PAINT.length]!,
+      ).multiplyScalar(0.62);
+      for (const g of containerTrim(solid)) {
+        worldUvs(g, SURFACE.prop.metres);
+        paint(g, trim.getHex());
+        list.push(g);
+      }
+    }
   });
   for (const [material, geos] of parts) {
     const merged = mergeGeometries(geos, false)!;
