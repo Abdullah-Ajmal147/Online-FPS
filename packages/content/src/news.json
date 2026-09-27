@@ -15,6 +15,15 @@
   ],
   "patches": [
     {
+      "version": "0.9.3",
+      "date": "2026-09-27",
+      "title": "Help",
+      "notes": [
+        "New Help screen in the main menu: basics, your current controls, how each mode scores, movement (slide, mantle, tactical sprint), every weapon and when it unlocks, XP and unlocks, fixes for common problems, and a direct line to the developer.",
+        "Keys show as ← → and Esc instead of their code names."
+      ]
+    },
+    {
       "version": "0.9.2",
       "date": "2026-09-27",
       "title": "Faster on your feet",

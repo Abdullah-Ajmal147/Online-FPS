@@ -216,12 +216,20 @@ export function rebind(
 }
 
 /** "KeyW" → "W", "ShiftLeft" → "Left Shift". */
+const KEY_NAMES: Record<string, string> = {
+  ArrowLeft: '←',
+  ArrowRight: '→',
+  ArrowUp: '↑',
+  ArrowDown: '↓',
+  Escape: 'Esc',
+};
+
 export function keyLabel(code: string): string {
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
   const m = /^(Shift|Control|Alt|Meta)(Left|Right)$/.exec(code);
   if (m) return `${m[2]} ${m[1] === 'Control' ? 'Ctrl' : m[1]}`;
-  return code;
+  return KEY_NAMES[code] ?? code;
 }
 
 /** The loadout part of the settings. */

@@ -23,6 +23,7 @@ import {
   type Settings,
 } from '../settings.ts';
 import { useStatus } from './Hud.tsx';
+import { HelpGuide } from './Help.tsx';
 import { LoadoutPicker } from './Loadout.tsx';
 import { primerDone, setPrimerDone } from '../primer.ts';
 import { pickRegion, regions } from '../regions.ts';
@@ -44,7 +45,7 @@ interface Props {
 /** Playlists offered on the Play screen (content mode ids). */
 const PLAYLISTS = ['team-deathmatch', 'domination'] as const;
 
-type Screen = 'play' | 'loadout' | 'career' | 'squad' | 'intel' | 'comms' | 'settings';
+type Screen = 'play' | 'loadout' | 'career' | 'squad' | 'intel' | 'comms' | 'help' | 'settings';
 
 const SCREENS: { id: Screen; label: string }[] = [
   { id: 'play', label: 'Play' },
@@ -53,6 +54,7 @@ const SCREENS: { id: Screen; label: string }[] = [
   { id: 'squad', label: 'Squad' },
   { id: 'intel', label: 'Intel' },
   { id: 'comms', label: 'Comms' },
+  { id: 'help', label: 'Help' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -128,6 +130,11 @@ export function Menu(props: Props) {
         {screen === 'squad' && <SquadScreen />}
         {screen === 'intel' && <IntelScreen />}
         {screen === 'comms' && <CommsScreen mode={props.settings.mode} />}
+        {screen === 'help' && (
+          <Screen title="Help" kicker="How to play · controls · problems · contact">
+            <HelpGuide settings={props.settings} onFeedback={() => setScreen('comms')} />
+          </Screen>
+        )}
         {screen === 'settings' && (
           <SettingsScreen settings={props.settings} onSettings={props.onSettings} />
         )}
