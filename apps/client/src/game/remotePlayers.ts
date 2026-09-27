@@ -52,10 +52,19 @@ export class RemotePlayers {
     renderer?: THREE.WebGPURenderer,
     camera?: THREE.Camera,
   ) {
+    const t0 = performance.now();
+    let loaded = 0;
     loadSoldierAssets()
-      .then((a) => this.warm(a, renderer, camera))
+      .then((a) => {
+        loaded = performance.now();
+        return this.warm(a, renderer, camera);
+      })
       .then((a) => {
         this.assets = a;
+        const now = performance.now();
+        console.info(
+          `[soldiers] models ready: loaded in ${Math.round(loaded - t0)} ms, prepared in ${Math.round(now - loaded)} ms`,
+        );
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
@@ -100,7 +109,11 @@ export class RemotePlayers {
     }
     if (renderer && camera) {
       this.scene.add(group);
-      await renderer.compileAsync(group, camera, this.scene).catch(() => undefined);
+      // At most 3 s: a hidden tab can stall this, and the models must not wait for it.
+      await Promise.race([
+        renderer.compileAsync(group, camera, this.scene).catch(() => undefined),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
       this.scene.remove(group);
     }
     for (const r of rigs) r.dispose();

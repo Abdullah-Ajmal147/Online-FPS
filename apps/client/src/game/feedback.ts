@@ -1,3 +1,4 @@
+import { declutter, type Label } from './declutter.ts';
 import * as THREE from 'three/webgpu';
 
 interface Floater {
@@ -47,6 +48,8 @@ export class Feedback {
         this.tags.delete(id);
       }
     }
+    // Project every tag, then stack the ones that would cover each other (nearest stays put).
+    const shown: { el: HTMLElement; label: Label }[] = [];
     for (const [id, t] of tags) {
       let el = this.tags.get(id);
       if (!el) {
@@ -56,8 +59,28 @@ export class Feedback {
         this.tags.set(id, el);
       }
       if (el.textContent !== t.name) el.textContent = t.name;
-      this.place(el, t.head, camera);
+      const p = t.head ? this.tmp.copy(t.head).project(camera) : null;
+      if (!t.head || !p || p.z > 1 || p.z < -1) {
+        el.style.display = 'none';
+        continue;
+      }
+      shown.push({
+        el,
+        label: {
+          x: ((p.x + 1) / 2) * window.innerWidth,
+          y: ((1 - p.y) / 2) * window.innerHeight,
+          // Estimated from the text (11 px bold, 6 px side padding): no layout reads per frame.
+          w: t.name.length * 6.6 + 12,
+          h: 15,
+          depth: camera.position.distanceTo(t.head),
+        },
+      });
     }
+    const up = declutter(shown.map((s) => s.label));
+    shown.forEach(({ el, label }, i) => {
+      el.style.display = '';
+      el.style.transform = `translate(${label.x}px, ${label.y - up[i]!}px) translate(-50%, -100%)`;
+    });
   }
 
   update(camera: THREE.Camera, frameSeconds: number): void {

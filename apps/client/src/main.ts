@@ -1,5 +1,7 @@
 import { h, render } from 'preact';
 import { startGame, type Game } from './game/game.ts';
+import { loadSoldierAssets } from './game/soldier/assets.ts';
+import { loadSurfaces } from './map.ts';
 import { refreshProfile } from './profile.ts';
 import { loadSettings, saveSettings, type Settings } from './settings.ts';
 import { getStatus, setStatus, subscribe } from './store.ts';
@@ -93,6 +95,10 @@ canvas.addEventListener('click', () => {
   if (getStatus().inMatch) void game?.requestPlay();
 });
 
+// Start downloading the heavy art right away, while the menu is up: soldier models and map
+// surfaces are ready (or nearly) by the time the player deploys. Failures fall back quietly.
+void loadSoldierAssets().catch(() => undefined);
+void loadSurfaces().catch(() => undefined);
 startGame(canvas, () => settings)
   .then((g) => {
     game = g;
