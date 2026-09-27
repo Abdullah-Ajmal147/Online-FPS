@@ -100,7 +100,9 @@ canvas.addEventListener('click', () => {
 void loadSoldierAssets().catch(() => undefined);
 void loadSurfaces('yard').catch(() => undefined);
 // The other maps' surfaces once the page is idle (they don't compete with start-up).
-setTimeout(() => void loadSurfaces('depot').catch(() => undefined), 8000);
+setTimeout(() => {
+  for (const theme of ['depot', 'town'] as const) void loadSurfaces(theme).catch(() => undefined);
+}, 8000);
 startGame(canvas, () => settings)
   .then((g) => {
     game = g;

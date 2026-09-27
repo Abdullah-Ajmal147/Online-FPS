@@ -20,6 +20,11 @@ Every model, texture, sound, font and animation not made by us goes here BEFORE 
 | Concrete 044 B (Saltline Depot floor)                           | `apps/client/public/assets/textures/depot/floor/`                     | https://ambientcg.com/view?id=Concrete044B             | ambientCG  | CC0 1.0                 | 2026-09-26 |
 | Corrugated Steel 007 A (Saltline Depot walls)                   | `apps/client/public/assets/textures/depot/wall/`                      | https://ambientcg.com/view?id=CorrugatedSteel007A      | ambientCG  | CC0 1.0                 | 2026-09-26 |
 | Concrete 034 (Saltline Depot platforms)                         | `apps/client/public/assets/textures/depot/platform/`                  | https://ambientcg.com/view?id=Concrete034              | ambientCG  | CC0 1.0                 | 2026-09-26 |
+| Paving Stones 115 B (Alder Street cobbles)                      | `apps/client/public/assets/textures/town/floor/`                      | https://ambientcg.com/view?id=PavingStones115B         | ambientCG  | CC0 1.0                 | 2026-09-27 |
+| Bricks 085 (Alder Street houses)                                | `apps/client/public/assets/textures/town/wall/`                       | https://ambientcg.com/view?id=Bricks085                | ambientCG  | CC0 1.0                 | 2026-09-27 |
+| Roofing Tiles 014 A (Alder Street roofs)                        | `apps/client/public/assets/textures/town/ramp/`                       | https://ambientcg.com/view?id=RoofingTiles014A         | ambientCG  | CC0 1.0                 | 2026-09-27 |
+| Wood Floor 051 (Alder Street floors)                            | `apps/client/public/assets/textures/town/platform/`                   | https://ambientcg.com/view?id=WoodFloor051             | ambientCG  | CC0 1.0                 | 2026-09-27 |
+| Planks 037 B (Alder Street stairs)                              | `apps/client/public/assets/textures/town/stairs/`                     | https://ambientcg.com/view?id=Planks037B               | ambientCG  | CC0 1.0                 | 2026-09-27 |
 
 The files above are optimized copies made by `pnpm assets` (tools/assets): meshes compressed,
 textures resized to WebP, unused clips and tracks removed. The original downloads are not in the

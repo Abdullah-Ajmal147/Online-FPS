@@ -1,4 +1,4 @@
-import { buildLoadout, modes, type LoadoutChoice } from '@sentinel/content';
+import { buildLoadout, MAP_ROTATION, modes, type LoadoutChoice } from '@sentinel/content';
 
 /** Player settings. Stored per browser (a convenience, not game state). */
 
@@ -55,6 +55,8 @@ export interface Settings {
   autoResolution: boolean;
   /** Playlist chosen on the Play screen (a content mode id). */
   mode: string;
+  /** Map chosen on the Play screen: a map in the rotation, or 'any'. */
+  map: string;
   /** Game server region id, or 'auto' (lowest ping). */
   region: string;
   /** Replay your death from the killer's eyes. */
@@ -80,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toggleSprint: false,
   headBob: false,
   mode: 'team-deathmatch',
+  map: 'any',
   region: 'auto',
   killcam: true,
   allowJoin: true,
@@ -137,6 +140,7 @@ export function normalizeSettings(raw: unknown): Settings {
   return {
     mode:
       typeof r.mode === 'string' && Object.hasOwn(modes, r.mode) ? r.mode : DEFAULT_SETTINGS.mode,
+    map: typeof r.map === 'string' && MAP_ROTATION.includes(r.map) ? r.map : 'any',
     // Validated against the region list when joining (unknown ids mean 'auto').
     region:
       typeof r.region === 'string' && /^[a-z0-9-]{1,24}$/.test(r.region)

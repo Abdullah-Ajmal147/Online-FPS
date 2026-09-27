@@ -23,6 +23,7 @@ import arenaJson from './maps/arena.json' with { type: 'json' };
 import greyboxJson from './maps/greybox.json' with { type: 'json' };
 import relayYardJson from './maps/relay-yard.json' with { type: 'json' };
 import saltlineDepotJson from './maps/saltline-depot.json' with { type: 'json' };
+import alderStreetJson from './maps/alder-street.json' with { type: 'json' };
 import movementJson from './movement.json' with { type: 'json' };
 import attachmentsJson from './attachments.json' with { type: 'json' };
 import perksJson from './perks.json' with { type: 'json' };
@@ -52,12 +53,14 @@ export const maps: Record<string, GameMap> = {
   'relay-yard': MapSchema.parse(relayYardJson),
   /** Second real map (Phase 5): dusk shipping depot, central platform, flank warehouses. */
   'saltline-depot': MapSchema.parse(saltlineDepotJson),
+  /** Third map (v2): a harbour town, houses you can enter (tools/maps/alder-street.mjs). */
+  'alder-street': MapSchema.parse(alderStreetJson),
   /** Open test arena with a clear line between spawns (netcode and hit-registration tests). */
   arena: MapSchema.parse(arenaJson),
 };
 
 /** Maps played in turn when the server isn't pinned to one (SENTINEL_MAP). */
-export const MAP_ROTATION: readonly string[] = ['relay-yard', 'saltline-depot'];
+export const MAP_ROTATION: readonly string[] = ['relay-yard', 'saltline-depot', 'alder-street'];
 
 export const movement: Movement = MovementSchema.parse(movementJson);
 

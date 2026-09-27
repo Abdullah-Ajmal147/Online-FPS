@@ -1,18 +1,80 @@
 {
   "yard": {
-    "floor": { "source": "Asphalt026C", "size": 1024 },
-    "wall": { "source": "Concrete031", "size": 512 },
-    "prop": { "source": "CorrugatedSteel005", "size": 512 },
-    "ramp": { "source": "DiamondPlate008C", "size": 512 },
-    "stairs": { "source": "MetalWalkway009", "size": 512 },
-    "platform": { "source": "MetalPlates013", "size": 512 }
+    "floor": {
+      "source": "Asphalt026C",
+      "size": 1024
+    },
+    "wall": {
+      "source": "Concrete031",
+      "size": 512
+    },
+    "prop": {
+      "source": "CorrugatedSteel005",
+      "size": 512
+    },
+    "ramp": {
+      "source": "DiamondPlate008C",
+      "size": 512
+    },
+    "stairs": {
+      "source": "MetalWalkway009",
+      "size": 512
+    },
+    "platform": {
+      "source": "MetalPlates013",
+      "size": 512
+    }
   },
   "depot": {
-    "floor": { "source": "Concrete044B", "size": 1024 },
-    "wall": { "source": "CorrugatedSteel007A", "size": 512 },
-    "prop": { "source": "CorrugatedSteel005", "size": 512 },
-    "ramp": { "source": "DiamondPlate008C", "size": 512 },
-    "stairs": { "source": "MetalWalkway009", "size": 512 },
-    "platform": { "source": "Concrete034", "size": 512 }
+    "floor": {
+      "source": "Concrete044B",
+      "size": 1024
+    },
+    "wall": {
+      "source": "CorrugatedSteel007A",
+      "size": 512
+    },
+    "prop": {
+      "source": "CorrugatedSteel005",
+      "size": 512
+    },
+    "ramp": {
+      "source": "DiamondPlate008C",
+      "size": 512
+    },
+    "stairs": {
+      "source": "MetalWalkway009",
+      "size": 512
+    },
+    "platform": {
+      "source": "Concrete034",
+      "size": 512
+    }
+  },
+  "town": {
+    "floor": {
+      "source": "PavingStones115B",
+      "size": 1024
+    },
+    "wall": {
+      "source": "Bricks085",
+      "size": 512
+    },
+    "prop": {
+      "source": "CorrugatedSteel005",
+      "size": 512
+    },
+    "ramp": {
+      "source": "RoofingTiles014A",
+      "size": 512
+    },
+    "stairs": {
+      "source": "Planks037B",
+      "size": 512
+    },
+    "platform": {
+      "source": "WoodFloor051",
+      "size": 512
+    }
   }
 }

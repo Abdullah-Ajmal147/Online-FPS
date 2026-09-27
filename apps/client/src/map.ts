@@ -27,14 +27,19 @@ const SURFACE: Record<Material, { metres: number; metalness: number }> = {
   platform: { metres: 2.5, metalness: 0.4 },
 };
 
+/** Per-theme scale changes (metres per texture copy), e.g. cobblestones are small. */
+const THEME_METRES: Partial<Record<string, Partial<Record<Material, number>>>> = {
+  town: { floor: 2.6, wall: 2.4 },
+};
+
 /** Shipping-container paint for props (the prop texture is bare grey corrugated steel). */
 const CONTAINER_PAINT = [0x8c3a2c, 0x2f5a86, 0x3d6a45, 0xa4652e, 0x7c7f84, 0x6e2f45];
 
 export type Surfaces = Record<Material, THREE.MeshStandardMaterial>;
 
 /** Surface themes (tools/assets/surfaces.json): a map's look, picked per map below. */
-export type Theme = 'yard' | 'depot';
-const THEME_FOR_MAP: Record<string, Theme> = { 'saltline-depot': 'depot' };
+export type Theme = 'yard' | 'depot' | 'town';
+const THEME_FOR_MAP: Record<string, Theme> = { 'saltline-depot': 'depot', 'alder-street': 'town' };
 export const themeOf = (mapId: string): Theme => THEME_FOR_MAP[mapId] ?? 'yard';
 
 const surfaces = new Map<Theme, Promise<Surfaces>>();
@@ -177,13 +182,18 @@ function paint(geo: THREE.BufferGeometry, color: number): void {
  * so the visuals match the colliders exactly. One merged mesh per material (a handful of draw
  * calls for the whole map). With `surfaces`, real textured materials; without, flat colours.
  */
-export function buildMapMeshes(solids: readonly Solid[], real?: Surfaces | null): THREE.Group {
+export function buildMapMeshes(
+  solids: readonly Solid[],
+  real?: Surfaces | null,
+  theme: string = 'yard',
+): THREE.Group {
+  const metres = (m: Material) => THEME_METRES[theme]?.[m] ?? SURFACE[m].metres;
   const group = new THREE.Group();
   group.name = 'map';
   const parts = new Map<Material, THREE.BufferGeometry[]>();
   solids.forEach((solid, i) => {
     const geo = solidGeometry(solid);
-    worldUvs(geo, SURFACE[solid.material].metres);
+    worldUvs(geo, metres(solid.material));
     // Props get a container colour (stable per solid); everything else is unpainted.
     paint(
       geo,
@@ -198,7 +208,7 @@ export function buildMapMeshes(solids: readonly Solid[], real?: Surfaces | null)
         CONTAINER_PAINT[(i * 7) % CONTAINER_PAINT.length]!,
       ).multiplyScalar(0.62);
       for (const g of containerTrim(solid)) {
-        worldUvs(g, SURFACE.prop.metres);
+        worldUvs(g, metres('prop'));
         paint(g, trim.getHex());
         list.push(g);
       }

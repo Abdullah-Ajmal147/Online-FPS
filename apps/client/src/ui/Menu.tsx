@@ -206,7 +206,10 @@ function PlayScreen({
   onSwitchTeam: () => void;
 }) {
   const status = useStatus();
-  const map = maps[status.mapId] ?? maps['relay-yard']!;
+  // In a match: the map being played. In the menu: the chosen map, or the next in rotation.
+  const map =
+    (!status.inMatch && settings.map !== 'any' ? maps[settings.map] : maps[status.mapId]) ??
+    maps['relay-yard']!;
   const invited = new URLSearchParams(location.search).has('with');
   const m = status.match;
   const daily = status.profile?.challenges.filter((c) => c.period === 'daily') ?? [];
@@ -238,6 +241,25 @@ function PlayScreen({
                 >
                   <b>{def.name}</b>
                   <span>{def.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {!status.inMatch && !invited && (
+          <div class="map-picks" role="radiogroup" aria-label="Map">
+            {['any', ...MAP_ROTATION].map((id) => {
+              const on = settings.map === id;
+              return (
+                <button
+                  key={id}
+                  role="radio"
+                  aria-checked={on}
+                  class={`map-pick${on ? ' on' : ''}`}
+                  data-testid={`map-${id}`}
+                  onClick={() => onSettings({ ...settings, map: id })}
+                >
+                  {id === 'any' ? 'Any map' : (maps[id]?.name ?? id)}
                 </button>
               );
             })}

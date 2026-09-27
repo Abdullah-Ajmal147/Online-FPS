@@ -53,6 +53,7 @@ function drawHitboxes(x: number, crouch: boolean): void {
 
 const view = params.get('view') ?? 'raw';
 const mixers: THREE.AnimationMixer[] = [];
+const lookAt = new THREE.Vector3();
 const lines: string[] = [];
 
 if (view === 'raw') {
@@ -286,6 +287,29 @@ if (view === 'stress') {
   );
 }
 
+if (view === 'map') {
+  // A map with its real surfaces: ?map=alder-street&cam=x,y,z&at=x,y,z
+  const { maps } = await import('@sentinel/content');
+  const { expandMap } = await import('@sentinel/shared');
+  const { buildMapMeshes, loadSurfaces, themeOf } = await import('../map.ts');
+  const { SkyMesh } = await import('three/addons/objects/SkyMesh.js');
+  const id = params.get('map') ?? 'alder-street';
+  const theme = themeOf(id);
+  floor.visible = false;
+  scene.add(buildMapMeshes(expandMap(maps[id]!), await loadSurfaces(theme), theme));
+  const sky = new SkyMesh();
+  sky.scale.setScalar(200);
+  sky.sunPosition.value.set(20, 40, 15).normalize();
+  scene.add(sky);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.58;
+  sun.intensity = 5.4;
+  sun.position.set(20, 40, 15);
+  const at = (params.get('at') ?? '0,1,0').split(',').map(Number) as [number, number, number];
+  lookAt.set(...at);
+  lines.push(`map ${id} (${theme})`);
+}
+
 let fpCamera: THREE.PerspectiveCamera | null = null;
 if (view === 'fp') {
   // First person: ?weapon=rifle&ads=0..1&team=0
@@ -317,7 +341,11 @@ if (view === 'fp') {
 
 const cam = (params.get('cam') ?? '0,1.1,4.2').split(',').map(Number);
 camera.position.set(cam[0]!, cam[1]!, cam[2]!);
-camera.lookAt(0, Number(params.get('look') ?? 0.95), 0);
+camera.lookAt(
+  lookAt.x === 0 && lookAt.z === 0 && !params.has('at')
+    ? new THREE.Vector3(0, Number(params.get('look') ?? 0.95), 0)
+    : lookAt,
+);
 info.textContent = lines.join('\n');
 (window as unknown as { __labReady: boolean }).__labReady = true;
 renderer.setAnimationLoop(() => renderer.render(scene, fpCamera ?? camera));

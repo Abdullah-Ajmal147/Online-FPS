@@ -60,6 +60,8 @@ export class Connection {
       token: string | null;
       loadout: LoadoutChoice;
       mode: string;
+      /** Quick Play map ('any': the rotation). */
+      map: string;
       region: string;
       allowJoin: boolean;
       /** Create a private match instead of joining one (Play screen). */
@@ -76,6 +78,7 @@ export class Connection {
         name,
         ...loadout,
         mode,
+        map: join.map,
         allowJoin: join.allowJoin,
         ...(token ? { token } : {}),
       };

@@ -1,0 +1,1760 @@
+{
+  "id": "alder-street",
+  "name": "Alder Street",
+  "location": "Alder Street, a harbour town, midday",
+  "description": "The Relay war emptied this harbour town. Brick houses line the main street; every door is open, and the upstairs windows watch the square.",
+  "killY": -20,
+  "lighting": "day",
+  "spawns": [
+    {
+      "team": 0,
+      "position": [-15, 0, 38.5],
+      "yawDeg": 0
+    },
+    {
+      "team": 0,
+      "position": [-9, 0, 38.5],
+      "yawDeg": 0
+    },
+    {
+      "team": 0,
+      "position": [-3, 0, 38.5],
+      "yawDeg": 0
+    },
+    {
+      "team": 0,
+      "position": [3, 0, 38.5],
+      "yawDeg": 0
+    },
+    {
+      "team": 0,
+      "position": [9, 0, 38.5],
+      "yawDeg": 0
+    },
+    {
+      "team": 0,
+      "position": [15, 0, 38.5],
+      "yawDeg": 0
+    },
+    {
+      "team": 1,
+      "position": [15, 0, -38.5],
+      "yawDeg": 180
+    },
+    {
+      "team": 1,
+      "position": [9, 0, -38.5],
+      "yawDeg": 180
+    },
+    {
+      "team": 1,
+      "position": [3, 0, -38.5],
+      "yawDeg": 180
+    },
+    {
+      "team": 1,
+      "position": [-3, 0, -38.5],
+      "yawDeg": 180
+    },
+    {
+      "team": 1,
+      "position": [-9, 0, -38.5],
+      "yawDeg": 180
+    },
+    {
+      "team": 1,
+      "position": [-15, 0, -38.5],
+      "yawDeg": 180
+    }
+  ],
+  "points": [
+    {
+      "id": "A",
+      "position": [-24, 0, 16]
+    },
+    {
+      "id": "B",
+      "position": [0, 0, 0]
+    },
+    {
+      "id": "C",
+      "position": [24, 0, -16]
+    }
+  ],
+  "geometry": [
+    {
+      "kind": "box",
+      "center": [0, -0.5, 0],
+      "size": [64, 1, 84],
+      "material": "floor"
+    },
+    {
+      "kind": "box",
+      "center": [0, 3, 42.5],
+      "size": [66, 6, 1],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [0, 3, -42.5],
+      "size": [66, 6, 1],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [32.5, 3, 0],
+      "size": [1, 6, 84],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-32.5, 3, 0],
+      "size": [1, 6, 84],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, 12.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, -12.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 2.1, 13.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 2.1, -13.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, 13.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, -13.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.25, 14.2],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.25, -14.2],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, 14.2],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, -14.2],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 4.35, 15],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 4.35, -15],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, 16.2],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, -16.2],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 0.5, 17.9],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 0.5, -17.9],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.15, 17.9],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.15, -17.9],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, 17.9],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, -17.9],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, 19.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, -19.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, 12.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, -12.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 0.5, 14.1],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 0.5, -14.1],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.15, 14.1],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.15, -14.1],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, 14.1],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, -14.1],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, 15.8],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, -15.8],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 4.35, 17],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 4.35, -17],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.25, 17.8],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.25, -17.8],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, 17.8],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, -17.8],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 2.1, 18.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 2.1, -18.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, 18.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, -18.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, 19.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, -19.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14.525, 3.2, 12],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [14.525, 3.2, -12],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, 12],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, -12],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.15, 12],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.15, -12],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 5.85, 12],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 5.85, -12],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-9.475, 3.2, 12],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [9.475, 3.2, -12],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14.525, 3.2, 20],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [14.525, 3.2, -20],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, 20],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, -20],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.15, 20],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.15, -20],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 5.85, 20],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 5.85, -20],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-9.475, 3.2, 20],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [9.475, 3.2, -20],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "stairs",
+      "start": [-16.05, 0, 19.15],
+      "width": 1.2,
+      "steps": 16,
+      "stepRise": 0.2,
+      "stepDepth": 0.28,
+      "yawDeg": 270,
+      "material": "stairs"
+    },
+    {
+      "kind": "stairs",
+      "start": [16.05, 0, -19.15],
+      "width": 1.2,
+      "steps": 16,
+      "stepRise": 0.2,
+      "stepDepth": 0.28,
+      "yawDeg": 90,
+      "material": "stairs"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.1, 15.35],
+      "size": [8.7, 0.2, 6.4],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.1, -15.35],
+      "size": [8.7, 0.2, 6.4],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-9.51, 3.1, 19.2],
+      "size": [3.72, 0.2, 1.3],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [9.51, 3.1, -19.2],
+      "size": [3.72, 0.2, 1.3],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 6.5, 16],
+      "size": [9, 0.2, 8],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [12, 6.5, -16],
+      "size": [9, 0.2, 8],
+      "material": "platform"
+    },
+    {
+      "kind": "ramp",
+      "base": [-7.15, 6.6, 16],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 90,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [7.15, 6.6, -16],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 270,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [-16.85, 6.6, 16],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 270,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [16.85, 6.6, -16],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 90,
+      "material": "ramp"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, 21.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, -21.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 2.1, 22.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 2.1, -22.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, 22.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, -22.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.25, 23.2],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.25, -23.2],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, 23.2],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, -23.2],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 4.35, 24],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 4.35, -24],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, 25.2],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, -25.2],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 0.5, 26.9],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 0.5, -26.9],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.15, 26.9],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.15, -26.9],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, 26.9],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, -26.9],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, 28.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, -28.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, 21.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, -21.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 0.5, 23.1],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 0.5, -23.1],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.15, 23.1],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.15, -23.1],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, 23.1],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, -23.1],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, 24.8],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, -24.8],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 4.35, 26],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 4.35, -26],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.25, 26.8],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.25, -26.8],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, 26.8],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, -26.8],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 2.1, 27.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 2.1, -27.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, 27.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, -27.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, 28.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, -28.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [9.475, 3.2, 21],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-9.475, 3.2, -21],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, 21],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, -21],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.15, 21],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.15, -21],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 5.85, 21],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 5.85, -21],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [14.525, 3.2, 21],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14.525, 3.2, -21],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [9.475, 3.2, 29],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-9.475, 3.2, -29],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, 29],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, -29],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.15, 29],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.15, -29],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 5.85, 29],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 5.85, -29],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [14.525, 3.2, 29],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14.525, 3.2, -29],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "stairs",
+      "start": [16.05, 0, 28.15],
+      "width": 1.2,
+      "steps": 16,
+      "stepRise": 0.2,
+      "stepDepth": 0.28,
+      "yawDeg": 90,
+      "material": "stairs"
+    },
+    {
+      "kind": "stairs",
+      "start": [-16.05, 0, -28.15],
+      "width": 1.2,
+      "steps": 16,
+      "stepRise": 0.2,
+      "stepDepth": 0.28,
+      "yawDeg": 270,
+      "material": "stairs"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.1, 24.35],
+      "size": [8.7, 0.2, 6.4],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.1, -24.35],
+      "size": [8.7, 0.2, 6.4],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [9.51, 3.1, 28.2],
+      "size": [3.72, 0.2, 1.3],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-9.51, 3.1, -28.2],
+      "size": [3.72, 0.2, 1.3],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [12, 6.5, 25],
+      "size": [9, 0.2, 8],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 6.5, -25],
+      "size": [9, 0.2, 8],
+      "material": "platform"
+    },
+    {
+      "kind": "ramp",
+      "base": [16.85, 6.6, 25],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 90,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [-16.85, 6.6, -25],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 270,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [7.15, 6.6, 25],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 270,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [-7.15, 6.6, -25],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 90,
+      "material": "ramp"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, 26.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, -26.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 2.1, 27.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 2.1, -27.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, 27.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, -27.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.25, 28.2],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.25, -28.2],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, 28.2],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, -28.2],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 4.35, 29],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 4.35, -29],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, 30.2],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, -30.2],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 0.5, 31.9],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 0.5, -31.9],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.15, 31.9],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.15, -31.9],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 5.85, 31.9],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 5.85, -31.9],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-7.5, 3.2, 33.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [7.5, 3.2, -33.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, 26.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, -26.7],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 0.5, 28.1],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 0.5, -28.1],
+      "size": [0.3, 1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.15, 28.1],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.15, -28.1],
+      "size": [0.3, 2.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, 28.1],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, -28.1],
+      "size": [0.3, 1.1, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, 29.8],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, -29.8],
+      "size": [0.3, 6.4, 2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 4.35, 31],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 4.35, -31],
+      "size": [0.3, 4.1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.25, 31.8],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.25, -31.8],
+      "size": [0.3, 1.9, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, 31.8],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, -31.8],
+      "size": [0.3, 1.1, 1.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 2.1, 32.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 2.1, -32.5],
+      "size": [0.3, 4.2, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 5.85, 32.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 5.85, -32.5],
+      "size": [0.3, 1.1, 0.2],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-16.5, 3.2, 33.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [16.5, 3.2, -33.3],
+      "size": [0.3, 6.4, 1.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14.525, 3.2, 26],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [14.525, 3.2, -26],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, 26],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, -26],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.15, 26],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.15, -26],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 5.85, 26],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 5.85, -26],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-9.475, 3.2, 26],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [9.475, 3.2, -26],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-14.525, 3.2, 34],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [14.525, 3.2, -34],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, 34],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, -34],
+      "size": [1.4, 1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.15, 34],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.15, -34],
+      "size": [1.4, 2.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 5.85, 34],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 5.85, -34],
+      "size": [1.4, 1.1, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-9.475, 3.2, 34],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [9.475, 3.2, -34],
+      "size": [3.65, 6.4, 0.3],
+      "material": "wall"
+    },
+    {
+      "kind": "stairs",
+      "start": [-16.05, 0, 33.15],
+      "width": 1.2,
+      "steps": 16,
+      "stepRise": 0.2,
+      "stepDepth": 0.28,
+      "yawDeg": 270,
+      "material": "stairs"
+    },
+    {
+      "kind": "stairs",
+      "start": [16.05, 0, -33.15],
+      "width": 1.2,
+      "steps": 16,
+      "stepRise": 0.2,
+      "stepDepth": 0.28,
+      "yawDeg": 90,
+      "material": "stairs"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 3.1, 29.35],
+      "size": [8.7, 0.2, 6.4],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [12, 3.1, -29.35],
+      "size": [8.7, 0.2, 6.4],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-9.51, 3.1, 33.2],
+      "size": [3.72, 0.2, 1.3],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [9.51, 3.1, -33.2],
+      "size": [3.72, 0.2, 1.3],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 6.5, 30],
+      "size": [9, 0.2, 8],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [12, 6.5, -30],
+      "size": [9, 0.2, 8],
+      "material": "platform"
+    },
+    {
+      "kind": "ramp",
+      "base": [-7.15, 6.6, 30],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 90,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [7.15, 6.6, -30],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 270,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [-16.85, 6.6, 30],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 270,
+      "material": "ramp"
+    },
+    {
+      "kind": "ramp",
+      "base": [16.85, 6.6, -30],
+      "width": 8.7,
+      "run": 4.85,
+      "rise": 2.79,
+      "yawDeg": 90,
+      "material": "ramp"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, 9.5],
+      "size": [8, 1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, -9.5],
+      "size": [8, 1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [12, 0.5, 19],
+      "size": [8, 1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-12, 0.5, -19],
+      "size": [8, 1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-3, 0.65, 13],
+      "size": [1.9, 1.3, 4.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [3, 0.65, -13],
+      "size": [1.9, 1.3, 4.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [3.2, 0.65, 21],
+      "size": [1.9, 1.3, 4.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-3.2, 0.65, -21],
+      "size": [1.9, 1.3, 4.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-3.2, 0.65, 29],
+      "size": [1.9, 1.3, 4.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [3.2, 0.65, -29],
+      "size": [1.9, 1.3, 4.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [4, 1.2, 7],
+      "size": [0.2, 2.4, 3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-4, 1.2, -7],
+      "size": [0.2, 2.4, 3],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [4.9, 2.45, 7],
+      "size": [2, 0.1, 3.2],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [-4.9, 2.45, -7],
+      "size": [2, 0.1, 3.2],
+      "material": "platform"
+    },
+    {
+      "kind": "box",
+      "center": [0, 0.5, 1.6],
+      "size": [4, 1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [0, 0.5, -1.6],
+      "size": [4, 1, 0.4],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [1.8, 0.5, 0],
+      "size": [0.4, 1, 2.8],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [-1.8, 0.5, 0],
+      "size": [0.4, 1, 2.8],
+      "material": "wall"
+    },
+    {
+      "kind": "box",
+      "center": [6.5, 0.45, 3.5],
+      "size": [2.4, 0.9, 1.2],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-6.5, 0.45, -3.5],
+      "size": [2.4, 0.9, 1.2],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-6.5, 0.45, 3.5],
+      "size": [2.4, 0.9, 1.2],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [6.5, 0.45, -3.5],
+      "size": [2.4, 0.9, 1.2],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-24.5, 0.6, 11],
+      "size": [7, 1.2, 0.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [24.5, 0.6, -11],
+      "size": [7, 1.2, 0.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-24.5, 0.6, 21],
+      "size": [7, 1.2, 0.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [24.5, 0.6, -21],
+      "size": [7, 1.2, 0.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-24.5, 0.6, 35],
+      "size": [7, 1.2, 0.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [24.5, 0.6, -35],
+      "size": [7, 1.2, 0.3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-27.5, 1.2, 25.5],
+      "size": [3, 2.4, 3.5],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [27.5, 1.2, -25.5],
+      "size": [3, 2.4, 3.5],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [24, 1.2, 36],
+      "size": [3.5, 2.4, 3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-24, 1.2, -36],
+      "size": [3.5, 2.4, 3],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [22, 0.6, 12],
+      "size": [0.3, 1.2, 6],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-22, 0.6, -12],
+      "size": [0.3, 1.2, 6],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [26, 0.75, 20],
+      "size": [2.4, 1.5, 1.2],
+      "material": "prop"
+    },
+    {
+      "kind": "box",
+      "center": [-26, 0.75, -20],
+      "size": [2.4, 1.5, 1.2],
+      "material": "prop"
+    }
+  ]
+}

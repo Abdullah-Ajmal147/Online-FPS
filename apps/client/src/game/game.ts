@@ -269,7 +269,7 @@ export async function startGame(
       });
     }
     const theme = themeOf(map.id);
-    mapMeshes = buildMapMeshes(mapSolids, surfacesByTheme.get(theme));
+    mapMeshes = buildMapMeshes(mapSolids, surfacesByTheme.get(theme), theme);
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
     sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
@@ -281,7 +281,7 @@ export async function startGame(
             (x, i, all) => all.findIndex((y) => y.material === x.material) === i,
           );
           await renderer
-            .compileAsync(buildMapMeshes(onePerMaterial, s), camera, scene)
+            .compileAsync(buildMapMeshes(onePerMaterial, s, theme), camera, scene)
             .catch(() => undefined);
           surfacesByTheme.set(theme, s);
           if (themeOf(map.id) === theme) showMap();
@@ -823,6 +823,7 @@ export async function startGame(
         token,
         loadout: loadoutChoice(settings()),
         mode: settings().mode,
+        map: settings().map,
         region: settings().region,
         allowJoin: settings().allowJoin,
         private: privateMatch,

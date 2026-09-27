@@ -95,7 +95,7 @@ describe('maps', () => {
   });
 });
 
-describe.each(['relay-yard', 'saltline-depot'])('%s', (id) => {
+describe.each(['relay-yard', 'saltline-depot', 'alder-street'])('%s', (id) => {
   it('is point-symmetric: rotated 180° it is the same map with the teams swapped (fair)', () => {
     const m = maps[id]!;
     const near = (a: readonly number[], b: readonly number[]) =>

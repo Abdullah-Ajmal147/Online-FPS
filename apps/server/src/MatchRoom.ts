@@ -200,7 +200,7 @@ export class MatchRoom extends Room {
     mode?: unknown;
     /** Private match (Play screen): not in matchmaking; invite link or Join button only. */
     private?: unknown;
-    /** Private match: the first map (then the usual rotation). */
+    /** Quick Play: this map only ('any': the rotation). Private match: the first map. */
     map?: unknown;
     /** Private match: fill empty slots with bots. */
     bots?: unknown;
@@ -217,6 +217,14 @@ export class MatchRoom extends Room {
       log.warn('fake lag ON (test setting)', { preset });
     }
     this.rotation = mapRotationFromEnv(process.env);
+    // Quick Play map choice (Play screen): the room plays only that map; 'any' (or none) keeps
+    // the rotation. Checked before any world is built; matchmaking keeps choices apart
+    // (filterBy 'map' in index.ts).
+    if (options?.private !== true && options?.map !== undefined && options.map !== 'any') {
+      if (typeof options.map !== 'string' || !MAP_ROTATION.includes(options.map))
+        throw new ServerError(400, 'unknown map');
+      if (!process.env.SENTINEL_MAP) this.rotation = [options.map];
+    }
     if (options?.private === true) {
       this.isPrivateMatch = true;
       privateRooms++;
