@@ -2223,3 +2223,62 @@ details.patch summary small {
   background: rgb(242 181 28 / 16%);
   color: #fff;
 }
+
+/* Sniper scope: clear circle, black outside, thin reticle, red centre dot. */
+.scope-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.08s linear;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      transparent 0 36vmin,
+      rgb(0 0 0 / 85%) 36.4vmin,
+      #000 37vmin
+    ),
+    linear-gradient(#000, #000) 50% 50% / 100% 1px no-repeat,
+    linear-gradient(#000, #000) 50% 50% / 1px 100% no-repeat;
+}
+
+.scope-overlay::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #ff3b30;
+}
+
+.scope-overlay.on {
+  opacity: 1;
+}
+
+body.scoped .crosshair-lines {
+  display: none;
+}
+
+/* Headshot kill: a short gold flash around the screen edge. */
+body.headshot-flash::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 18vmin rgb(242 181 28 / 55%);
+  animation: headshot-flash 0.5s ease-out forwards;
+}
+
+@keyframes headshot-flash {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}

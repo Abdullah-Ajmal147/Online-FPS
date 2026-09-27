@@ -405,6 +405,22 @@ export class GameAudio {
     }
   }
 
+  /** Headshot kill: a bright ringing strike over a low thump, clearly unlike a normal kill. */
+  headshotKill(): void {
+    const out = this.uiOut();
+    const ctx = this.ctx;
+    if (!ctx || !out) return;
+    this.tone(90, 0.22, 0.45, 0, 'sine', out);
+    for (const [f, v, d] of [
+      [1760, 0.16, 0],
+      [2637, 0.1, 0.01],
+      [3520, 0.07, 0.02],
+      [2093, 0.12, 0.08],
+    ] as const)
+      this.tone(f, 0.35, v, d, 'sine', out);
+    this.noiseBurst(out, ctx.currentTime, 0.04, 0.25, 'highpass', 5000, 0.7);
+  }
+
   /** Rising arpeggio for a medal (double kill, spree…). */
   medal(): void {
     const out = this.uiOut();

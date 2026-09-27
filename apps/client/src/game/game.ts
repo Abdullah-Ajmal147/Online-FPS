@@ -201,6 +201,12 @@ export async function startGame(
 
   applyGraphics();
 
+  // Sniper scope view (shown while a marksman rifle is fully aimed; style.css .scope-overlay).
+  const scopeEl = document.createElement('div');
+  scopeEl.className = 'scope-overlay';
+  scopeEl.dataset.testid = 'scope';
+  canvas.after(scopeEl); // over the 3D view, under the HUD (health, ammo stay readable)
+
   const camera = new THREE.PerspectiveCamera(70, 1, 0.02, 250);
   camera.rotation.order = 'YXZ'; // yaw first, then pitch: no roll creeping in
   scene.add(camera); // the viewmodel hangs off the camera
@@ -760,8 +766,18 @@ export async function startGame(
     if (kind === 'medal') audio.medal();
     hudDirty = true;
   };
+  /** When our last headshot kill landed (drives the short zoom punch and gold flash). */
+  let headshotAt = -Infinity;
   function onMyKill(victim: string, headshot: boolean): void {
     const now = performance.now();
+    if (headshot) {
+      headshotAt = now;
+      announce('medal', 'HEADSHOT');
+      audio.headshotKill();
+      document.body.classList.remove('headshot-flash');
+      void document.body.offsetWidth; // restart the CSS animation
+      document.body.classList.add('headshot-flash');
+    }
     announce('kill', `ELIMINATED ${victim.toUpperCase()}`, headshot ? '+100 · HEADSHOT' : '+100');
     recentKills = [...recentKills.filter((t) => now - t < 4000), now];
     streak++;
@@ -1122,14 +1138,22 @@ export async function startGame(
     applyGraphics();
     const spec = simCtx.loadout[w.slot];
     const ads = adsFraction(w, spec);
-    // Aiming zooms in a little (a marksman scope a lot more).
-    const zoom = spec.def.class === 'marksman' ? 0.45 : 0.18;
-    const vfov = verticalFovDegrees(settings().fov * (1 - zoom * ads), camera.aspect);
+    // Aiming zooms in a little; a marksman scope 4× (FOV × 0.25), with the scope view drawn
+    // over the screen once the rifle is nearly up (the rifle model is hidden behind it).
+    const marksman = spec.def.class === 'marksman';
+    const zoom = marksman ? 0.75 : 0.18;
+    const scoped = marksman && ads > 0.85 && hud.alive;
+    scopeEl.classList.toggle('on', scoped);
+    document.body.classList.toggle('scoped', scoped);
+    // Headshot kill: a quick zoom punch (0.45 s), never enough to lose the target.
+    const hsT = (performance.now() - headshotAt) / 450;
+    const punch = hsT >= 0 && hsT < 1 ? Math.sin(Math.PI * hsT) * 0.1 : 0;
+    const vfov = verticalFovDegrees(settings().fov * (1 - zoom * ads) * (1 - punch), camera.aspect);
     if (Math.abs(camera.fov - vfov) > 0.01) {
       camera.fov = vfov;
       camera.updateProjectionMatrix();
     }
-    viewmodel.root.visible = hud.alive;
+    viewmodel.root.visible = hud.alive && !scoped;
     viewmodel.setTeam(myTeam());
     viewmodel.update(frame, {
       slot: w.slot,
