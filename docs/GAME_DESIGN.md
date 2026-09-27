@@ -19,8 +19,8 @@ public beta (Phase 8); the name only appears in UI strings, so a change stays ch
 
 ## Setting (original IP)
 
-Near-future, fictional factions. Stylized low-poly look, clean readable silhouettes,
-bright team colors. No blood or gore (target PEGI 12).
+Near-future, fictional factions. Grounded, realistic look (ADR 0011; was stylized low-poly
+in v1), clean readable silhouettes, bright team colors on helmets, arm bands and patches. No blood or gore (target PEGI 12).
 
 - **Aegis Directive** (team color: blue): a disciplined private security force that protects
   the world's automated cities. Clean armor, hard edges, cool lighting.

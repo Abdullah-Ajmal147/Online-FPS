@@ -27,6 +27,9 @@ Roadmap v2" doc. This file is the short version Claude Code reads.
 | 8   | Public beta           | 3–4     | 99% crash-free; live on domain + CrazyGames    |
 | 9   | Live service          | ongoing | per season                                     |
 
+**v2 (Phases 10–16)**: realistic graphics, fast movement, competitive modes, maps, store,
+community, mobile — see `docs/V2_ROADMAP.md` (competitor research and exit tests).
+
 ## Budgets
 
 - Initial download < 15 MB; total < 50 MB; < 1,500 files

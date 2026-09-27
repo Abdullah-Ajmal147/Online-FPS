@@ -1,6 +1,8 @@
 # Progress
 
-**Current phase:** 8 — Public beta (Phases 3–7: everything that doesn't need the owner's accounts or hardware is done)
+**Current phase:** 8 — Public beta (Phases 3–7: everything that doesn't need the owner's accounts or hardware is done).
+Live at https://play.remoteref.com since 2026-09-26 (runbook: `deploy/deploy.md`). What is
+still open, in one list: [Outstanding](#outstanding-2026-09-26) at the end of this file.
 
 ## Phase 0 — Setup
 
@@ -234,7 +236,8 @@ Exit tests:
 - [x] Adding a weapon needs only a JSON file (+ model, once there are models)
 - [x] First download < 15 MB; total < 50 MB; < 1,500 files (checked in CI)
 - [ ] 60 fps at Low on an integrated-GPU laptop on both maps — needs the owner's hardware
-- Task 1 (glTF asset pipeline) waits for the first real models; everything is greybox today.
+- [x] Task 1 (glTF asset pipeline): done 2026-09-26 with the first real models, see
+      [Real soldiers and weapons](#real-soldiers-and-weapons-owner-request-2026-09-26).
 
 What we learned:
 
@@ -428,5 +431,69 @@ Learned: never create materials during play with three's WebGPU renderer; pool a
 
 Learned: Colyseus' static `onAuth` runs before room creation, but returning auth data from it
 skips the instance `onAuth` (bans, pools); it must return plain `true`.
+
+## Sound, second report (2026-09-26): "after a few seconds in a match the sound is gone"
+
+Measured, not guessed: the audio engine never stopped (3 bot matches headless, 45 s in real
+Chrome, output level logged every second). When a match went live the music faded ~20 dB to
+RMS ~0.01 and the map made no sound, so between fights it was effectively silent.
+
+- World ambience (wind gusts + air) under every match, on the effects volume; the quietest
+  moments are now ~0.02–0.04 RMS, fights 0.1–0.3. Fuller match music (moving bass, sparse
+  melody), still under the effects.
+- Audio resumes on every click/key, on the context's `statechange` and when the tab is shown
+  again (it resumed only on the first gesture: a headset switch or OS audio hiccup left the
+  rest of the session silent).
+- Soft clipper as the last stage (rifle transients reached 1.015 full scale → clicks).
+
+## Real soldiers and weapons (owner request, 2026-09-26)
+
+"Make the game look like real humans." Phase 5 task 1 (asset pipeline) done with it.
+
+- Assets (all CC0, logged in `docs/LICENSES.md`): Quaternius Universal Base Characters
+  (male + female bodies), Universal Animation Library (17 of the free clips), five Quaternius
+  guns. `pnpm assets` (tools/assets) compresses them: 1.1 MB of characters and animations,
+  130 KB of weapons; sources stay out of git (`tools/assets/README.md`).
+- Dressed in code, original designs: the body is split by bone into skin, combat suit in a
+  procedural faction camo, gloves, boots and a team arm band; helmets with headsets, plate
+  carriers with pouches and radio, belts, cargo pockets and knee pads are shapes fitted to the
+  measured body (one draw call per bone). Aegis: urban grey-blue, goggles; Ember: desert tan,
+  face wraps. Team colour on helmet bands, arm bands and patches.
+- Animated from the pose the server already sends (no protocol change): locomotion clips
+  blended by real speed on one shared step cycle, hips turn toward strafing, backwards plays in
+  reverse; weapon at the shoulder along the aim; both arms reach it with two-bone IK; fingers
+  in a grip pose; death clip, weapon drops and falls flat. Sprinting lowers the weapon.
+- **Hit where you see:** spine IK puts the drawn head on the server's head hitbox every frame
+  (hips raised for the low running clips). Browser test: within 5 cm in 9 poses (standing,
+  aiming ±45°, crouched, crouch-walking, jogging, sprinting, strafing, backwards).
+- First person: real weapon models, sight-aligned for aiming down sights, held by the player's
+  own gloved, camo-sleeved arms (the team's model cut to its arms, same IK, drawn 1.3×).
+- Tracers start at the remote soldier's muzzle; name tags ride on the real head.
+- Cost: 11 soldiers animate in 0.7 ms/frame (2.1 ms before refreshing only the bones each IK
+  step reads); beyond 35 m legs only. Download 6.75 MB total (2.83 MB gzipped).
+- Model lab (dev only): `/lab.html?view=hold|dressed|guns|fp|bench`, with the server
+  hitboxes drawn over the soldiers.
+
+Learned: gltf-transform's quantization folds a scale into skins' inverse bind matrices, so
+`skeleton.pose()` puts bones in the wrong place (animation is fine) — measure rest poses from
+the bones' own transforms. Dropping a clip must also drop its samplers' keyframe data, or
+prune keeps it (2.9 MB → 420 KB).
+
+## Outstanding (2026-09-26)
+
+Needs the owner:
+
+- 5 outside playtesters; online sign-off on movement and gunplay feel.
+- 60 fps at Low on an integrated-GPU laptop, on both maps.
+- Sentry / PostHog keys; Supabase accounts (XP on another device).
+- Final name, trademark, Discord link, portal submission.
+
+Now possible on the live server: two humans + 10 bots over the internet, 10 bot matches on
+the real server, a restore-from-backup drill there.
+
+Technical, not blocked: overlapping name tags; the ~30 s first match after a server restart
+(bot navigation is not the cause: 0.36 s, now built at startup); cross-browser determinism
+(Firefox/WebKit); WebGPU path never seen running; rewind cap tuning for high ping; reload and
+weapon-switch animations for other players (not in snapshots today).
 
 <!-- Copy this block for each new phase. Claude updates it via /commit-task and /phase-done. -->
