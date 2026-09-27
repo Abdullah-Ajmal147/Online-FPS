@@ -187,7 +187,7 @@ export class Viewmodel {
     const id = shown.userData.id as keyof typeof HOLDS;
     const hold = HOLDS[id];
     // The grip points scale with the drawn weapon (they are in its space).
-    arms.grip(shown.userData.gun as THREE.Object3D, hold.right, hold.left);
+    arms.grip(shown.userData.gun as THREE.Object3D, hold.right, hold.left, hold.leftTwist);
   }
 }
 

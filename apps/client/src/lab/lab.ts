@@ -299,6 +299,13 @@ if (view === 'fp') {
   const vm = new Viewmodel(fpCamera);
   await new Promise((r) => setTimeout(r, 200));
   const cls = params.get('weapon') ?? 'rifle';
+  // Tuning: ?left=x,y,z&twist=x,y,z override the hold of that weapon for this page.
+  const { HOLDS, MODEL_FOR_CLASS } = await import('../game/soldier/holds.ts');
+  const hold = HOLDS[MODEL_FOR_CLASS[cls as keyof typeof MODEL_FOR_CLASS]];
+  const vec = (k: string) =>
+    params.get(k)?.split(',').map(Number) as [number, number, number] | undefined;
+  hold.left = vec('left') ?? hold.left;
+  hold.leftTwist = vec('twist') ?? hold.leftTwist;
   const w = Object.values(weaponCatalog).find((x) => x.class === cls)!;
   vm.setLoadout(w, w);
   vm.setTeam(Number(params.get('team') ?? 0));

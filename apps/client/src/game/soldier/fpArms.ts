@@ -63,7 +63,12 @@ export class FirstPersonArms {
   }
 
   /** Hands onto the weapon: wrist points in weapon space, weapon already placed this frame. */
-  grip(weapon: THREE.Object3D, right: THREE.Vector3Tuple, left: THREE.Vector3Tuple): void {
+  grip(
+    weapon: THREE.Object3D,
+    right: THREE.Vector3Tuple,
+    left: THREE.Vector3Tuple,
+    leftTwist: THREE.Vector3Tuple = [0, 0, 0],
+  ): void {
     // Everything hangs off the camera; bring the camera's subtree up to date first.
     this.root.parent!.updateWorldMatrix(true, true);
     const wm = weapon.matrixWorld;
@@ -86,7 +91,10 @@ export class FirstPersonArms {
       this.left,
       new THREE.Vector3(...left).applyMatrix4(wm),
       pole(this.left, -0.8),
-      q.clone().multiply(this.offsets.l),
+      q
+        .clone()
+        .multiply(this.offsets.l)
+        .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...leftTwist))),
     );
   }
 }

@@ -64,8 +64,10 @@ export const HOLDS: Record<WeaponModelId, Hold> = {
   marksman: {
     at: [0.13, 0.12, 0.4],
     right: [0.02, -0.05, 0.22],
-    left: [-0.02, -0.04, -0.15],
-    leftTwist: [0, 0, 0],
+    // Support hand just in front of the magazine (the fore-end is out of reach on a long
+    // rifle), fist turned under the stock.
+    left: [-0.03, -0.07, -0.1],
+    leftTwist: [-1.57, 0, 0],
     muzzle: [0, 0.02, -0.56],
     kick: 0.05,
     fp: { sightDrop: 0.028, z: -0.6 },
