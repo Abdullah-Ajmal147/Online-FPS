@@ -20,9 +20,12 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     --mount=type=cache,id=pnpm-cache,target=/root/.cache/pnpm \
     pnpm fetch --store-dir /pnpm-store
 COPY . .
+# --prefer-offline, not --offline: on CI the fetch layer above can come from the layer cache
+# while the store cache mount starts empty (it is not carried between runners); then offline
+# install finds nothing and fails. Anything missing is downloaded here instead.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     --mount=type=cache,id=pnpm-cache,target=/root/.cache/pnpm \
-    pnpm install --frozen-lockfile --offline --store-dir /pnpm-store
+    pnpm install --frozen-lockfile --prefer-offline --store-dir /pnpm-store
 # The client talks to the game server on the same host (port 2567) and the API on port 8787
 # unless VITE_SERVER_URL / VITE_API_URL are set at build time.
 ARG VITE_SERVER_URL
