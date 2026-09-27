@@ -98,7 +98,7 @@ canvas.addEventListener('click', () => {
 // Start downloading the heavy art right away, while the menu is up: soldier models and map
 // surfaces are ready (or nearly) by the time the player deploys. Failures fall back quietly.
 void loadSoldierAssets().catch(() => undefined);
-void loadSurfaces().catch(() => undefined);
+for (const theme of ['yard', 'depot'] as const) void loadSurfaces(theme).catch(() => undefined);
 startGame(canvas, () => settings)
   .then((g) => {
     game = g;

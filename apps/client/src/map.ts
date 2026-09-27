@@ -32,13 +32,20 @@ const CONTAINER_PAINT = [0x8c3a2c, 0x2f5a86, 0x3d6a45, 0xa4652e, 0x7c7f84, 0x6e2
 
 export type Surfaces = Record<Material, THREE.MeshStandardMaterial>;
 
-let surfaces: Promise<Surfaces> | null = null;
+/** Surface themes (tools/assets/surfaces.json): a map's look, picked per map below. */
+export type Theme = 'yard' | 'depot';
+const THEME_FOR_MAP: Record<string, Theme> = { 'saltline-depot': 'depot' };
+export const themeOf = (mapId: string): Theme => THEME_FOR_MAP[mapId] ?? 'yard';
 
-/** Load the surface textures once (in the background, from the start of the page). */
-export function loadSurfaces(): Promise<Surfaces> {
-  surfaces ??= (async () => {
+const surfaces = new Map<Theme, Promise<Surfaces>>();
+
+/** Load a theme's surface textures once (in the background). */
+export function loadSurfaces(theme: Theme = 'yard'): Promise<Surfaces> {
+  let loading = surfaces.get(theme);
+  if (loading) return loading;
+  loading = (async () => {
     const loader = new THREE.TextureLoader();
-    const base = `${import.meta.env.BASE_URL}assets/textures/`;
+    const base = `${import.meta.env.BASE_URL}assets/textures/${theme}/`;
     const tex = async (m: Material, name: string, srgb: boolean) => {
       const t = await loader.loadAsync(`${base}${m}/${name}.webp`);
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -61,13 +68,14 @@ export function loadSurfaces(): Promise<Surfaces> {
           metalness: SURFACE[m].metalness,
           vertexColors: true, // container paint on props; white elsewhere
         });
-        mat.name = `surface:${m}`;
+        mat.name = `surface:${theme}:${m}`;
         return [m, mat] as const;
       }),
     );
     return Object.fromEntries(entries) as Surfaces;
   })();
-  return surfaces;
+  surfaces.set(theme, loading);
+  return loading;
 }
 
 /** Geometry of one solid in world space, with just position, normal, uv and colour. */

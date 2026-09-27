@@ -54,7 +54,7 @@ import {
 import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees } from '../camera.ts';
 import { InputCapture } from '../input/capture.ts';
-import { buildMapMeshes, loadSurfaces, type Surfaces } from '../map.ts';
+import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
 import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
@@ -233,9 +233,9 @@ export async function startGame(
       weapon: createWeaponState(simCtx.loadout),
     };
   };
-  // Real map surfaces load in the background from the start; until they are here the map is
+  // Real map surfaces (per map theme) load in the background; until a map's are here it is
   // drawn in flat colours, then redrawn once (in the menu, before any match: no mid-fight hitch).
-  let surfaces: Surfaces | null = null;
+  const surfacesByTheme = new Map<Theme, Surfaces>();
   let mapSolids: Solid[] = [];
   function showMap(): void {
     if (mapMeshes) {
@@ -244,23 +244,27 @@ export async function startGame(
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });
     }
-    mapMeshes = buildMapMeshes(mapSolids, surfaces);
+    const theme = themeOf(map.id);
+    mapMeshes = buildMapMeshes(mapSolids, surfacesByTheme.get(theme));
     scene.add(mapMeshes);
     effects.setSolids(mapMeshes);
     sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
+    if (!surfacesByTheme.has(theme)) {
+      loadSurfaces(theme)
+        .then(async (s) => {
+          // Set the materials up off the main path before they are first drawn.
+          const onePerMaterial = mapSolids.filter(
+            (x, i, all) => all.findIndex((y) => y.material === x.material) === i,
+          );
+          await renderer
+            .compileAsync(buildMapMeshes(onePerMaterial, s), camera, scene)
+            .catch(() => undefined);
+          surfacesByTheme.set(theme, s);
+          if (themeOf(map.id) === theme) showMap();
+        })
+        .catch((e: unknown) => console.warn('[map] surface textures unavailable, flat colours', e));
+    }
   }
-  loadSurfaces()
-    .then(async (s) => {
-      surfaces = s;
-      // Set the materials up off the main path before they are first drawn.
-      const onePerMaterial = mapSolids.filter(
-        (x, i, all) => all.findIndex((y) => y.material === x.material) === i,
-      );
-      const probe = buildMapMeshes(onePerMaterial, s);
-      await renderer.compileAsync(probe, camera, scene).catch(() => undefined);
-      if (mapSolids.length) showMap();
-    })
-    .catch((e: unknown) => console.warn('[map] surface textures unavailable, flat colours', e));
   function loadMap(id: string): void {
     const next = maps[id];
     if (!next) throw new Error(`unknown map "${id}"`);
@@ -1251,7 +1255,7 @@ const LIGHTING: Record<
     hemiSky: 0xffd2b0,
     hemiGround: 0x4a4050,
     hemiIntensity: 3.2,
-    sun: 0xff9a5c,
+    sun: 0xffb07c,
     sunIntensity: 4.6,
     sunPosition: [35, 14, -20],
     turbidity: 6,

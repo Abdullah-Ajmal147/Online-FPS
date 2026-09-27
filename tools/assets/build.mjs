@@ -209,23 +209,31 @@ for (const [id, spec] of Object.entries(GUNS)) {
 const SURFACES = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'surfaces.json'), 'utf8'),
 );
-for (const [surface, spec] of Object.entries(SURFACES)) {
-  const dir = join(SRC, 'textures', spec.source);
-  const out = join(OUT, 'textures', surface);
-  mkdirSync(out, { recursive: true });
-  let bytes = 0;
-  for (const [map, suffix, quality] of [
-    ['color', 'Color', 82],
-    ['normal', 'NormalGL', 90],
-    ['rough', 'Roughness', 80],
-  ]) {
-    const file = join(out, `${map}.webp`);
-    let img = sharp(join(dir, `${spec.source}_1K-JPG_${suffix}.jpg`)).resize(spec.size, spec.size);
-    if (map === 'rough') img = img.greyscale();
-    await img.webp({ quality }).toFile(file);
-    bytes += statSync(file).size;
+// One set per theme (maps pick a theme in the client); a texture shared by themes is simply
+// written twice (small, and each theme folder stays self-contained).
+for (const [theme, surfaces] of Object.entries(SURFACES))
+  for (const [surface, spec] of Object.entries(surfaces)) {
+    const dir = join(SRC, 'textures', spec.source);
+    const out = join(OUT, 'textures', theme, surface);
+    mkdirSync(out, { recursive: true });
+    let bytes = 0;
+    for (const [map, suffix, quality] of [
+      ['color', 'Color', 82],
+      ['normal', 'NormalGL', 90],
+      ['rough', 'Roughness', 80],
+    ]) {
+      const file = join(out, `${map}.webp`);
+      let img = sharp(join(dir, `${spec.source}_1K-JPG_${suffix}.jpg`)).resize(
+        spec.size,
+        spec.size,
+      );
+      if (map === 'rough') img = img.greyscale();
+      await img.webp({ quality }).toFile(file);
+      bytes += statSync(file).size;
+    }
+    console.log(
+      `${`textures/${theme}/${surface}`.padEnd(28)} ${(bytes / 1024).toFixed(0).padStart(6)} KB`,
+    );
   }
-  console.log(`${('textures/' + surface).padEnd(28)} ${(bytes / 1024).toFixed(0).padStart(6)} KB`);
-}
 
 void Document;
