@@ -497,7 +497,14 @@ export type GameEvent =
   /** To the victim: who hit you, from where, and your health now. */
   | { type: 'damaged'; attacker: number; from: Vec3; health: number }
   /** Broadcast: a frag exploded or a smoke released its cloud (effects and sound). */
-  | { type: 'explosion'; kind: 'frag' | 'smoke'; position: Vec3 };
+  | { type: 'explosion'; kind: 'frag' | 'smoke'; position: Vec3 }
+  /**
+   * To one team (v15): a teammate's radar sweep, where every living enemy was on the ground
+   * plan (x, z) when it was earned. A deliberate, earned reveal (kill streak).
+   */
+  | { type: 'radar'; by: number; enemies: [number, number][] }
+  /** To the earner (v15): a kill-streak reward (content streakRewards index) at `streak` kills. */
+  | { type: 'reward'; player: number; reward: number; streak: number };
 
 /** Wire value for "no weapon" in kill events and entities. */
 export const NO_WEAPON = 255;
@@ -506,6 +513,10 @@ const EV_KILL = 1;
 const EV_HIT = 2;
 const EV_DAMAGED = 3;
 const EV_EXPLOSION = 4;
+const EV_RADAR = 5;
+const EV_REWARD = 6;
+/** Most enemies in one radar event (a team is at most 6; room to spare, bounded decode). */
+const MAX_RADAR_ENEMIES = 16;
 
 export function encodeEvents(events: GameEvent[]): Uint8Array {
   const w = new BinaryWriter(1 + events.length * 8);
@@ -534,6 +545,15 @@ export function encodeEvents(events: GameEvent[]): Uint8Array {
       case 'explosion':
         w.u8(EV_EXPLOSION).u8(e.kind === 'smoke' ? 1 : 0);
         for (const v of e.position) w.i16(clampI16(quantizePosition(v)));
+        break;
+      case 'radar':
+        if (e.enemies.length > MAX_RADAR_ENEMIES) throw new RangeError('too many radar enemies');
+        w.u8(EV_RADAR).u8(e.by).u8(e.enemies.length);
+        for (const [x, z] of e.enemies)
+          w.i16(clampI16(quantizePosition(x))).i16(clampI16(quantizePosition(z)));
+        break;
+      case 'reward':
+        w.u8(EV_REWARD).u8(e.player).u8(e.reward).u8(Math.min(255, e.streak));
         break;
     }
   }
@@ -575,6 +595,16 @@ export function decodeEvents(bytes: Uint8Array): GameEvent[] {
         dequantizePosition(r.i16()),
       ];
       events.push({ type: 'explosion', kind, position });
+    } else if (type === EV_RADAR) {
+      const by = r.u8();
+      const n = r.u8();
+      if (n > MAX_RADAR_ENEMIES) throw new RangeError('too many radar enemies');
+      const enemies: [number, number][] = [];
+      for (let k = 0; k < n; k++)
+        enemies.push([dequantizePosition(r.i16()), dequantizePosition(r.i16())]);
+      events.push({ type: 'radar', by, enemies });
+    } else if (type === EV_REWARD) {
+      events.push({ type: 'reward', player: r.u8(), reward: r.u8(), streak: r.u8() });
     } else {
       throw new RangeError(`unknown event type ${type}`);
     }

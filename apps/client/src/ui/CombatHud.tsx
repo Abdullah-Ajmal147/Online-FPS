@@ -100,6 +100,11 @@ function Vitals({ c }: { c: CombatHudState }) {
           <div class="health-fill" style={{ width: `${c.health}%` }} data-low={c.health < 35} />
         </div>
         <span>{c.health}</span>
+        {c.armorSeconds > 0 && (
+          <span class="armor-badge" data-testid="armor">
+            ARMOR {c.armorSeconds}s
+          </span>
+        )}
       </div>
       <div class="ammo" data-testid="ammo">
         <span class="ammo-mag">{c.reloading ? '—' : c.ammo}</span>

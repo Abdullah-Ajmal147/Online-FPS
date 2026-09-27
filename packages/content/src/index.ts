@@ -4,6 +4,8 @@ import {
   NewsSchema,
   EquipmentSchema,
   PerkSchema,
+  StreakRewardSchema,
+  type StreakReward,
   MapSchema,
   ModeSchema,
   MovementSchema,
@@ -31,6 +33,7 @@ import loreJson from './lore.json' with { type: 'json' };
 import newsJson from './news.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
+import streaksJson from './streaks.json' with { type: 'json' };
 import { challengeData } from './challenges.ts';
 import { hasAttachment, hasPerk, hasWeapon, progression, type Access } from './progression.ts';
 import { weaponFiles } from './weapons/catalog.gen.ts';
@@ -129,6 +132,11 @@ export const attachmentCatalog: readonly Attachment[] = (attachmentsJson as unkn
 export const perkCatalog: readonly Perk[] = (perksJson as unknown[])
   .map((p) => PerkSchema.parse(p))
   .sort(byId);
+
+/** Kill-streak rewards, fewest kills first (index = wire code in reward events). */
+export const streakRewards: readonly StreakReward[] = (streaksJson as unknown[])
+  .map((s) => StreakRewardSchema.parse(s))
+  .sort((a, b) => a.kills - b.kills);
 
 export const MAX_ATTACHMENTS = 3;
 const SLOT_ORDER: readonly Attachment['slot'][] = ['optic', 'barrel', 'magazine', 'grip', 'stock'];
@@ -300,6 +308,7 @@ export const CONTENT_HASH: string = (() => {
     movement,
     attachmentCatalog,
     perkCatalog,
+    streakRewards,
   ]);
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {

@@ -8,6 +8,7 @@ import {
   news,
   perkCatalog,
   progression,
+  streakRewards,
   unlockLevel,
   weaponCatalog,
 } from '@sentinel/content';
@@ -308,6 +309,21 @@ export function HelpGuide({
             </li>
             <li>Shotguns fire several pellets per shot ("× 8"): up close, most of them hit.</li>
             <li>Choose your weapons, attachments and perks on the Loadout screen.</li>
+            <li data-testid="help-streaks">
+              Kill streaks (kills without dying):{' '}
+              {streakRewards
+                .map(
+                  (s) =>
+                    `${s.kills} kills: ${s.name}` +
+                    (s.reward === 'radar'
+                      ? ` (your team sees every enemy for ${s.seconds} s)`
+                      : s.reward === 'resupply'
+                        ? ' (full ammo and grenades)'
+                        : ` (${Math.round((1 - (s.damageTaken ?? 1)) * 100)}% less damage for ${s.seconds} s)`),
+                )
+                .join(' · ')}
+              .
+            </li>
           </ul>
         </div>
       )}

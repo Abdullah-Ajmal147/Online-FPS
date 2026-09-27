@@ -754,6 +754,111 @@ describe('MatchSim: scavenging', () => {
   });
 });
 
+describe('MatchSim: kill-streak rewards', () => {
+  /** Shooter (team 0), a target (team 1), a teammate and a second enemy standing elsewhere. */
+  function setup() {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer(); // team 0
+    const target = sim.addPlayer(); // team 1
+    const mate = sim.addPlayer(); // team 0
+    const other = sim.addPlayer(); // team 1
+    place(shooter, [0, 0, 10]);
+    place(target, [0, 0, 0]);
+    place(mate, [15, 0, 15]);
+    place(other, [-12, 0, -8]);
+    const pitch = aimPitch(1.67, 1.1, 10);
+    aimIn(sim, shooter, pitch);
+    const events: { to: number | null; type: string; event: unknown }[] = [];
+    /** One more kill on the target (it's put back at its spot, alive and at 1 health). */
+    const killOnce = () => {
+      if (!target.alive) {
+        for (let i = 0; i < RESPAWN_TICKS && !target.alive; i++)
+          feed(sim, shooter, 1, Button.Aim, { pitch });
+      }
+      place(target, [0, 0, 0]);
+      target.health = 1;
+      target.lastDamageTick = sim.tick;
+      for (let i = 0; i < 30 && target.alive; i++) {
+        feed(sim, shooter, 1, AIM_FIRE, { pitch });
+        for (const e of sim.events) events.push({ to: e.to, type: e.event.type, event: e.event });
+      }
+      expect(target.alive).toBe(false);
+    };
+    return { sim, shooter, target, mate, other, events, killOnce };
+  }
+
+  it('3 kills in one life: a radar sweep of every living enemy, sent to the whole team only', () => {
+    const { shooter, mate, other, events, killOnce } = setup();
+    killOnce();
+    killOnce();
+    expect(events.some((e) => e.type === 'radar')).toBe(false);
+    killOnce();
+    expect(shooter.streak).toBe(3);
+    const radar = events.filter((e) => e.type === 'radar');
+    expect(radar.map((e) => e.to).sort()).toEqual([shooter.id, mate.id].sort());
+    // The target was just killed; the other enemy is alive and shows where it stands.
+    expect((radar[0]!.event as { enemies: [number, number][] }).enemies).toEqual([
+      [other.sim.move.position[0], other.sim.move.position[2]],
+    ]);
+    expect(events.find((e) => e.type === 'reward')).toMatchObject({
+      to: shooter.id,
+      event: { player: shooter.id, reward: 0, streak: 3 },
+    });
+  });
+
+  it('5 kills: full ammo and grenades; 7 kills: armor cuts damage taken', () => {
+    const { sim, shooter, other, killOnce } = setup();
+    for (let i = 0; i < 4; i++) killOnce();
+    shooter.sim = {
+      ...shooter.sim,
+      weapon: {
+        ...shooter.sim.weapon,
+        ammo: [
+          { ammo: 3, reserve: 0 },
+          { ammo: 1, reserve: 0 },
+        ],
+      },
+    };
+    shooter.frags = 0;
+    shooter.smokes = 0;
+    killOnce();
+    expect(shooter.sim.weapon.ammo[0]).toEqual({
+      ammo: defaultLoadout[0].magazine,
+      reserve: defaultLoadout[0].reserve,
+    });
+    expect(shooter.sim.weapon.ammo[1].reserve).toBe(defaultLoadout[1].reserve);
+    expect(shooter.frags).toBe(equipment.frag.perLife);
+    expect(shooter.smokes).toBe(equipment.smoke.perLife);
+
+    killOnce();
+    expect(shooter.armorUntil).toBe(0);
+    killOnce();
+    expect(shooter.streak).toBe(7);
+    expect(shooter.armorUntil).toBeGreaterThan(sim.tick);
+    // The other enemy shoots the armored shooter: less than a rifle's torso damage lands.
+    const before = shooter.health;
+    (sim as unknown as { damage: (...a: unknown[]) => void }).damage(
+      shooter,
+      other,
+      20,
+      'torso',
+      0,
+    );
+    expect(before - shooter.health).toBe(Math.round(20 * 0.7));
+  });
+
+  it('a death resets the streak (and the armor); the best streak of the match is kept', () => {
+    const { sim, shooter, other, killOnce } = setup();
+    for (let i = 0; i < 7; i++) killOnce();
+    (sim as unknown as { kill: (...a: unknown[]) => void }).kill(shooter, other, 0, false);
+    expect(shooter.streak).toBe(0);
+    expect(shooter.armorUntil).toBe(0);
+    expect(shooter.bestStreak).toBe(7);
+    sim.resetStats();
+    expect(shooter.bestStreak).toBe(0);
+  });
+});
+
 describe('MatchSim: health', () => {
   it('regenerates 4 s after the last damage', () => {
     const sim = newSim(arena);

@@ -5,6 +5,7 @@ import { advanceFixedStep, MAX_FRAME_SECONDS } from '../game/fixedStep.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { buttonsFromKeys, keyTurn } from './keys.ts';
 import { applyLook } from './look.ts';
+import { radarPoint } from '../game/radar.ts';
 
 const B = DEFAULT_SETTINGS.bindings;
 
@@ -110,5 +111,20 @@ describe('zoomedFovDegrees', () => {
     expect(zoomedFovDegrees(90, 2)).toBeCloseTo(53.13, 2);
     const tanHalf = (deg: number) => Math.tan((deg * Math.PI) / 360);
     expect(tanHalf(90) / tanHalf(zoomedFovDegrees(90, 8))).toBeCloseTo(8, 10);
+  });
+});
+
+describe('radarPoint', () => {
+  it('puts what is ahead at the top and what is to the right on the right, for any yaw', () => {
+    // Facing -Z (yaw 0): an enemy 10 m ahead is straight up; 10 m to +X is to the right.
+    const [ax, ay] = radarPoint(0, -10, 0, 1);
+    expect(ax).toBeCloseTo(0, 10);
+    expect(ay).toBeCloseTo(-10, 10);
+    expect(radarPoint(10, 0, 0, 1)[0]).toBeCloseTo(10, 10);
+    // Turned a quarter left (facing -X): an enemy at -X is ahead, one at -Z is to the right.
+    const [bx, by] = radarPoint(-10, 0, Math.PI / 2, 1);
+    expect(bx).toBeCloseTo(0, 10);
+    expect(by).toBeCloseTo(-10, 10);
+    expect(radarPoint(0, -10, Math.PI / 2, 2)[0]).toBeCloseTo(20, 10);
   });
 });

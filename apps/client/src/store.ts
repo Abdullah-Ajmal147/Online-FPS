@@ -63,6 +63,8 @@ export interface CombatHud {
   frags: number;
   smokes: number;
   respawnSeconds: number;
+  /** Armor streak reward: whole seconds left (0 = none). */
+  armorSeconds: number;
   killedBy: string | null;
   /** Killcam replay running: who killed us, with what. */
   killcam: { killer: string; weapon: string } | null;

@@ -3,6 +3,7 @@ import {
   buildLoadout,
   defaultBuiltLoadout,
   equipment,
+  streakRewards,
   loadoutToWire,
   weaponCatalog,
   weapons,
@@ -49,6 +50,8 @@ import { Grenades, type Detonation } from './grenades.ts';
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
 export const MAX_HEALTH = 100;
+/** Damage multiplier while the armor streak reward lasts (content streaks.json). */
+const ARMOR_TAKEN = streakRewards.find((s) => s.reward === 'armor')?.damageTaken ?? 1;
 /** Respawn 3 s after death (Phase 2 task 6). */
 export const RESPAWN_TICKS = 3 * TICK_RATE;
 /** Health starts coming back 4 s after the last damage and refills in ~1.7 s (GAME_DESIGN). */
@@ -152,6 +155,12 @@ export interface SimPlayer {
   nextThrowTick: number;
   kills: number;
   deaths: number;
+  /** Kills this life (kill-streak rewards); 0 after a death. */
+  streak: number;
+  /** This match: the longest streak (end-of-match awards). */
+  bestStreak: number;
+  /** Armor reward: damage taken is reduced until this tick. */
+  armorUntil: number;
   /** This match: kills by headshot, by frag, and per weapon id (progression, challenges). */
   headshots: number;
   fragKills: number;
@@ -344,6 +353,9 @@ export class MatchSim {
       nextThrowTick: 0,
       kills: 0,
       deaths: 0,
+      streak: 0,
+      bestStreak: 0,
+      armorUntil: 0,
       headshots: 0,
       fragKills: 0,
       weaponKills: new Map(),
@@ -587,6 +599,8 @@ export class MatchSim {
   ): void {
     if (!victim.alive || this.tick < victim.protectedUntil) return;
     const self = victim === attacker;
+    // Armor (kill-streak reward): less damage taken while it lasts.
+    if (this.tick < victim.armorUntil) damage = Math.max(1, Math.round(damage * ARMOR_TAKEN));
     victim.health = Math.max(this.noDeath ? 1 : 0, victim.health - damage);
     victim.lastDamageTick = this.tick;
     const killed = victim.health === 0;
@@ -620,8 +634,12 @@ export class MatchSim {
     victim.health = 0;
     victim.respawnTicks = RESPAWN_TICKS;
     victim.deaths++;
+    victim.streak = 0;
+    victim.armorUntil = 0;
     if (killer) {
       killer.kills++;
+      killer.streak++;
+      killer.bestStreak = Math.max(killer.bestStreak, killer.streak);
       if (headshot) killer.headshots++;
       if (weapon === KILL_SOURCE_FRAG) killer.fragKills++;
       const id = weaponCatalog[weapon]?.id;
@@ -639,6 +657,46 @@ export class MatchSim {
         headshot,
       },
     });
+    if (killer) this.streakReward(killer);
+  }
+
+  /**
+   * Kill-streak rewards (content streaks.json), decided here like everything else: the
+   * client only shows them. Each is earned once per life, at exactly its kill count.
+   */
+  private streakReward(p: SimPlayer): void {
+    const index = streakRewards.findIndex((s) => s.kills === p.streak);
+    const reward = streakRewards[index];
+    if (!reward) return;
+    this.events.push({
+      to: p.id,
+      event: { type: 'reward', player: p.id, reward: index, streak: p.streak },
+    });
+    if (reward.reward === 'radar') {
+      // Where every living enemy is right now, to the whole team (an earned reveal).
+      const enemies: [number, number][] = [];
+      for (const q of this.players.values()) {
+        if (q.team !== p.team && q.alive) {
+          enemies.push([q.sim.move.position[0], q.sim.move.position[2]]);
+        }
+      }
+      for (const q of this.players.values()) {
+        if (q.team === p.team) {
+          this.events.push({ to: q.id, event: { type: 'radar', by: p.id, enemies } });
+        }
+      }
+    } else if (reward.reward === 'resupply') {
+      const w = p.sim.weapon;
+      const ammo = w.ammo.map((_, i) => {
+        const def = p.ctx.loadout[i as 0 | 1].def;
+        return { ammo: def.magazine, reserve: def.reserve };
+      }) as SimState['weapon']['ammo'];
+      p.sim = { ...p.sim, weapon: { ...w, ammo } };
+      p.frags = equipment.frag.perLife;
+      p.smokes = equipment.smoke.perLife;
+    } else {
+      p.armorUntil = this.tick + Math.round((reward.seconds ?? 0) * TICK_RATE);
+    }
   }
 
   /**
@@ -701,6 +759,8 @@ export class MatchSim {
       p.kills = 0;
       p.deaths = 0;
       p.headshots = 0;
+      p.streak = 0;
+      p.bestStreak = 0;
       p.fragKills = 0;
       p.weaponKills.clear();
       p.aim = newAimStats();

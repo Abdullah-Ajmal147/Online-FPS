@@ -9,6 +9,7 @@ import {
   killSourceName,
   maps,
   movement,
+  streakRewards,
   weaponCatalog,
   buildLoadout,
   loadoutFromWire,
@@ -55,6 +56,7 @@ import {
 } from '@sentinel/shared';
 import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
+import { Radar } from './radar.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
 import { Connection } from '../net.ts';
@@ -211,6 +213,9 @@ export async function startGame(
   zoomEl.className = 'zoom-level';
   zoomEl.dataset.testid = 'zoom-level';
   scopeEl.after(zoomEl);
+  const radar = new Radar(zoomEl);
+  /** Armor streak reward: until when (performance.now), as the server granted it. */
+  let armorUntil = -Infinity;
   /** Chosen zoom level per weapon slot (index into the weapon's zoomLevels). */
   const zoomIndex: [number, number] = [0, 0];
 
@@ -410,6 +415,7 @@ export async function startGame(
     smokes: 1,
     reloading: false,
     respawnSeconds: 0,
+    armorSeconds: 0,
     killedBy: null,
     killcam: null,
     hitAt: -Infinity,
@@ -545,6 +551,9 @@ export async function startGame(
   if (import.meta.env.DEV) {
     // Dev/test only: enemies as drawn, with line of sight from our eyes (Playwright "player" tests).
     (window as unknown as { __sentinelDebug?: unknown }).__sentinelDebug = {
+      /** Feed server events as if they arrived (kill-streak reward and radar tests). */
+      events: (events: GameEvent[]) => onEvents(events),
+      myId: () => myId,
       /** Current recoil offset of the view, radians [yaw, pitch] (a person re-aims against it). */
       recoil: () => [
         predictor.state.weapon.recoilYaw * RAD_PER_UNIT,
@@ -725,6 +734,18 @@ export async function startGame(
         hud.damage = [...hud.damage.slice(-5), { key: feedKey++, angle, at: performance.now() }];
         hud.health = ev.health;
         audio.hurt();
+      } else if (ev.type === 'reward') {
+        // Kill-streak reward: the server already applied it (ammo, armor); we show it.
+        const reward = streakRewards[ev.reward];
+        if (reward && ev.player === myId) {
+          announce('medal', reward.name.toUpperCase(), `${ev.streak} KILL STREAK`);
+          if (reward.reward === 'armor')
+            armorUntil = performance.now() + (reward.seconds ?? 0) * 1000;
+        }
+      } else if (ev.type === 'radar') {
+        const seconds = streakRewards.find((s) => s.reward === 'radar')?.seconds ?? 5;
+        radar.show(ev.enemies, seconds);
+        if (ev.by !== myId) announce('kill', 'RADAR SWEEP', `from ${nameOf(ev.by)}`);
       } else if (ev.type === 'explosion') {
         const [x, y, z] = ev.position;
         if (ev.kind === 'frag') effects.explosion(new THREE.Vector3(x, y, z));
@@ -1141,6 +1162,14 @@ export async function startGame(
       0,
     );
     const replaying = updateKillcam(frame);
+    radar.update(px, pz, input.look.yaw);
+    const armorSeconds = hud.alive
+      ? Math.max(0, Math.ceil((armorUntil - performance.now()) / 1000))
+      : 0;
+    if (armorSeconds !== hud.armorSeconds) {
+      hud.armorSeconds = armorSeconds;
+      hudDirty = true;
+    }
     syncLoadout();
     applyGraphics();
     const spec = simCtx.loadout[w.slot];

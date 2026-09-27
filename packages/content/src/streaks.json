@@ -1,0 +1,5 @@
+[
+  { "kills": 3, "reward": "radar", "name": "Radar sweep", "seconds": 5 },
+  { "kills": 5, "reward": "resupply", "name": "Resupply" },
+  { "kills": 7, "reward": "armor", "name": "Armor", "seconds": 10, "damageTaken": 0.7 }
+]

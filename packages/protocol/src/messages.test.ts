@@ -83,8 +83,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 14 (own state: mantle and tactical sprint ticks)', () => {
-    expect(PROTOCOL_VERSION).toBe(14);
+  it('is 15 (radar and kill-streak reward events)', () => {
+    expect(PROTOCOL_VERSION).toBe(15);
   });
 });
 
@@ -212,6 +212,16 @@ describe('Events', () => {
       { type: 'damaged', attacker: 2, from: [10.5, 1.5, -3], health: 66 },
       { type: 'explosion', kind: 'frag', position: [4, 0.5, -2.25] },
       { type: 'explosion', kind: 'smoke', position: [-4, 0, 2] },
+      {
+        type: 'radar',
+        by: 3,
+        enemies: [
+          [12.5, -30.25],
+          [-4, 7.0625],
+        ],
+      },
+      { type: 'radar', by: 9, enemies: [] },
+      { type: 'reward', player: 3, reward: 2, streak: 7 },
     ];
     expect(decodeEvents(encodeEvents(events))).toEqual(events);
   });

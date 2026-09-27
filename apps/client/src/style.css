@@ -2416,3 +2416,29 @@ body.headshot-flash::after {
 .zoom-level.on {
   opacity: 0.85;
 }
+
+/* Kill-streak radar sweep (top-left) and the armor badge by the health bar. */
+.radar {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 168px;
+  height: 168px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s linear;
+}
+.radar.on {
+  opacity: 1;
+}
+.armor-badge {
+  margin-left: 10px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: #3b8cff;
+  color: #fff;
+  font:
+    700 12px ui-monospace,
+    monospace;
+  letter-spacing: 0.06em;
+}

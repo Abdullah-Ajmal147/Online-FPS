@@ -482,3 +482,30 @@ export const NewsSchema = z.object({
     .min(1),
 });
 export type News = z.infer<typeof NewsSchema>;
+
+// ---------------------------------------------------------------------------
+// Kill-streak rewards: earned by kills in one life, decided by the server.
+// ---------------------------------------------------------------------------
+
+export const STREAK_REWARDS = ['radar', 'resupply', 'armor'] as const;
+
+export const StreakRewardSchema = z
+  .object({
+    /** Kills in one life that earn it. */
+    kills: z.number().int().min(2).max(30),
+    /**
+     * radar: the team sees where every enemy is right now (for `seconds`).
+     * resupply: full ammo and grenades. armor: damage taken × `damageTaken` for `seconds`.
+     */
+    reward: z.enum(STREAK_REWARDS),
+    name: z.string().min(1),
+    seconds: z.number().positive().max(30).optional(),
+    damageTaken: z.number().min(0.1).max(1).optional(),
+  })
+  .refine((s) => s.reward === 'resupply' || s.seconds !== undefined, {
+    message: 'radar and armor need seconds',
+  })
+  .refine((s) => s.reward !== 'armor' || s.damageTaken !== undefined, {
+    message: 'armor needs damageTaken',
+  });
+export type StreakReward = z.infer<typeof StreakRewardSchema>;
