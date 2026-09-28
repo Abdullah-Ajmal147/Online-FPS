@@ -110,7 +110,8 @@ export const MapSchema = z
       .max(5)
       .default([]),
     /** Sky, fog and sun preset the client draws the map with. */
-    lighting: z.enum(['day', 'dusk']).default('day'),
+    /** Mood: day (high sun), golden (late afternoon, long shadows), dusk. */
+    lighting: z.enum(['day', 'golden', 'dusk']).default('day'),
   })
   .refine((m) => [0, 1].every((team) => m.spawns.some((s) => s.team === team)), {
     message: 'every team needs at least one spawn',

@@ -208,11 +208,11 @@ const spawns = [
 const map = {
   id: 'alder-street',
   name: 'Alder Street',
-  location: 'Alder Street, a harbour town, midday',
+  location: 'Alder Street, a harbour town, late afternoon',
   description:
     'The Relay war emptied this harbour town. Brick houses line the main street; every door is open, and the upstairs windows watch the square.',
   killY: -20,
-  lighting: 'day',
+  lighting: 'golden',
   spawns,
   points: [
     { id: 'A', position: [-24, 0, 16] },

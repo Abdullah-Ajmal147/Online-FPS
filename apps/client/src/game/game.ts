@@ -1,7 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
-import { bloom } from 'three/addons/tsl/display/BloomNode.js';
-import { pass } from 'three/tsl';
+import { Post, type Grade } from './post.ts';
 import {
   MAP_ROTATION,
   modes,
@@ -147,7 +146,7 @@ export async function startGame(
   const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
   sun.position.set(20, 40, 15);
   sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35, far: 100 });
+  Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 50, bottom: -50, far: 140 });
   scene.add(sun);
   // A real sky: sun, atmospheric haze and clouds, drawn at the far plane (always behind the map).
   const sky = new SkyMesh();
@@ -242,22 +241,28 @@ export async function startGame(
   camera.rotation.order = 'YXZ'; // yaw first, then pitch: no roll creeping in
   scene.add(camera); // the viewmodel hangs off the camera
 
-  // High preset: bloom, a soft glow around the brightest light (sun glints on metal, muzzle
-  // flashes, the sky at the horizon), taken from the scene before tone mapping. Built the
-  // first time High is used; Low/Medium render directly (it costs 1–2 ms of GPU time).
-  let bloomPipeline: THREE.RenderPipeline | null = null;
+  // Medium/High: the scene goes through Post (grading; High adds ambient occlusion and bloom).
+  // Built when first needed and rebuilt when the preset changes; Low draws straight out.
+  let post: Post | null = null;
+  let postPreset: string | null = null;
   function draw(): void {
     sky.position.copy(camera.position);
-    if (!GRAPHICS[settings().graphics].bloom) {
+    const preset = settings().graphics;
+    const q = GRAPHICS[preset];
+    if (!q.post) {
       renderer.render(scene, camera);
       return;
     }
-    if (!bloomPipeline) {
-      const scenePass = pass(scene, camera);
-      const color = scenePass.getTextureNode('output');
-      bloomPipeline = new THREE.RenderPipeline(renderer, color.add(bloom(color, 0.25, 0.2, 3)));
+    if (!post || postPreset !== preset) {
+      post?.dispose();
+      post = new Post(renderer, scene, camera, {
+        ambientOcclusion: q.ambientOcclusion,
+        bloom: q.bloom,
+      });
+      postPreset = preset;
+      post.setGrade(LOOKS[map?.lighting ?? 'day']);
     }
-    bloomPipeline.render();
+    post.render();
   }
   const resize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -371,6 +376,7 @@ export async function startGame(
     sky.turbidity.value = l.turbidity;
     sky.rayleigh.value = l.rayleigh;
     sky.cloudCoverage.value = l.clouds;
+    post?.setGrade(LOOKS[preset]);
     bakeSkyLight();
   }
 
@@ -1438,33 +1444,78 @@ const LIGHTING: Record<
     clouds: number;
   }
 > = {
+  // A higher sun, but low enough for readable shadows; the fill (hemisphere) is kept well
+  // below the sun: a flat, evenly lit scene is what made the maps look lifeless.
   day: {
-    sky: 0x8ec3ef,
-    fogNear: 70,
+    sky: 0x9cc8ee,
+    fogNear: 55,
+    fogFar: 170,
+    hemiSky: 0xd6e2f4,
+    hemiGround: 0x6a5c4e,
+    hemiIntensity: 2.1,
+    sun: 0xfff0d6,
+    sunIntensity: 6.2,
+    sunPosition: [26, 30, 18],
+    turbidity: 3,
+    rayleigh: 1.4,
+    clouds: 0.4,
+  },
+  // Late afternoon: warm low sun, long shadows, blue shade.
+  golden: {
+    sky: 0xf2c89a,
+    fogNear: 45,
     fogFar: 160,
-    hemiSky: 0xe8f3ff,
-    hemiGround: 0x5a5048,
-    hemiIntensity: 3.2,
-    sun: 0xfff4e0,
-    sunIntensity: 5.4,
-    sunPosition: [20, 40, 15],
-    turbidity: 2.5,
-    rayleigh: 1.2,
-    clouds: 0.35,
+    hemiSky: 0xc4cddd,
+    hemiGround: 0x74604e,
+    hemiIntensity: 2.3,
+    sun: 0xffc27a,
+    sunIntensity: 6.6,
+    sunPosition: [34, 13, 22],
+    turbidity: 5,
+    rayleigh: 2.2,
+    clouds: 0.3,
   },
   dusk: {
     sky: 0xe39a6b,
-    fogNear: 60,
+    fogNear: 45,
     fogFar: 150,
-    hemiSky: 0xffd2b0,
-    hemiGround: 0x4a4050,
-    hemiIntensity: 3.2,
-    sun: 0xffb07c,
-    sunIntensity: 4.6,
-    sunPosition: [35, 14, -20],
-    turbidity: 3.5,
+    hemiSky: 0xf0c8b0,
+    hemiGround: 0x5a4a52,
+    hemiIntensity: 2.3,
+    sun: 0xffa36a,
+    sunIntensity: 5.2,
+    sunPosition: [35, 11, -20],
+    turbidity: 4,
     rayleigh: 3,
     clouds: 0.5,
+  },
+};
+
+/** The graded look per mood (Medium/High, see post.ts). */
+const LOOKS: Record<GameMap['lighting'], Grade> = {
+  day: {
+    contrast: 1.07,
+    saturation: 1.07,
+    shadowTint: [-0.006, 0, 0.01],
+    highlightTint: [0.02, 0.01, -0.012],
+    vignette: 0.3,
+    grain: 0.022,
+  },
+  golden: {
+    contrast: 1.08,
+    saturation: 1.1,
+    shadowTint: [-0.006, 0, 0.012],
+    highlightTint: [0.035, 0.014, -0.02],
+    vignette: 0.34,
+    grain: 0.026,
+  },
+  dusk: {
+    contrast: 1.08,
+    saturation: 1.05,
+    shadowTint: [-0.006, -0.002, 0.016],
+    highlightTint: [0.04, 0.008, -0.01],
+    vignette: 0.36,
+    grain: 0.028,
   },
 };
 
@@ -1482,6 +1533,10 @@ const GRAPHICS: Record<
     bloom: boolean;
     /** Light from the sky (environment map): costs a little on every lit pixel. */
     skyLight: boolean;
+    /** Colour grading, vignette and grain (one extra full-screen pass). */
+    post: boolean;
+    /** Ambient occlusion: contact shadows in corners (half resolution). */
+    ambientOcclusion: boolean;
   }
 > = {
   low: {
@@ -1491,6 +1546,8 @@ const GRAPHICS: Record<
     maxPixelRatio: 1,
     bloom: false,
     skyLight: false,
+    post: false,
+    ambientOcclusion: false,
   },
   medium: {
     shadowMapSize: 1024,
@@ -1499,6 +1556,8 @@ const GRAPHICS: Record<
     maxPixelRatio: 1.5,
     bloom: false,
     skyLight: true,
+    post: true,
+    ambientOcclusion: false,
   },
   high: {
     shadowMapSize: 2048,
@@ -1507,5 +1566,7 @@ const GRAPHICS: Record<
     maxPixelRatio: 2,
     bloom: true,
     skyLight: true,
+    post: true,
+    ambientOcclusion: true,
   },
 };

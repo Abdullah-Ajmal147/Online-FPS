@@ -43,7 +43,7 @@ export function loadSoldierAssets(): Promise<SoldierAssets> {
       Promise.all(
         WEAPON_MODEL_IDS.map((id) =>
           get(`weapons/${id}.glb`)
-            .then((g) => [id, g.scene] as const)
+            .then((g) => [id, finishGun(g.scene)] as const)
             .catch(() => null),
         ),
       ),
@@ -101,4 +101,38 @@ export function createSoldierModel(
     }
   });
   return { root, body, bones, flashMats: [mats.cloth, mats.gear] };
+}
+
+/**
+ * The weapon packs ship near-black flat materials (base colour ~0.02, no textures), which
+ * read as silhouettes. Give each part a real finish by its material name: gun metal that
+ * catches the sun and reflects the sky, warmer rough wood, matte polymer for the rest.
+ * Shared by every copy of the model (first person and on soldiers).
+ */
+function finishGun(root: THREE.Object3D): THREE.Object3D {
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const mat = m as THREE.MeshStandardMaterial;
+      if (!mat.isMeshStandardMaterial || /glass|lens/i.test(mat.name)) continue;
+      if (/wood/i.test(mat.name)) {
+        mat.color.multiplyScalar(2.4);
+        mat.metalness = 0;
+        mat.roughness = 0.62;
+      } else if (/light/i.test(mat.name)) {
+        mat.color.setRGB(0.09, 0.085, 0.075); // polymer furniture
+        mat.metalness = 0.05;
+        mat.roughness = 0.58;
+      } else {
+        // Gun metal: dark but not black, polished enough for a highlight along the barrel.
+        const lift = Math.max(0.055, mat.color.r * 2.2);
+        mat.color.setRGB(lift, lift * 1.02, lift * 1.08);
+        mat.metalness = 0.85;
+        mat.roughness = /dark|black/i.test(mat.name) ? 0.42 : 0.32;
+      }
+      mat.needsUpdate = true;
+    }
+  });
+  return root;
 }
