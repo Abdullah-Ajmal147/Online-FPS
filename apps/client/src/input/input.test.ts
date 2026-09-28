@@ -5,7 +5,7 @@ import { advanceFixedStep, MAX_FRAME_SECONDS } from '../game/fixedStep.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { buttonsFromKeys, keyTurn } from './keys.ts';
 import { applyLook } from './look.ts';
-import { radarPoint } from '../game/radar.ts';
+import { radarPoint } from '../game/minimap.ts';
 
 const B = DEFAULT_SETTINGS.bindings;
 

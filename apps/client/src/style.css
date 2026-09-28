@@ -2417,18 +2417,18 @@ body.headshot-flash::after {
   opacity: 0.85;
 }
 
-/* Kill-streak radar sweep (top-left) and the armor badge by the health bar. */
-.radar {
+/* Minimap (top-left; also shows the kill-streak radar sweep) and the armor badge. */
+.minimap {
   position: fixed;
-  top: 16px;
-  left: 16px;
-  width: 168px;
-  height: 168px;
+  top: 14px;
+  left: 14px;
+  width: 184px;
+  height: 184px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s linear;
 }
-.radar.on {
+.minimap.on {
   opacity: 1;
 }
 .armor-badge {

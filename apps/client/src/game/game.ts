@@ -57,7 +57,7 @@ import {
 } from '@sentinel/shared';
 import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
-import { Radar } from './radar.ts';
+import { Minimap } from './minimap.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
 import { Connection } from '../net.ts';
@@ -230,7 +230,9 @@ export async function startGame(
   zoomEl.className = 'zoom-level';
   zoomEl.dataset.testid = 'zoom-level';
   scopeEl.after(zoomEl);
-  const radar = new Radar(zoomEl);
+  const minimap = new Minimap(zoomEl);
+  /** Capture points as the last MatchInfo had them (minimap colours). */
+  let objectives: { id: string; owner: number }[] = [];
   /** Armor streak reward: until when (performance.now), as the server granted it. */
   let armorUntil = -Infinity;
   /** Chosen zoom level per weapon slot (index into the weapon's zoomLevels). */
@@ -330,6 +332,7 @@ export async function startGame(
     map = next;
     const solids = expandMap(map);
     mapSolids = solids;
+    minimap.setMap(solids, map.points);
     const oldWorld = moveCtx?.world;
     showMap();
     grenadeView.clear();
@@ -513,6 +516,7 @@ export async function startGame(
     const mvp = info.players.find((p) => p.id === info.mvp);
     if (!info.vote) myVote = null; // the vote closed with the results screen
     pointMarkers.update(info.points);
+    objectives = info.points;
     // Domination: a node changed hands (not at the start of a match, when all reset).
     for (const p of info.points) {
       const before = pointOwners.get(p.id);
@@ -720,8 +724,11 @@ export async function startGame(
       remotePlayers.setWeapon(e.id, weaponCatalog[e.weapon]);
       // A remote player fired since the last snapshot: muzzle flash, tracer, 3D sound.
       const lastShots = remoteShots.get(e.id);
-      if (lastShots !== undefined && lastShots !== e.shotCount && e.alive)
+      if (lastShots !== undefined && lastShots !== e.shotCount && e.alive) {
         remoteFired(e.id, e.weapon);
+        // Gunfire gives an enemy away on the minimap, where they fired from.
+        if (e.team !== myTeam()) minimap.enemyFired(e.id, e.position[0], e.position[2]);
+      }
       remoteShots.set(e.id, e.shotCount);
     }
     for (const id of remoteBuffers.keys()) {
@@ -786,13 +793,14 @@ export async function startGame(
         }
       } else if (ev.type === 'radar') {
         const seconds = streakRewards.find((s) => s.reward === 'radar')?.seconds ?? 5;
-        radar.show(ev.enemies, seconds);
+        minimap.sweep(ev.enemies, seconds);
         if (ev.by !== myId) announce('kill', 'RADAR SWEEP', `from ${nameOf(ev.by)}`);
       } else if (ev.type === 'explosion') {
         const [x, y, z] = ev.position;
         if (ev.kind === 'frag') effects.explosion(new THREE.Vector3(x, y, z));
         audio.explosion(ev.kind, ev.position);
       } else if (ev.type === 'kill') {
+        minimap.forget(ev.victim);
         const entry: KillFeedEntry = {
           key: feedKey++,
           killer: nameOf(ev.killer),
@@ -1204,7 +1212,19 @@ export async function startGame(
       0,
     );
     const replaying = updateKillcam(frame);
-    radar.update(px, pz, input.look.yaw);
+    const teammates: { x: number; z: number; yaw: number }[] = [];
+    for (const [id, pose] of remotePoses) {
+      if (id !== myId && pose.alive && pose.team === myTeam()) {
+        teammates.push({ x: pose.position[0], z: pose.position[2], yaw: pose.yaw });
+      }
+    }
+    minimap.draw(
+      { x: px, z: pz, yaw: input.look.yaw },
+      teammates,
+      objectives,
+      myTeam(),
+      hud.alive && !replaying,
+    );
     const armorSeconds = hud.alive
       ? Math.max(0, Math.ceil((armorUntil - performance.now()) / 1000))
       : 0;

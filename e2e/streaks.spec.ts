@@ -22,7 +22,9 @@ test('streak rewards: announcement, radar sweep with enemy dots, armor badge', a
       );
     }, events);
 
-  await expect(page.getByTestId('radar')).not.toHaveClass(/\bon\b/);
+  const minimap = page.getByTestId('minimap');
+  await expect(minimap).toHaveClass(/\bon\b/); // always up while alive
+  await expect(minimap).toHaveAttribute('data-sweep', 'off');
   await feed([
     { type: 'reward', player: 0, reward: 0, streak: 3 },
     {
@@ -35,11 +37,11 @@ test('streak rewards: announcement, radar sweep with enemy dots, armor badge', a
     },
   ]);
   await expect(page.getByTestId('announcements')).toContainText('RADAR SWEEP');
-  await expect(page.getByTestId('radar')).toHaveClass(/\bon\b/);
+  await expect(minimap).toHaveAttribute('data-sweep', 'on');
   await page.screenshot({ path: 'test-results/streak-radar.png' });
 
   await feed([{ type: 'reward', player: 0, reward: 2, streak: 7 }]);
   await expect(page.getByTestId('armor')).toContainText('ARMOR');
   // The sweep ends after its seconds (5 s).
-  await expect(page.getByTestId('radar')).not.toHaveClass(/\bon\b/, { timeout: 8_000 });
+  await expect(minimap).toHaveAttribute('data-sweep', 'off', { timeout: 8_000 });
 });
