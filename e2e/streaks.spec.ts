@@ -46,19 +46,25 @@ test('streak rewards: announcement, radar sweep with enemy dots, armor badge', a
   await expect(minimap).toHaveAttribute('data-sweep', 'off', { timeout: 8_000 });
 });
 
-/** Taking damage: a red edge pulse, and at low health a heartbeat pulse that stays. */
-test('hurt feedback: a hit and low health show the red edge', async ({ page }) => {
+/** Taking damage: a red edge pulse, and at low health a heartbeat pulse. */
+test('hurt feedback: a hit pulses the red edge', async ({ page }) => {
   await deploy(page, '/?server=http://localhost:2571');
-  const hurt = page.getByTestId('hurt');
-  await expect
-    .poll(async () => Number(await hurt.evaluate((e) => getComputedStyle(e).opacity)))
-    .toBe(0);
+  // The pulse lasts 0.6 s and the next snapshot restores our real health, so on a slow
+  // software-rendered page a poll can miss it: record the highest opacity it reaches instead.
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="hurt"]') as HTMLElement;
+    const w = window as unknown as { __hurtMax: number };
+    w.__hurtMax = Number(el.style.opacity || 0);
+    new MutationObserver(() => {
+      w.__hurtMax = Math.max(w.__hurtMax, Number(el.style.opacity || 0));
+    }).observe(el, { attributes: true, attributeFilter: ['style'] });
+  });
+  const max = () => page.evaluate(() => (window as unknown as { __hurtMax: number }).__hurtMax);
+  expect(await max()).toBe(0);
   await page.evaluate(() => {
     const d = (window as unknown as { __sentinelDebug: { events(e: unknown[]): void } })
       .__sentinelDebug;
     d.events([{ type: 'damaged', attacker: 250, from: [0, 1, -10], health: 20 }]);
   });
-  await expect
-    .poll(async () => Number(await hurt.evaluate((e) => getComputedStyle(e).opacity)))
-    .toBeGreaterThan(0.2);
+  await expect.poll(max, { timeout: 10_000 }).toBeGreaterThan(0.2);
 });
