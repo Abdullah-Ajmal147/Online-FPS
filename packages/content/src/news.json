@@ -15,6 +15,18 @@
   ],
   "patches": [
     {
+      "version": "0.9.5",
+      "date": "2026-09-28",
+      "title": "Minimap and a new look",
+      "notes": [
+        "Minimap (top-left): the map from above, turned to your view; teammates always shown, and enemies show where they fire. The radar sweep reward now lights up the minimap.",
+        "New lighting: a time of day per map (Alder Street in late-afternoon sun), long shadows and softer shade instead of flat light.",
+        "Cinematic look on Medium and High: colour grading, vignette and film grain; High adds ambient occlusion (soft contact shadows).",
+        "Combat feel: dust and sparks where bullets hit (yours and theirs), a muzzle light on every shot, spent cases, camera shake from hits and nearby blasts.",
+        "Weapons have real metal and wood finishes."
+      ]
+    },
+    {
       "version": "0.9.4",
       "date": "2026-09-27",
       "title": "Streaks, awards and map vote",

@@ -563,6 +563,27 @@ Learned:
   corrections); remember matches freeze between rounds.
 - Server log `warn` goes to stdout, which Playwright doesn't show for its web servers.
 
+## v2 work, 2026-09-28: minimap and a new look
+
+Friends' feedback: "graphics too basic, no emotion" and "hard to see where the enemy is".
+
+- **Minimap** (top-left, player-centred, turned to the view): walls and buildings drawn once
+  from the map solids, teammates always, an enemy as a red dot where they fired (2.5 s),
+  Domination nodes in owner colours; the radar sweep reward shows on it (replaces the
+  separate radar).
+- **Lighting moods**: day, golden (late afternoon, Alder Street) and dusk; the fill light is
+  now well below the sun (flat, evenly lit scenes were the lifeless look); wider shadow area.
+- **Post (Medium/High, `post.ts`)**: grading after tone mapping (contrast, saturation, cool
+  shadows / warm highlights, vignette, per-pixel grain); High adds half-resolution ambient
+  occlusion (normals from the same pass) and bloom. Low unchanged.
+- **Guns**: the packs' near-black flat materials get metal / wood / polymer finishes.
+- **Combat feel**: impact dust and sparks (remote shots too), muzzle light (Medium/High),
+  spent cases, camera shake (shots, hits, blasts), landing dip.
+
+Learned: headless Chromium renders in software, so judge looks from screenshots with a
+no-bot server and long screenshot timeouts; UV-seeded noise showed as streaks (hash the
+pixel index instead).
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:
