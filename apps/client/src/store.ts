@@ -125,6 +125,8 @@ export interface ClientStatus {
   inMatch: boolean;
   /** The server has placed our soldier (first own snapshot of this match connection). */
   spawned: boolean;
+  /** The map and models are compiled for the GPU (the deploy card waits for it). */
+  worldReady: boolean;
   net: { state: 'idle' | 'connecting' | 'connected' | 'error'; text: string };
   /** True while the mouse is captured and the player is in control. */
   playing: boolean;
@@ -157,6 +159,7 @@ let status: ClientStatus = {
   mapId: '',
   inMatch: false,
   spawned: false,
+  worldReady: true,
   net: { state: 'idle', text: 'not in a match' },
   playing: false,
   player: null,

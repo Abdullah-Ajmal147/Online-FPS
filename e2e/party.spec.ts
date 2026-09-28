@@ -63,8 +63,9 @@ test('chat: filtered by the server, team chat stays in the team, mute hides a pl
   await deploy(mate, link);
   const enemy = await (await browser.newContext()).newPage();
   await deploy(enemy, '/?server=http://localhost:2572');
-  await expect.poll(() => myTeam(mate)).toBe(await myTeam(host));
-  await expect.poll(() => myTeam(enemy)).not.toBe(await myTeam(host));
+  // Joining takes a while on CI's slow software-rendered pages: allow it (was the 5 s default).
+  await expect.poll(() => myTeam(mate), { timeout: 20_000 }).toBe(await myTeam(host));
+  await expect.poll(() => myTeam(enemy), { timeout: 20_000 }).not.toBe(await myTeam(host));
 
   await say(host, 'Enter', 'what the fuck, gg');
   await expect.poll(() => chatText(mate)).toContain('what the ****, gg');

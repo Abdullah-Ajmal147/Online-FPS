@@ -22,7 +22,8 @@ interface Props {
 export function App(props: Props) {
   const status = useStatus();
   const deploying =
-    status.inMatch && (status.net.state !== 'connected' || !status.match || !status.spawned);
+    status.inMatch &&
+    (status.net.state !== 'connected' || !status.match || !status.spawned || !status.worldReady);
   return (
     <>
       {status.inMatch && (

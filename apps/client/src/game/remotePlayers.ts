@@ -26,6 +26,12 @@ interface Remote {
 
 /** A drawn player: the animated soldier model, or the simple shape soldier until it loads. */
 interface Drawn {
+  /**
+   * When they left the snapshots (performance.now()), or -1 while present. Out of sight,
+   * a soldier is only hidden: rebuilding one (skinned model, rig, materials) each time an
+   * enemy steps back into view caused hitches in firefights.
+   */
+  goneSince: number;
   team: number;
   rig: SoldierRig | null;
   simple: Remote | null;
@@ -38,12 +44,18 @@ interface Drawn {
  * weapon held with IK) once those load in the background; until then (or if they can't load) as
  * a simple original soldier built from shapes. Hit → white flash; death → fall, then sink away.
  */
+/** A soldier out of the snapshots this long has left the match: free it. */
+const GONE_FREE_MS = 30_000;
+
 export class RemotePlayers {
   /** Soldiers cast shadows only where shadows are redrawn every frame (High). */
   static castShadows = true;
 
   private drawn = new Map<number, Drawn>();
   private assets: SoldierAssets | null = null;
+
+  /** Settles when the soldier models are loaded and compiled (or failed: simple soldiers). */
+  readonly ready: Promise<unknown>;
 
   /** Model soldiers built this frame (swapping 11 at once would be one long frame). */
   private builtThisFrame = 0;
@@ -55,7 +67,7 @@ export class RemotePlayers {
   ) {
     const t0 = performance.now();
     let loaded = 0;
-    loadSoldierAssets()
+    this.ready = loadSoldierAssets()
       .then((a) => {
         loaded = performance.now();
         return this.warm(a, renderer, camera);
@@ -138,6 +150,7 @@ export class RemotePlayers {
       d.weapon = null;
       this.setWeaponOf(d, weapon);
     }
+    (d.rig?.root ?? d.simple!.root).matrixWorldAutoUpdate = true;
     const flashing = performance.now() < d.flashUntil;
     if (d.rig) {
       d.rig.visible = true;
@@ -184,6 +197,7 @@ export class RemotePlayers {
           simple: null,
           flashUntil: 0,
           weapon: null,
+          goneSince: -1,
         };
       } catch (e) {
         console.warn('[soldiers] could not build a model soldier', e);
@@ -191,7 +205,7 @@ export class RemotePlayers {
     }
     const simple = makeSoldier(team);
     this.scene.add(simple.root);
-    return { team, rig: null, simple, flashUntil: 0, weapon: null };
+    return { team, rig: null, simple, flashUntil: 0, weapon: null, goneSince: -1 };
   }
 
   private remove(d: Drawn): void {
@@ -236,10 +250,12 @@ export class RemotePlayers {
 
   /** Positions of drawn remote players (used by end-to-end tests). */
   positions(): number[][] {
-    return [...this.drawn.values()].map((d) => {
-      const p = (d.rig?.root ?? d.simple!.root).position;
-      return [p.x, p.y, p.z];
-    });
+    return [...this.drawn.values()]
+      .filter((d) => d.goneSince < 0)
+      .map((d) => {
+        const p = (d.rig?.root ?? d.simple!.root).position;
+        return [p.x, p.y, p.z];
+      });
   }
 
   /** Above a player's head (for name tags / damage numbers). */
@@ -252,12 +268,26 @@ export class RemotePlayers {
     return out.copy(r.root.position).setY(r.root.position.y + movement.standingHeight + 0.25);
   }
 
-  /** Remove players that are no longer in snapshots. */
-  retain(ids: ReadonlySet<number>): void {
+  /**
+   * Players no longer in snapshots (out of sight, ADR 0009) are hidden and kept, ready for
+   * when they reappear; only after a long absence (left the match) is the soldier freed.
+   */
+  retain(ids: ReadonlySet<number>, now = performance.now()): void {
     for (const [id, d] of this.drawn) {
-      if (ids.has(id)) continue;
-      this.remove(d);
-      this.drawn.delete(id);
+      if (ids.has(id)) {
+        d.goneSince = -1;
+        continue;
+      }
+      if (d.goneSince < 0) {
+        d.goneSince = now;
+        if (d.rig) d.rig.visible = false;
+        if (d.simple) d.simple.root.visible = false;
+        // Hidden soldiers skip the per-frame matrix update of their whole skeleton.
+        (d.rig?.root ?? d.simple!.root).matrixWorldAutoUpdate = false;
+      } else if (now - d.goneSince > GONE_FREE_MS) {
+        this.remove(d);
+        this.drawn.delete(id);
+      }
     }
   }
 }

@@ -15,6 +15,8 @@ class Pool<T extends THREE.Object3D> {
       const obj = make();
       obj.visible = false;
       obj.frustumCulled = false;
+      // Idle pool objects skip the per-frame world-matrix update (hundreds of them).
+      obj.matrixWorldAutoUpdate = false;
       scene.add(obj);
       this.items.push({ obj, age: 0, life: 0, active: false });
     }
@@ -28,6 +30,7 @@ class Pool<T extends THREE.Object3D> {
     it.life = life;
     it.active = true;
     it.obj.visible = true;
+    it.obj.matrixWorldAutoUpdate = true;
     it.obj.scale.setScalar(1);
     return it.obj;
   }
@@ -40,6 +43,7 @@ class Pool<T extends THREE.Object3D> {
       if (it.age >= it.life) {
         it.active = false;
         it.obj.visible = false;
+        it.obj.matrixWorldAutoUpdate = false;
         continue;
       }
       each(it.obj, it.age / it.life);
@@ -51,6 +55,7 @@ class Pool<T extends THREE.Object3D> {
     for (const it of this.items) {
       if (it.active) continue;
       it.obj.visible = show;
+      it.obj.matrixWorldAutoUpdate = show;
       if (show) it.obj.position.set(0, -500, 0);
     }
   }
@@ -58,9 +63,17 @@ class Pool<T extends THREE.Object3D> {
 
 type Faded = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
 
+/** A ray's hit on the map: distance along the ray, the point and the surface normal. */
+export interface MapHit {
+  distance: number;
+  point: THREE.Vector3;
+  normal: THREE.Vector3;
+}
+export type MapRaycast = (origin: THREE.Vector3, dir: THREE.Vector3, max: number) => MapHit | null;
+
 /** Short-lived shot effects in the world: tracers, remote muzzle flashes, impact marks. */
 export class Effects {
-  private readonly raycaster = new THREE.Raycaster();
+  private raycast: MapRaycast | null = null;
   private readonly tracers: Pool<THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>;
   private readonly flashes: Pool<Faded>;
   private readonly impacts: Pool<Faded>;
@@ -84,12 +97,10 @@ export class Effects {
   private readonly gravity = new THREE.Vector3(0, -9.8, 0);
   private warmFrames = 2;
 
-  /** What shots can hit visually (the map meshes); set when a map loads. */
-  private solids: THREE.Object3D = new THREE.Group();
-
-  constructor(scene: THREE.Scene) {
+  /** `muzzleLight`: start with the light in the scene (Medium/High), so the materials are
+   * compiled with it from the first frame; adding it later recompiles every material. */
+  constructor(scene: THREE.Scene, muzzleLight = false) {
     this.scene = scene;
-    this.raycaster.far = 150;
     const flashGeo = new THREE.SphereGeometry(0.06, 8, 6);
     const markGeo = new THREE.CircleGeometry(0.05, 10);
     const mesh = (geo: THREE.BufferGeometry, color: number, opacity: number, depthWrite = true) =>
@@ -141,12 +152,21 @@ export class Effects {
       metalness: 0.9,
       roughness: 0.3,
     });
+    if (muzzleLight) scene.add(this.muzzleLightSource);
     this.casings = new Pool(scene, 24, () => {
       const m = new THREE.Mesh(caseGeo, brass);
       m.userData.v = new THREE.Vector3();
       m.userData.spin = new THREE.Vector3();
       return m;
     });
+  }
+
+  /**
+   * Show (or hide again) every idle pooled object far below the map, so an async compile of
+   * the scene includes them (hidden objects are skipped).
+   */
+  showPoolsForCompile(show: boolean): void {
+    for (const p of this.pools()) p.warm(show);
   }
 
   /** Muzzle light on (Medium/High) or out of the scene (Low). */
@@ -156,15 +176,21 @@ export class Effects {
     else this.muzzleLightSource.removeFromParent();
   }
 
-  setSolids(solids: THREE.Object3D): void {
-    this.solids = solids;
+  /**
+   * How rays hit the map, set when a map loads: the physics world's ray cast (its spatial
+   * index answers in microseconds). The Three.js raycaster tested every map triangle, and ran
+   * every frame (crosshair) and for every shot of every player.
+   */
+  setRaycast(raycast: MapRaycast): void {
+    this.raycast = raycast;
   }
 
-  /** Where a ray hits the map (visual only; the server decides real hits). */
-  castMap(origin: THREE.Vector3, dir: THREE.Vector3, max = 150): THREE.Intersection | null {
-    this.raycaster.set(origin, dir);
-    this.raycaster.far = max;
-    return this.raycaster.intersectObject(this.solids, true)[0] ?? null;
+  /**
+   * Where a ray hits the map (visual only; the server decides real hits). The result is
+   * reused by the next call: use it straight away.
+   */
+  castMap(origin: THREE.Vector3, dir: THREE.Vector3, max = 150): MapHit | null {
+    return this.raycast?.(origin, dir, max) ?? null;
   }
 
   tracer(from: THREE.Vector3, to: THREE.Vector3): void {
@@ -192,10 +218,9 @@ export class Effects {
    * A bullet hitting the map: a hole, a puff of dust off the surface, and a few sparks.
    * `sparks`: more of them (metal surfaces).
    */
-  impact(hit: THREE.Intersection, sparks = 3): void {
-    if (!hit.face) return;
+  impact(hit: MapHit, sparks = 3): void {
     const m = this.impacts.take(10);
-    const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    const normal = hit.normal;
     m.position.copy(hit.point).addScaledVector(normal, 0.01);
     m.lookAt(m.position.clone().add(normal));
     const puff = this.puffs.take(0.7);
@@ -255,7 +280,7 @@ export class Effects {
       .position.copy(at)
       .setY(at.y + 0.6);
     const down = this.castMap(at.clone().setY(at.y + 0.3), new THREE.Vector3(0, -1, 0), 2);
-    if (down?.face) {
+    if (down) {
       const s = this.scorches.take(12);
       s.scale.setScalar(20);
       s.position.copy(down.point).setY(down.point.y + 0.012);

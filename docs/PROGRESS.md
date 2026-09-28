@@ -599,6 +599,28 @@ fresnel), and game-feel ("juice") write-ups.
 - **Hurt feedback**: red edge pulse on each hit, heartbeat pulse under 35 health, colour
   drains on Medium/High (`Post.setStress`).
 
+## Performance pass, 2026-09-28 (owner: "sometimes the start lags")
+
+Measured with a profiling harness (bot match, frame times, long tasks, CPU profile), then fixed
+the biggest offenders:
+
+- Visual ray casts (crosshair every frame, every shot's impact, blasts) used the Three.js
+  raycaster over every map triangle; now the physics world's ray cast (spatial index,
+  reused objects).
+- Out-of-sight enemies (server culling) were destroyed and rebuilt on reappearing (skinned
+  model, rig, materials); now hidden and kept, freed after 30 s away.
+- The muzzle light was added on the first frame, recompiling every material; it is now in
+  the scene from the start (Medium/High).
+- Idle pooled effects and hidden soldiers skip the per-frame world-matrix update.
+- World-ready step: after joining or a map change, the scene (map + textures, soldier
+  models, pooled effects, post pass) is compiled asynchronously behind the deploy card, and
+  the 3D view isn't drawn until then (max ~6 s). The 1.5–2.9 s compile stalls that hit the
+  first seconds of play now happen behind the card; in play no shader compiles remain.
+
+Results (headless software rendering, so compare before/after only): frames drawn +38%,
+p95 frame 280 → 127 ms, worst in-play stall 429 → 260 ms; map-ray and shader-compile time in
+play gone.
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:

@@ -307,7 +307,7 @@ export async function startGame(
   let loadout: readonly [Weapon, Weapon] = defaultLoadout;
   let loadoutKey = '';
   let predictor!: Predictor; // all assigned by loadMap() right below
-  const effects = new Effects(scene);
+  const effects = new Effects(scene, GRAPHICS[settings().graphics].post);
   const grenadeView = new GrenadeView(scene);
   const pointMarkers = new PointMarkers(scene);
   const freshSim = (): SimState => {
@@ -331,10 +331,9 @@ export async function startGame(
     const theme = themeOf(map.id);
     mapMeshes = buildMapMeshes(mapSolids, surfacesByTheme.get(theme), theme);
     scene.add(mapMeshes);
-    effects.setSolids(mapMeshes);
     sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
-    if (!surfacesByTheme.has(theme)) {
-      loadSurfaces(theme)
+    if (!surfacesByTheme.has(theme) && !surfaceLoads.has(theme)) {
+      const load = loadSurfaces(theme)
         .then(async (s) => {
           // Set the materials up off the main path before they are first drawn.
           const onePerMaterial = mapSolids.filter(
@@ -347,8 +346,44 @@ export async function startGame(
           if (themeOf(map.id) === theme) showMap();
         })
         .catch((e: unknown) => console.warn('[map] surface textures unavailable, flat colours', e));
+      surfaceLoads.set(theme, load);
     }
   }
+  /** Map surface textures being loaded, per theme (the world-ready step waits for them). */
+  const surfaceLoads = new Map<string, Promise<void>>();
+
+  /**
+   * World ready (after joining or a map change): compile everything the first frames will
+   * draw — the map with its textures, the soldier models, the pooled effects, the post pass —
+   * asynchronously, behind the deploy card, instead of synchronously on the first frames of
+   * play (measured: 1.5–2.3 s stalls in the first seconds after spawning). The 3D view isn't
+   * drawn meanwhile (drawing would compile the slow way). At most ~6 s: never stuck.
+   */
+  let worldReady = true;
+  let worldToken = 0;
+  function prepareWorld(): void {
+    const token = ++worldToken;
+    worldReady = false;
+    setStatus({ worldReady: false });
+    const within = (p: Promise<unknown>, ms: number) =>
+      Promise.race([p.catch(() => undefined), new Promise((r) => setTimeout(r, ms))]);
+    void (async () => {
+      await within(
+        Promise.all([surfaceLoads.get(themeOf(map.id)) ?? null, remotePlayers.ready]),
+        4000,
+      );
+      effects.showPoolsForCompile(true);
+      await within(renderer.compileAsync(scene, camera, scene), 2500);
+      effects.showPoolsForCompile(false);
+      if (token !== worldToken) return; // a newer map change took over
+      draw(); // first draw, under the card: the post pass sets itself up here
+      worldReady = true;
+      setStatus({ worldReady: true });
+    })();
+  }
+  // Visual ray casts against the map (effects, crosshair): the physics world, reused objects.
+  const mapHit = { distance: 0, point: new THREE.Vector3(), normal: new THREE.Vector3() };
+  const mapRay = new rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
   function loadMap(id: string): void {
     const next = maps[id];
     if (!next) throw new Error(`unknown map "${id}"`);
@@ -364,6 +399,26 @@ export async function startGame(
     sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
     setStatus({ mapName: map.name, mapId: map.id });
     moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
+    const world = moveCtx.world;
+    effects.setRaycast((origin, dir, max) => {
+      mapRay.origin.x = origin.x;
+      mapRay.origin.y = origin.y;
+      mapRay.origin.z = origin.z;
+      mapRay.dir.x = dir.x;
+      mapRay.dir.y = dir.y;
+      mapRay.dir.z = dir.z;
+      const hit = world.castRayAndGetNormal(
+        mapRay,
+        max,
+        true,
+        rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+      );
+      if (!hit) return null;
+      mapHit.distance = hit.timeOfImpact;
+      mapHit.point.copy(origin).addScaledVector(dir, hit.timeOfImpact);
+      mapHit.normal.set(hit.normal.x, hit.normal.y, hit.normal.z);
+      return mapHit;
+    });
     simCtx = createSimContext(moveCtx, loadout);
     const body = createPlayerBody(moveCtx);
     // Map rotation mid-session: keep the predictor (its input sequence numbers must keep
@@ -902,6 +957,9 @@ export async function startGame(
   }
 
   let myTeamCache = 0;
+  /** The world-ready step ran for this map (first join, then each map change). */
+  let joinedWorld = false;
+  let preparedMap = '';
   const myTeam = () => myTeamCache;
 
   const onDisconnect = () => {
@@ -940,6 +998,11 @@ export async function startGame(
           if (hello.mapId !== map.id) {
             loadMap(hello.mapId);
             prevState = predictor.state;
+          }
+          if (!joinedWorld || hello.mapId !== preparedMap) {
+            joinedWorld = true;
+            preparedMap = hello.mapId;
+            prepareWorld();
           }
         },
         onSnapshot,
@@ -1401,7 +1464,7 @@ export async function startGame(
     if (!replaying) updateAimAndTags();
     feedback.update(camera, frame);
     effects.update(frame);
-    draw();
+    if (worldReady) draw();
 
     // HUD values that change every frame: ammo/reload. Push to the store only when changed.
     const mag = w.ammo[w.slot];
