@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { soldierMaterial } from './soldier/rim.ts';
 import { movement } from '@sentinel/content';
 import type { RemotePose } from '@sentinel/shared';
 import type { Weapon } from '@sentinel/content';
@@ -16,7 +17,7 @@ interface Remote {
   root: THREE.Group;
   body: THREE.Group;
   /** Materials that flash when this player is hit. */
-  flashMats: THREE.MeshStandardMaterial[];
+  flashMats: FlashMaterial[];
   flashUntil: number;
   alive: boolean;
   /** Seconds since death (drives the fall), -1 while alive. */
@@ -261,8 +262,16 @@ export class RemotePlayers {
   }
 }
 
-function mat(color: number, rough = 0.6, metal = 0.1): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+/** A soldier material whose emissive the hit flash turns up. */
+type FlashMaterial = { emissiveIntensity: number };
+
+function mat(
+  team: number,
+  color: number,
+  rough = 0.6,
+  metal = 0.1,
+): THREE.MeshStandardNodeMaterial {
+  return soldierMaterial(team, {
     color,
     roughness: rough,
     metalness: metal,
@@ -290,9 +299,9 @@ function box(
 function makeSoldier(team: number): Remote {
   const color = TEAM_COLORS[team] ?? 0xcccccc;
   const dark = TEAM_DARK[team] ?? 0x333333;
-  const uniform = mat(color, 0.7);
-  const vest = mat(dark, 0.5, 0.2);
-  const skin = mat(0x2a2d33, 0.8); // gloves/boots, neutral
+  const uniform = mat(team, color, 0.7);
+  const vest = mat(team, dark, 0.5, 0.2);
+  const skin = mat(team, 0x2a2d33, 0.8); // gloves/boots, neutral
   const visorMat = new THREE.MeshStandardMaterial({
     color: 0x0b0d10,
     roughness: 0.15,

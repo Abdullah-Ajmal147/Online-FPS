@@ -143,6 +143,9 @@ export class Viewmodel {
     );
   }
 
+  private swayYaw = 0;
+  private swayPitch = 0;
+
   update(
     frame: number,
     o: {
@@ -152,6 +155,9 @@ export class Viewmodel {
       switching: number;
       speed: number;
       grounded: boolean;
+      /** How far the view turned this frame (radians): the gun lags behind, then settles. */
+      turnYaw: number;
+      turnPitch: number;
     },
   ): void {
     for (const g of Object.values(this.real ?? this.models)) g.visible = g === this.guns[o.slot];
@@ -159,12 +165,20 @@ export class Viewmodel {
     if (this.flash.visible && this.kick < 0.6) this.flash.visible = false;
     if (o.grounded && o.speed > 0.5) this.bobPhase += frame * o.speed * 1.6;
     const bob = (1 - o.ads) * Math.min(1, o.speed / 5);
+    // Sway: the weapon trails fast turns a little (weight), much less when aiming.
+    const hold = 1 - 0.75 * o.ads;
+    const rate = frame > 0 ? 1 / frame : 0;
+    const targetYaw = Math.max(-0.07, Math.min(0.07, o.turnYaw * rate * 0.01)) * hold;
+    const targetPitch = Math.max(-0.05, Math.min(0.05, o.turnPitch * rate * 0.01)) * hold;
+    const k = 1 - Math.exp(-frame * 10);
+    this.swayYaw += (targetYaw - this.swayYaw) * k;
+    this.swayPitch += (targetPitch - this.swayPitch) * k;
 
     // Hip position → centred down the sights as ADS goes 0 → 1.
     const hipX = 0.16;
     const hipY = -0.15;
     this.root.position.set(
-      hipX * (1 - o.ads) + Math.sin(this.bobPhase) * 0.012 * bob,
+      hipX * (1 - o.ads) + Math.sin(this.bobPhase) * 0.012 * bob - this.swayYaw * 0.18,
       hipY +
         (1 - o.ads) * 0 +
         o.ads * 0.058 -
@@ -173,7 +187,11 @@ export class Viewmodel {
         o.switching * 0.25,
       -0.32 + this.kick * 0.04,
     );
-    this.root.rotation.set(this.kick * 0.06 - o.reloading * 0.6, 0, o.reloading * 0.3);
+    this.root.rotation.set(
+      this.kick * 0.06 - o.reloading * 0.6 - this.swayPitch,
+      -this.swayYaw,
+      o.reloading * 0.3 + this.swayYaw * 0.6,
+    );
     const gun = this.guns[o.slot]!;
     this.flash.position.set(
       gun.position.x,

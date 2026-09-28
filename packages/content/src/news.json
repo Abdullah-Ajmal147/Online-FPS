@@ -15,6 +15,17 @@
   ],
   "patches": [
     {
+      "version": "0.9.6",
+      "date": "2026-09-28",
+      "title": "See the enemy, feel the fight",
+      "notes": [
+        "Enemies have a red outline light and teammates a soft blue one, a little stronger at a distance, so soldiers stand out against any wall or sky.",
+        "Your weapon sways with fast turns and settles; a small view punch on every kill.",
+        "Eliminations burst with sparks and a flash (no gore), so a kill reads from across the map.",
+        "Taking damage pulses the screen edge; at low health a heartbeat pulse, and on Medium/High the colour drains."
+      ]
+    },
+    {
       "version": "0.9.5",
       "date": "2026-09-28",
       "title": "Minimap and a new look",

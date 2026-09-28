@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { soldierMaterial } from './rim.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { camoTexture } from './camo.ts';
@@ -380,8 +381,16 @@ export function soldierMaterials(
   team: number,
   skin: THREE.Material,
   normalMap: THREE.Texture | null,
-): { skin: THREE.Material; cloth: THREE.MeshStandardMaterial; gear: THREE.MeshStandardMaterial } {
-  const cloth = new THREE.MeshStandardMaterial({
+  rim = true,
+): {
+  skin: THREE.Material;
+  cloth: THREE.MeshStandardNodeMaterial;
+  gear: THREE.MeshStandardNodeMaterial;
+} {
+  const make = rim
+    ? (p: THREE.MeshStandardMaterialParameters) => soldierMaterial(team, p)
+    : (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardNodeMaterial(p);
+  const cloth = make({
     map: camoTexture(team),
     vertexColors: true,
     roughness: 0.88,
@@ -392,7 +401,7 @@ export function soldierMaterials(
     emissive: 0xffffff,
     emissiveIntensity: 0,
   });
-  const gear = new THREE.MeshStandardMaterial({
+  const gear = make({
     vertexColors: true,
     roughness: 0.7,
     metalness: 0.05,

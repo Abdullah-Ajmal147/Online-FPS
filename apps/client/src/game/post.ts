@@ -53,6 +53,8 @@ export class Post {
     highlightTint: uniform(new THREE.Vector3()),
     vignette: uniform(0),
     grain: uniform(0),
+    /** 0–1: hurt / low health drains the colour (set every frame by the game). */
+    stress: uniform(0),
   };
 
   constructor(
@@ -84,7 +86,7 @@ export class Post {
     const display = renderOutput(color);
     const u = this.u;
     let g = display.rgb.sub(0.5).mul(u.contrast).add(0.5);
-    g = saturation(g, u.saturation);
+    g = saturation(g, u.saturation.mul(float(1).sub(u.stress.mul(0.65))));
     const lum = luminance(g);
     g = g.add(mix(u.shadowTint, u.highlightTint, smoothstep(0.15, 0.85, lum)));
     const d = screenUV.sub(0.5).length();
@@ -105,6 +107,10 @@ export class Post {
     this.u.highlightTint.value.set(...grade.highlightTint);
     this.u.vignette.value = grade.vignette;
     this.u.grain.value = grade.grain;
+  }
+
+  setStress(v: number): void {
+    this.u.stress.value = v;
   }
 
   render(): void {

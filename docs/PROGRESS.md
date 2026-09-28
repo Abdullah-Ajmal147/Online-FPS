@@ -584,6 +584,21 @@ Learned: headless Chromium renders in software, so judge looks from screenshots 
 no-bot server and long screenshot timeouts; UV-seeded noise showed as streaks (hash the
 pixel index instead).
 
+## v2 work, 2026-09-28: polish ideas from other shooters
+
+Owner asked to learn from other online games (Krunker link). Krunker's page only offers "I
+Accept" on a 1029-partner ad-consent banner, so it wasn't accepted or played; ideas came
+from published sources: Riot's "VALORANT shaders and gameplay clarity" (friend-or-foe
+fresnel), and game-feel ("juice") write-ups.
+
+- **Friend-or-foe rim light** (`soldier/rim.ts`): red on enemies, soft blue on allies,
+  stronger with distance; added to the material's emissive so the hit flash still works; off
+  on our own first-person arms. Viewer team is a shader uniform set each frame.
+- **Weapon sway** from view turns (less when aiming); **kill view punch**.
+- **Elimination burst** (sparks, dust, flash; no gore).
+- **Hurt feedback**: red edge pulse on each hit, heartbeat pulse under 35 health, colour
+  drains on Medium/High (`Post.setStress`).
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:

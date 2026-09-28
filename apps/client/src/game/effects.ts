@@ -211,6 +211,28 @@ export class Effects {
     }
   }
 
+  /**
+   * A soldier eliminated here: a burst of sparks and dust upward and a flash (no gore: PEGI
+   * 12), so a kill reads from across the map.
+   */
+  elimination(at: THREE.Vector3): void {
+    for (let i = 0; i < 16; i++) {
+      const s = this.sparks.take(0.35 + Math.random() * 0.3);
+      s.position.copy(at).setY(at.y + 0.6 + Math.random() * 0.8);
+      (s.userData.v as THREE.Vector3).set(
+        (Math.random() - 0.5) * 5,
+        2 + Math.random() * 3.5,
+        (Math.random() - 0.5) * 5,
+      );
+    }
+    for (let i = 0; i < 2; i++) {
+      const p = this.puffs.take(0.9);
+      p.position.copy(at).setY(at.y + 0.5 + i * 0.6);
+      (p.userData.v as THREE.Vector3).set(0, 0.6, 0);
+    }
+    this.muzzleLight(at.clone().setY(at.y + 1));
+  }
+
   /** A spent case out of our gun: `at` the ejection port, flung along `right` and up. */
   casing(at: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): void {
     const c = this.casings.take(0.9);

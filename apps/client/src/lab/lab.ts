@@ -335,7 +335,16 @@ if (view === 'fp') {
   vm.setTeam(Number(params.get('team') ?? 0));
   const ads = Number(params.get('ads') ?? 0);
   for (let i = 0; i < 3; i++)
-    vm.update(1 / 60, { slot: 0, ads, reloading: 0, switching: 0, speed: 0, grounded: true });
+    vm.update(1 / 60, {
+      slot: 0,
+      ads,
+      reloading: 0,
+      switching: 0,
+      speed: 0,
+      grounded: true,
+      turnYaw: 0,
+      turnPitch: 0,
+    });
   lines.push(`fp: ${wid} ads ${ads}`);
 }
 

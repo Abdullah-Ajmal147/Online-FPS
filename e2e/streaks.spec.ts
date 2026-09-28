@@ -45,3 +45,20 @@ test('streak rewards: announcement, radar sweep with enemy dots, armor badge', a
   // The sweep ends after its seconds (5 s).
   await expect(minimap).toHaveAttribute('data-sweep', 'off', { timeout: 8_000 });
 });
+
+/** Taking damage: a red edge pulse, and at low health a heartbeat pulse that stays. */
+test('hurt feedback: a hit and low health show the red edge', async ({ page }) => {
+  await deploy(page, '/?server=http://localhost:2571');
+  const hurt = page.getByTestId('hurt');
+  await expect
+    .poll(async () => Number(await hurt.evaluate((e) => getComputedStyle(e).opacity)))
+    .toBe(0);
+  await page.evaluate(() => {
+    const d = (window as unknown as { __sentinelDebug: { events(e: unknown[]): void } })
+      .__sentinelDebug;
+    d.events([{ type: 'damaged', attacker: 250, from: [0, 1, -10], health: 20 }]);
+  });
+  await expect
+    .poll(async () => Number(await hurt.evaluate((e) => getComputedStyle(e).opacity)))
+    .toBeGreaterThan(0.2);
+});

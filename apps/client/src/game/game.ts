@@ -57,6 +57,7 @@ import {
 import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { Minimap } from './minimap.ts';
+import { viewerTeam } from './soldier/rim.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
 import { Connection } from '../net.ts';
@@ -238,6 +239,14 @@ export async function startGame(
   let shake = 0;
   const kick = (amount: number) => (shake = Math.min(2, shake + amount));
   let landDip = 0;
+  let lastLookYaw = 0;
+  /** Last hit we took (the red edge pulse). */
+  let hurtAt = -Infinity;
+  const hurtEl = document.createElement('div');
+  hurtEl.className = 'hurt-overlay';
+  hurtEl.dataset.testid = 'hurt';
+  zoomEl.after(hurtEl);
+  let lastLookPitch = 0;
   let wasGrounded = true;
   let lastVy = 0;
   const camRight = new THREE.Vector3();
@@ -799,6 +808,7 @@ export async function startGame(
         hud.health = ev.health;
         audio.hurt();
         kick(0.5); // taking a hit jolts the view
+        hurtAt = performance.now();
       } else if (ev.type === 'reward') {
         // Kill-streak reward: the server already applied it (ammo, armor); we show it.
         const reward = streakRewards[ev.reward];
@@ -822,6 +832,8 @@ export async function startGame(
         audio.explosion(ev.kind, ev.position);
       } else if (ev.type === 'kill') {
         minimap.forget(ev.victim);
+        const victimPose = ev.victim === myId ? null : remotePoses.get(ev.victim);
+        if (victimPose) effects.elimination(tmpC.set(...victimPose.position));
         const entry: KillFeedEntry = {
           key: feedKey++,
           killer: nameOf(ev.killer),
@@ -867,6 +879,8 @@ export async function startGame(
   };
   /** When our last headshot kill landed (drives the short zoom punch and gold flash). */
   let headshotAt = -Infinity;
+  /** When our last kill landed (a small view punch). */
+  let killAt = -Infinity;
   function onMyKill(victim: string, headshot: boolean): void {
     const now = performance.now();
     if (headshot) {
@@ -878,6 +892,7 @@ export async function startGame(
       document.body.classList.add('headshot-flash');
     }
     announce('kill', `ELIMINATED ${victim.toUpperCase()}`, headshot ? '+100 · HEADSHOT' : '+100');
+    killAt = now;
     recentKills = [...recentKills.filter((t) => now - t < 4000), now];
     streak++;
     const multi = ['', '', 'DOUBLE KILL', 'TRIPLE KILL'][recentKills.length] ?? 'MULTI KILL';
@@ -1255,6 +1270,12 @@ export async function startGame(
       input.look.yaw + w.recoilYaw * RAD_PER_UNIT + sy,
       shake * 0.006 * Math.sin(t * 43.9),
     );
+    // How far the view turned since the last frame (weapon sway).
+    let turnYaw = input.look.yaw - lastLookYaw;
+    turnYaw -= Math.round(turnYaw / (2 * Math.PI)) * 2 * Math.PI;
+    const turnPitch = input.look.pitch - lastLookPitch;
+    lastLookYaw = input.look.yaw;
+    lastLookPitch = input.look.pitch;
     const replaying = updateKillcam(frame);
     const teammates: { x: number; z: number; yaw: number }[] = [];
     for (const [id, pose] of remotePoses) {
@@ -1269,6 +1290,15 @@ export async function startGame(
       myTeam(),
       hud.alive && !replaying,
     );
+    // Hurt: a pulse at the screen edge on each hit; below 35 health a slow heartbeat pulse and
+    // (Medium/High) the colour drains. Blood-free (PEGI 12): a vignette, not gore.
+    const sinceHurt = (performance.now() - hurtAt) / 600;
+    const pulse = sinceHurt >= 0 && sinceHurt < 1 ? 1 - sinceHurt : 0;
+    const low = hud.alive && hud.health < 35 ? (35 - hud.health) / 35 : 0;
+    const beat = low > 0 ? low * (0.55 + 0.45 * Math.sin(performance.now() / 180) ** 2) : 0;
+    const stress = hud.alive ? Math.min(1, Math.max(pulse * 0.8, beat)) : 0;
+    hurtEl.style.opacity = stress.toFixed(3);
+    post?.setStress(Math.max(low, pulse * 0.4));
     const armorSeconds = hud.alive
       ? Math.max(0, Math.ceil((armorUntil - performance.now()) / 1000))
       : 0;
@@ -1279,6 +1309,7 @@ export async function startGame(
     syncLoadout();
     applyGraphics();
     effects.setMuzzleLight(GRAPHICS[settings().graphics].post);
+    viewerTeam.value = myTeam(); // soldiers' rim light: red for enemies, blue for allies
     const spec = simCtx.loadout[w.slot];
     const ads = adsFraction(w, spec);
     // Aiming zooms by the weapon's current zoom level (the wheel steps through its levels
@@ -1305,7 +1336,13 @@ export async function startGame(
     input.lookScale = 1 / magnification;
     // Headshot kill: a quick zoom punch (0.45 s), never enough to lose the target.
     const hsT = (performance.now() - headshotAt) / 450;
-    const punch = hsT >= 0 && hsT < 1 ? Math.sin(Math.PI * hsT) * 0.1 : 0;
+    const killT = (performance.now() - killAt) / 300;
+    const punch =
+      hsT >= 0 && hsT < 1
+        ? Math.sin(Math.PI * hsT) * 0.1
+        : killT >= 0 && killT < 1
+          ? Math.sin(Math.PI * killT) * 0.035
+          : 0;
     const vfov = verticalFovDegrees(zoomedFov * (1 - punch), camera.aspect);
     if (Math.abs(camera.fov - vfov) > 0.01) {
       camera.fov = vfov;
@@ -1320,6 +1357,8 @@ export async function startGame(
       switching: w.switchTicks / spec.equipTicks,
       speed,
       grounded: m.grounded,
+      turnYaw,
+      turnPitch,
     });
     audio.setListener(camera.position.x, camera.position.y, camera.position.z, input.look.yaw);
     if (w.slot !== lastSlot) audio.click();

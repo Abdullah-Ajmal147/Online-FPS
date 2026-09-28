@@ -64,7 +64,7 @@ export interface SoldierModel {
   body: THREE.SkinnedMesh;
   bones: Map<string, THREE.Bone>;
   /** Materials that flash white on a confirmed hit. */
-  flashMats: THREE.MeshStandardMaterial[];
+  flashMats: { emissiveIntensity: number }[];
 }
 
 /** A new dressed soldier (variant 0 = male body, 1 = female body). */
@@ -72,6 +72,8 @@ export function createSoldierModel(
   assets: SoldierAssets,
   team: number,
   variant: number,
+  /** Friend-or-foe rim light (off for our own first-person arms). */
+  rim = true,
 ): SoldierModel {
   const gltf = assets.bodies[variant % assets.bodies.length]!;
   const key = `${variant}:${team}`;
@@ -83,7 +85,7 @@ export function createSoldierModel(
   const root = cloneSkinned(gltf.scene);
   const body = bodyMeshOf(root);
   const original = body.material as THREE.MeshStandardMaterial;
-  const mats = soldierMaterials(team, original, original.normalMap);
+  const mats = soldierMaterials(team, original, original.normalMap, rim);
   body.geometry = parts.bodyGeometry;
   body.material = [mats.skin, mats.cloth];
   const bones = new Map<string, THREE.Bone>();

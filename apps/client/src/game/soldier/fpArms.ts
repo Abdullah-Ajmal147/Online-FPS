@@ -17,7 +17,7 @@ export class FirstPersonArms {
   private readonly offsets: { r: THREE.Quaternion; l: THREE.Quaternion };
 
   constructor(assets: SoldierAssets, team: number) {
-    const model = createSoldierModel(assets, team, 0);
+    const model = createSoldierModel(assets, team, 0, false); // no rim light on our own arms
     this.root = model.root;
     const body = bodyMeshOf(this.root);
     body.geometry = armsOnly(body);
