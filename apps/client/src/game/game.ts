@@ -234,6 +234,15 @@ export async function startGame(
   let objectives: { id: string; owner: number }[] = [];
   /** Armor streak reward: until when (performance.now), as the server granted it. */
   let armorUntil = -Infinity;
+  /** Camera feel: shake (explosions, hits, shots; decays fast) and the landing dip. */
+  let shake = 0;
+  const kick = (amount: number) => (shake = Math.min(2, shake + amount));
+  let landDip = 0;
+  let wasGrounded = true;
+  let lastVy = 0;
+  const camRight = new THREE.Vector3();
+  const camUp = new THREE.Vector3();
+  const tmpC = new THREE.Vector3();
   /** Chosen zoom level per weapon slot (index into the weapon's zoomLevels). */
   const zoomIndex: [number, number] = [0, 0];
 
@@ -789,6 +798,7 @@ export async function startGame(
         hud.damage = [...hud.damage.slice(-5), { key: feedKey++, angle, at: performance.now() }];
         hud.health = ev.health;
         audio.hurt();
+        kick(0.5); // taking a hit jolts the view
       } else if (ev.type === 'reward') {
         // Kill-streak reward: the server already applied it (ammo, armor); we show it.
         const reward = streakRewards[ev.reward];
@@ -803,7 +813,12 @@ export async function startGame(
         if (ev.by !== myId) announce('kill', 'RADAR SWEEP', `from ${nameOf(ev.by)}`);
       } else if (ev.type === 'explosion') {
         const [x, y, z] = ev.position;
-        if (ev.kind === 'frag') effects.explosion(new THREE.Vector3(x, y, z));
+        if (ev.kind === 'frag') {
+          effects.explosion(new THREE.Vector3(x, y, z));
+          // Nearby blasts shake the view (strong up close, nothing past ~20 m).
+          const d = camera.position.distanceTo(tmpC.set(x, y, z));
+          kick(Math.max(0, 1 - d / 20) * 1.6);
+        }
         audio.explosion(ev.kind, ev.position);
       } else if (ev.type === 'kill') {
         minimap.forget(ev.victim);
@@ -959,6 +974,16 @@ export async function startGame(
     const eye = eyePosition(predictor.state.move, moveCtx);
     const range = spec.def.maxRange;
     viewmodel.muzzleWorld(shot.slot, tmpB);
+    effects.muzzleLight(tmpB);
+    // A spent case from the ejection port (behind the muzzle, right side), flung right and up.
+    camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+    effects.casing(
+      tmpC.copy(tmpB).lerp(camera.position, 0.55).addScaledVector(camRight, 0.035),
+      camRight,
+      camUp,
+    );
+    kick(0.12); // a little shake on every shot
     let playerHit = false;
     // Visual spread guess, one ray per pellet (the server rolls the real ones).
     const cone = shot.spread + spec.pelletSpread;
@@ -1008,6 +1033,9 @@ export async function startGame(
     effects.muzzleFlash(muzzle);
     const wall = effects.castMap(tmpA, tmpDir, 80);
     effects.tracer(muzzle, tmpA.clone().addScaledVector(tmpDir, wall?.distance ?? 80));
+    // Where their bullet lands (a guess from their view; the server decides hits): being shot
+    // at should look like it, chips and dust off the wall next to you.
+    if (wall) effects.impact(wall, 2);
     audio.shot(def?.class ?? 'rifle', [tmpA.x, tmpA.y, tmpA.z]);
   }
 
@@ -1209,13 +1237,23 @@ export async function startGame(
       bobPhase += frame * speed * 1.8;
       bob = Math.sin(bobPhase) * 0.03;
     }
-    camera.position.set(px, py + eyeHeight + bob, pz);
-    // Mouse look every frame from the live look angles (no input lag), plus weapon recoil.
+    // Landing: the view dips with the impact speed and springs back.
+    if (m.grounded && !wasGrounded) landDip = Math.min(0.14, Math.max(0, -lastVy) * 0.018);
+    wasGrounded = m.grounded;
+    lastVy = m.velocity[1];
+    landDip = Math.max(0, landDip - frame * 0.6);
+    camera.position.set(px, py + eyeHeight + bob - landDip, pz);
+    // Mouse look every frame from the live look angles (no input lag), plus weapon recoil and
+    // camera shake (visual only: the shot direction comes from the look angles).
     const w = s.weapon;
+    shake = Math.max(0, shake * Math.exp(-frame * 9) - frame * 0.02);
+    const t = performance.now() / 1000;
+    const sx = shake * 0.012 * Math.sin(t * 71.3);
+    const sy = shake * 0.012 * Math.sin(t * 57.1 + 1.7);
     camera.rotation.set(
-      input.look.pitch + w.recoilPitch * RAD_PER_UNIT,
-      input.look.yaw + w.recoilYaw * RAD_PER_UNIT,
-      0,
+      input.look.pitch + w.recoilPitch * RAD_PER_UNIT + sx,
+      input.look.yaw + w.recoilYaw * RAD_PER_UNIT + sy,
+      shake * 0.006 * Math.sin(t * 43.9),
     );
     const replaying = updateKillcam(frame);
     const teammates: { x: number; z: number; yaw: number }[] = [];
@@ -1240,6 +1278,7 @@ export async function startGame(
     }
     syncLoadout();
     applyGraphics();
+    effects.setMuzzleLight(GRAPHICS[settings().graphics].post);
     const spec = simCtx.loadout[w.slot];
     const ads = adsFraction(w, spec);
     // Aiming zooms by the weapon's current zoom level (the wheel steps through its levels

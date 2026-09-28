@@ -67,12 +67,28 @@ export class Effects {
   private readonly blasts: Pool<Faded>;
   private readonly dust: Pool<Faded>;
   private readonly scorches: Pool<Faded>;
+  /** Impact puffs (soft sprites that swell and fade) and sparks (tiny, flying, falling). */
+  private readonly puffs: Pool<THREE.Sprite>;
+  private readonly sparks: Pool<Faded>;
+  /** Our own spent cases, flying out of the gun. */
+  private readonly casings: Pool<THREE.Mesh>;
+  /**
+   * One light that flashes at the muzzle when a shot is fired (walls, hands and the gun light
+   * up). In the scene (Medium/High) with intensity 0 in between: adding and removing lights
+   * rebuilds every material's shader, so it only changes with the graphics preset. Low leaves
+   * it out: a point light costs on every lit pixel, even when dark.
+   */
+  private readonly muzzleLightSource = new THREE.PointLight(0xffc27a, 0, 9, 1.6);
+  private readonly scene: THREE.Scene;
+  private muzzleLightAge = Infinity;
+  private readonly gravity = new THREE.Vector3(0, -9.8, 0);
   private warmFrames = 2;
 
   /** What shots can hit visually (the map meshes); set when a map loads. */
   private solids: THREE.Object3D = new THREE.Group();
 
   constructor(scene: THREE.Scene) {
+    this.scene = scene;
     this.raycaster.far = 150;
     const flashGeo = new THREE.SphereGeometry(0.06, 8, 6);
     const markGeo = new THREE.CircleGeometry(0.05, 10);
@@ -98,6 +114,46 @@ export class Effects {
       m.rotation.x = -Math.PI / 2;
       return m;
     });
+    const puffMap = softDisc();
+    this.puffs = new Pool(scene, 32, () => {
+      const s = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: puffMap,
+          color: 0xb3a592,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+        }),
+      );
+      s.userData.v = new THREE.Vector3();
+      return s;
+    });
+    const sparkGeo = new THREE.SphereGeometry(0.012, 4, 3);
+    this.sparks = new Pool(scene, 64, () => {
+      const m = mesh(sparkGeo, 0xffd58a, 1, false);
+      m.userData.v = new THREE.Vector3();
+      return m;
+    });
+    const caseGeo = new THREE.CylinderGeometry(0.0045, 0.0045, 0.026, 6);
+    caseGeo.rotateZ(Math.PI / 2);
+    const brass = new THREE.MeshStandardMaterial({
+      color: 0xb8903e,
+      metalness: 0.9,
+      roughness: 0.3,
+    });
+    this.casings = new Pool(scene, 24, () => {
+      const m = new THREE.Mesh(caseGeo, brass);
+      m.userData.v = new THREE.Vector3();
+      m.userData.spin = new THREE.Vector3();
+      return m;
+    });
+  }
+
+  /** Muzzle light on (Medium/High) or out of the scene (Low). */
+  setMuzzleLight(on: boolean): void {
+    if (on === (this.muzzleLightSource.parent !== null)) return;
+    if (on) this.scene.add(this.muzzleLightSource);
+    else this.muzzleLightSource.removeFromParent();
   }
 
   setSolids(solids: THREE.Object3D): void {
@@ -123,14 +179,47 @@ export class Effects {
 
   muzzleFlash(at: THREE.Vector3): void {
     this.flashes.take(0.05).position.copy(at);
+    this.muzzleLight(at);
   }
 
-  impact(hit: THREE.Intersection): void {
+  /** Light up the surroundings for a moment (every shot, ours and others'). */
+  muzzleLight(at: THREE.Vector3): void {
+    this.muzzleLightSource.position.copy(at);
+    this.muzzleLightAge = 0;
+  }
+
+  /**
+   * A bullet hitting the map: a hole, a puff of dust off the surface, and a few sparks.
+   * `sparks`: more of them (metal surfaces).
+   */
+  impact(hit: THREE.Intersection, sparks = 3): void {
     if (!hit.face) return;
-    const m = this.impacts.take(8);
+    const m = this.impacts.take(10);
     const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
     m.position.copy(hit.point).addScaledVector(normal, 0.01);
     m.lookAt(m.position.clone().add(normal));
+    const puff = this.puffs.take(0.7);
+    puff.position.copy(hit.point).addScaledVector(normal, 0.08);
+    (puff.userData.v as THREE.Vector3).copy(normal).multiplyScalar(0.6).y += 0.25;
+    for (let i = 0; i < sparks; i++) {
+      const s = this.sparks.take(0.18 + Math.random() * 0.15);
+      s.position.copy(hit.point).addScaledVector(normal, 0.02);
+      (s.userData.v as THREE.Vector3)
+        .set(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5)
+        .multiplyScalar(4)
+        .addScaledVector(normal, 3.5);
+    }
+  }
+
+  /** A spent case out of our gun: `at` the ejection port, flung along `right` and up. */
+  casing(at: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): void {
+    const c = this.casings.take(0.9);
+    c.position.copy(at);
+    (c.userData.v as THREE.Vector3)
+      .copy(right)
+      .multiplyScalar(1.6 + Math.random() * 0.6)
+      .addScaledVector(up, 1.4 + Math.random() * 0.5);
+    (c.userData.spin as THREE.Vector3).set(Math.random() * 30, Math.random() * 30, 20);
   }
 
   /** Frag blast: a bright flash ball that swells and fades, plus a scorch mark below. */
@@ -161,6 +250,30 @@ export class Effects {
     this.tracers.update(frame, (o, k) => (o.material.opacity = 0.8 * (1 - k)));
     this.flashes.update(frame, fade(1));
     this.impacts.update(frame, fade(0.85));
+    this.puffs.update(frame, (o, k) => {
+      o.position.addScaledVector(o.userData.v as THREE.Vector3, frame);
+      o.scale.setScalar(0.16 + 0.75 * Math.sqrt(k));
+      o.material.opacity = 0.62 * (1 - k);
+    });
+    this.sparks.update(frame, (o, k) => {
+      const v = o.userData.v as THREE.Vector3;
+      v.addScaledVector(this.gravity, frame);
+      o.position.addScaledVector(v, frame);
+      o.material.opacity = 1 - k;
+    });
+    this.casings.update(frame, (o) => {
+      const v = o.userData.v as THREE.Vector3;
+      v.addScaledVector(this.gravity, frame);
+      o.position.addScaledVector(v, frame);
+      const spin = o.userData.spin as THREE.Vector3;
+      o.rotation.x += spin.x * frame;
+      o.rotation.y += spin.y * frame;
+      o.rotation.z += spin.z * frame;
+    });
+    // Muzzle light: bright for a frame or two, gone in 60 ms.
+    this.muzzleLightAge += frame;
+    this.muzzleLightSource.intensity =
+      this.muzzleLightAge < 0.06 ? 14 * (1 - this.muzzleLightAge / 0.06) : 0;
     this.scorches.update(frame, fade(0.7));
     // Blast and dust swell (0.06 m sphere → ~3 m / ~2 m across) while fading.
     this.blasts.update(frame, (o, k) => {
@@ -174,6 +287,32 @@ export class Effects {
   }
 
   private pools(): Pool<THREE.Object3D>[] {
-    return [this.tracers, this.flashes, this.impacts, this.blasts, this.dust, this.scorches];
+    return [
+      this.tracers,
+      this.flashes,
+      this.impacts,
+      this.blasts,
+      this.dust,
+      this.scorches,
+      this.puffs,
+      this.sparks,
+      this.casings,
+    ] as Pool<THREE.Object3D>[];
   }
+}
+
+/** A soft round sprite texture (white centre fading to clear), drawn once. */
+function softDisc(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
