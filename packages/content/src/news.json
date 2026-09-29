@@ -15,6 +15,19 @@
   ],
   "patches": [
     {
+      "version": "0.9.8",
+      "date": "2026-09-29",
+      "title": "Melee, prone and a sharper look",
+      "notes": [
+        "Melee (V): a quick strike. From behind it takes an enemy down in one; from the front it takes two.",
+        "Prone (Z): lie down and crawl. Steadier aim and harder to spot, but slow. Jump, sprint or crouch to get up.",
+        "Marksman scope: the aim drifts while scoped; hold Shift to hold your breath and steady it. Enemies see a glint when you aim their way.",
+        "Weapons kick with real weight, every third round is a tracer, bullets leave marks and chip concrete, brick and wood, and ring off metal.",
+        "Haze over the ground, dust in the air, sun shafts on High, and dirt at the foot of walls. Looking into the sun no longer washes out the screen.",
+        "F1 opens a tuning panel: frame graph, draw calls, weapon feel sliders and a time-to-kill table."
+      ]
+    },
+    {
       "version": "0.9.7",
       "date": "2026-09-29",
       "title": "Smoother starts, safer keys",

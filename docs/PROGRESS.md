@@ -621,6 +621,34 @@ Results (headless software rendering, so compare before/after only): frames draw
 p95 frame 280 → 127 ms, worst in-play stall 429 → 260 ms; map-ray and shader-compile time in
 play gone.
 
+## v2 work, 2026-09-29: feel, impacts, atmosphere, melee, prone
+
+From a shooter-quality checklist the owner forwarded; built in five parts:
+
+- **F1 tuning panel** (`ui/TuningPanel.tsx`, `game/tuning.ts`): frame-time graph, draw calls,
+  triangles, geometries/textures, heap, render scale; live sliders for feel.json and the
+  colour grade/exposure; time-to-kill table from weapon data (`game/ttk.ts`); copy feel.json.
+- **Feel** (`content/feel.json`, client only, not hashed): per-class gun kick as exact damped
+  springs (`game/kickSpring.ts`, frame-rate independent), tracer rounds (1 in 3, flying
+  streaks), sprint/tactical-sprint FOV widening, strafe tilt.
+- **Impacts by surface** (`game/surfaceKinds.ts`): colliders report their solid, so a ray knows
+  concrete/metal/brick/wood per map theme: dust colour, chips/splinters, sparks, lasting marks
+  (200, oldest reused), impact sounds (metal ping + ricochet), footsteps ring on steel.
+- **Atmosphere** (post.ts, Medium/High): ground haze from depth, warm toward the sun; sun shafts
+  on High; the sky barely feeds bloom (facing the sun no longer floods the screen); wall-base
+  grime and world-space stains on map materials; drifting dust motes.
+- **Gameplay** (protocol 18–20):
+  - melee (V, `melee.json`), server-resolved on rewound poses, queued like shots;
+  - scoped-rifle sway with hold breath (sprint), deterministic weapon state; scope glint;
+  - prone (Z): crawl, steadier aim, hitboxes lying along the facing, prone eye at head height.
+
+The netcode reviewer's findings were all fixed (prone eye above hitboxes, melee join order,
+prone limbs through walls, prone visibility points), with tests for each.
+
+Learned: two headless pages in one browser throttle each other (a scoped player "stopped
+aiming"); use a browser per player in multi-client scratch tests. After editing files, a
+running Vite can serve two copies of a module to `import()` probes: restart it.
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:
