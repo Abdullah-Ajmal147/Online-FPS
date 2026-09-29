@@ -11,6 +11,7 @@ import { defineConfig, devices } from '@playwright/test';
  *   :2572 — bots, arena: party invite test (three friends, one link, one team)
  *   :2573 — no bots, open arena: killcam test (two players, one kills the other)
  *   :2574 — bots, arena: private match test
+ *   :2575 — no bots, open arena: friends by link, one on each side, who then fight
  *   :8787 — progression API (in-memory DB); the :2568 server reports finished matches to it
  * Game servers are never reused (they need these exact settings), so stop `pnpm dev` first.
  */
@@ -113,6 +114,20 @@ export default defineConfig({
         PORT: '2573',
         SENTINEL_BOTS: '0',
         SENTINEL_MAP: 'arena',
+        SENTINEL_WARMUP_SECONDS: '3600',
+      },
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },
+      reuseExistingServer: false,
+    },
+    {
+      // Friends-by-link test: humans only on an open map, so the rival is in plain sight.
+      command: 'node_modules/.bin/tsx src/index.ts',
+      cwd: 'apps/server',
+      url: 'http://localhost:2575/healthz',
+      env: {
+        PORT: '2575',
+        SENTINEL_MAP: 'arena',
+        SENTINEL_BOTS: '0',
         SENTINEL_WARMUP_SECONDS: '3600',
       },
       gracefulShutdown: { signal: 'SIGTERM', timeout: 3000 },

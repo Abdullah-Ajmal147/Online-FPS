@@ -129,6 +129,8 @@ export interface ClientStatus {
   /** The map and models are compiled for the GPU (the deploy card waits for it). */
   worldReady: boolean;
   net: { state: 'idle' | 'connecting' | 'connected' | 'error'; text: string };
+  /** A friend's invite link didn't work (shown once in the match, then cleared). */
+  inviteProblem: string | null;
   /** True while the mouse is captured and the player is in control. */
   playing: boolean;
   /** Null until the local simulation has started. */
@@ -144,6 +146,8 @@ export interface ClientStatus {
   xpBaseline: string | null;
   /** Party invite link for the current match (null until connected). */
   invite: string | null;
+  /** "Play against me" invite link: the friend joins the other team (null until connected). */
+  inviteVs: string | null;
   /** Recent chat lines, oldest first (muted players already left out). */
   chat: ChatEntry[];
   /** Measured round trip per region id (null: unreachable); empty until measured. */
@@ -162,6 +166,7 @@ let status: ClientStatus = {
   spawned: false,
   worldReady: true,
   net: { state: 'idle', text: 'not in a match' },
+  inviteProblem: null,
   playing: false,
   player: null,
   netStats: null,
@@ -171,6 +176,7 @@ let status: ClientStatus = {
   profile: null,
   xpBaseline: null,
   invite: null,
+  inviteVs: null,
   chat: [],
   regionPings: {},
   region: null,

@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { IMPACT, type SurfaceKind } from './surfaceKinds.ts';
+import { IMPACT, SURFACE_KINDS, type SurfaceKind } from './surfaceKinds.ts';
 
 /**
  * A fixed set of reusable objects, all in the scene from the start, shown when used. The
@@ -89,6 +89,8 @@ export class Effects {
   private readonly impacts: Pool<Faded>;
   /** Chips and splinters knocked off concrete, brick and wood. */
   private readonly chips: Pool<Faded>;
+  private readonly markMats = {} as Record<SurfaceKind, THREE.MeshBasicMaterial>;
+  private readonly chipMats = {} as Record<SurfaceKind, THREE.MeshBasicMaterial>;
   private readonly blasts: Pool<Faded>;
   private readonly dust: Pool<Faded>;
   private readonly scorches: Pool<Faded>;
@@ -124,41 +126,47 @@ export class Effects {
     // enough to catch the bloom on High.
     const rodGeo = new THREE.CylinderGeometry(0.009, 0.009, 1, 5, 1, true);
     rodGeo.rotateX(Math.PI / 2);
+    // Shared materials for the big pools: the renderer builds every distinct material's shader
+    // setup (hundreds of per-object materials froze slow machines for seconds at start-up).
+    const tracerMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(0xffd08a).multiplyScalar(3),
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
     this.tracers = new Pool(scene, 48, () => {
-      const m = new THREE.Mesh(
-        rodGeo,
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color(0xffd08a).multiplyScalar(3),
-          transparent: true,
-          opacity: 0.9,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        }),
-      ) as Faded;
+      const m = new THREE.Mesh(rodGeo, tracerMat) as Faded;
       m.userData = { from: new THREE.Vector3(), dir: new THREE.Vector3(), dist: 0, life: 0 };
       return m;
     });
     this.flashes = new Pool(scene, 24, () => mesh(flashGeo, 0xffd27a, 1));
     const holeMap = bulletHole();
     const holeGeo = new THREE.PlaneGeometry(0.11, 0.11);
+    // One mark material and one chip material per surface kind, shared by the whole pool.
+    // Pool objects start out spread over the kinds, so the warm-up compiles all of them.
+    for (const kind of SURFACE_KINDS) {
+      this.markMats[kind] = new THREE.MeshBasicMaterial({
+        map: holeMap,
+        color: IMPACT[kind].mark,
+        transparent: true,
+        depthWrite: false,
+        // Drawn onto the wall, not in front of it: no fighting with the surface.
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+      });
+      this.chipMats[kind] = new THREE.MeshBasicMaterial({ color: IMPACT[kind].chipColor });
+    }
+    let markN = 0;
     this.impacts = new Pool(scene, MARKS, () => {
-      const m = new THREE.Mesh(
-        holeGeo,
-        new THREE.MeshBasicMaterial({
-          map: holeMap,
-          transparent: true,
-          depthWrite: false,
-          // Drawn onto the wall, not in front of it: no fighting with the surface.
-          polygonOffset: true,
-          polygonOffsetFactor: -2,
-        }),
-      ) as Faded;
-      return m;
+      const kind = SURFACE_KINDS[markN++ % SURFACE_KINDS.length]!;
+      return new THREE.Mesh(holeGeo, this.markMats[kind]) as Faded;
     });
     const chipGeo = new THREE.BoxGeometry(0.018, 0.012, 0.03);
+    let chipN = 0;
     this.chips = new Pool(scene, 64, () => {
-      const m = mesh(chipGeo, 0x888888, 1, true);
-      m.material.transparent = false;
+      const kind = SURFACE_KINDS[chipN++ % SURFACE_KINDS.length]!;
+      const m = new THREE.Mesh(chipGeo, this.chipMats[kind]) as Faded;
       m.userData.v = new THREE.Vector3();
       m.userData.spin = new THREE.Vector3();
       return m;
@@ -278,8 +286,9 @@ export class Effects {
     const look = IMPACT[hit.surface];
     const normal = hit.normal;
     const m = this.impacts.take(MARK_SECONDS);
-    m.material.color.setHex(look.mark);
-    m.scale.setScalar(look.markSize * (0.85 + Math.random() * 0.3));
+    m.material = this.markMats[hit.surface];
+    m.userData.size = look.markSize * (0.85 + Math.random() * 0.3);
+    m.scale.setScalar(m.userData.size as number);
     m.position.copy(hit.point).addScaledVector(normal, 0.004);
     m.lookAt(tmp.copy(m.position).add(normal));
     m.rotateZ(Math.random() * Math.PI * 2);
@@ -299,7 +308,7 @@ export class Effects {
     }
     for (let i = 0; i < Math.round(look.chips * share); i++) {
       const c = this.chips.take(0.6 + Math.random() * 0.4);
-      c.material.color.setHex(look.chipColor);
+      c.material = this.chipMats[hit.surface];
       c.position.copy(hit.point).addScaledVector(normal, 0.03);
       (c.userData.v as THREE.Vector3)
         .set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5)
@@ -370,6 +379,7 @@ export class Effects {
     }
     const fade = (base: number) => (o: Faded, k: number) => (o.material.opacity = base * (1 - k));
     this.tracers.update(frame, (o, k) => {
+      // (Shared material: a tracer doesn't fade, it flies and ends.)
       const u = o.userData as {
         from: THREE.Vector3;
         dir: THREE.Vector3;
@@ -382,8 +392,11 @@ export class Effects {
       o.scale.set(1, 1, Math.max(0.001, head - tail));
     });
     this.flashes.update(frame, fade(1));
-    // Marks stay, then fade out over the last fifth of their time.
-    this.impacts.update(frame, (o, k) => (o.material.opacity = k < 0.8 ? 1 : (1 - k) / 0.2));
+    // Marks stay, then shrink away over the last fifth of their time (the material is shared,
+    // so they shrink rather than fade).
+    this.impacts.update(frame, (o, k) => {
+      if (k > 0.8) o.scale.setScalar(((o.userData.size as number) ?? 1) * ((1 - k) / 0.2));
+    });
     this.chips.update(frame, (o) => {
       const v = o.userData.v as THREE.Vector3;
       v.addScaledVector(this.gravity, frame);

@@ -169,7 +169,7 @@ export function normalizeSettings(raw: unknown): Settings {
       r.renderScale,
       LIMITS.renderScale.min,
       LIMITS.renderScale.max,
-      DEFAULT_SETTINGS.renderScale,
+      defaultRenderScale(),
     ),
     ...choice,
     sensitivity: clamp(
@@ -258,7 +258,20 @@ export function loadoutChoice(s: Settings): LoadoutChoice {
  * too slow for timing checks. Tests that check presets set them explicitly.
  */
 function defaultGraphics(): GraphicsPreset {
-  const automated =
-    import.meta.env?.DEV && typeof navigator !== 'undefined' && navigator.webdriver === true;
-  return automated ? 'low' : DEFAULT_SETTINGS.graphics;
+  return automated() ? 'low' : DEFAULT_SETTINGS.graphics;
+}
+
+/**
+ * Browser tests also draw at half resolution (a quarter of the pixels): several test windows
+ * drawing in software on a small CI machine starved each other of CPU until a host's page
+ * froze and dropped out of its friends' match.
+ */
+function defaultRenderScale(): number {
+  return automated() ? LIMITS.renderScale.min : DEFAULT_SETTINGS.renderScale;
+}
+
+function automated(): boolean {
+  return Boolean(
+    import.meta.env?.DEV && typeof navigator !== 'undefined' && navigator.webdriver === true,
+  );
 }

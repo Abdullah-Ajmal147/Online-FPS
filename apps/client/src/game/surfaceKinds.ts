@@ -2,7 +2,8 @@ import type { Material } from '@sentinel/content';
 import type { Theme } from '../map.ts';
 
 /** What a surface is made of, as far as bullets and feet can tell (impacts, marks, sounds). */
-export type SurfaceKind = 'concrete' | 'metal' | 'brick' | 'wood';
+export const SURFACE_KINDS = ['concrete', 'metal', 'brick', 'wood'] as const;
+export type SurfaceKind = (typeof SURFACE_KINDS)[number];
 
 /**
  * Per map theme, what each map material looks like (tools/assets/surfaces.json): the yard is

@@ -276,8 +276,13 @@ function PlayScreen({
           <RegionPicker settings={settings} onSettings={onSettings} />
         )}
         {invited && !status.inMatch && (
-          <div class="notice">A friend invited you: DEPLOY puts you on their team.</div>
+          <div class="notice" data-testid="invited-notice">
+            {new URLSearchParams(location.search).get('side') === 'vs'
+              ? 'A friend challenged you: DEPLOY puts you on the other team, against them.'
+              : 'A friend invited you: DEPLOY puts you on their team.'}
+          </div>
         )}
+        {status.inMatch && <InviteLinks />}
         {team && (
           <div class={`notice faction-${team.id}`}>
             You fight for the <b>{team.name}</b>. {team.motto}
@@ -327,6 +332,50 @@ function PlayScreen({
         mantle · C crouch/slide · G frag · Q smoke · Enter chat · Esc pause
       </p>
     </section>
+  );
+}
+
+/**
+ * In a match: the two invite links, one tap to copy each. "With me" puts a friend on your
+ * team; "Against me" on the other one (the server keeps it fair: a side can't be stacked).
+ */
+function InviteLinks() {
+  const status = useStatus();
+  const [copied, setCopied] = useState<'with' | 'vs' | null>(null);
+  /** Shown to copy by hand when the clipboard isn't allowed. */
+  const [manual, setManual] = useState<string | null>(null);
+  if (!status.invite) return null;
+  const copy = (which: 'with' | 'vs', link: string | null) => {
+    if (!link) return;
+    const done = () => {
+      setCopied(which);
+      setManual(null);
+    };
+    if (!navigator.clipboard) {
+      setManual(link);
+      return;
+    }
+    void navigator.clipboard.writeText(link).then(done, () => setManual(link));
+  };
+  return (
+    <div class="invite-links" data-testid="invite-links">
+      <b>Play with friends:</b> send a link.
+      <button class="btn" data-testid="copy-invite" onClick={() => copy('with', status.invite)}>
+        {copied === 'with' ? 'Copied ✓' : 'Invite to my team'}
+      </button>
+      <button class="btn" data-testid="copy-invite-vs" onClick={() => copy('vs', status.inviteVs)}>
+        {copied === 'vs' ? 'Copied ✓' : 'Invite to play against me'}
+      </button>
+      {manual && (
+        <input
+          class="invite-manual"
+          readOnly
+          value={manual}
+          data-testid="invite-manual"
+          onFocus={(e) => (e.target as HTMLInputElement).select()}
+        />
+      )}
+    </div>
   );
 }
 

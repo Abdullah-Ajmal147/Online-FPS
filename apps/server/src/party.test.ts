@@ -20,6 +20,16 @@ describe('party team', () => {
     expect(partyTeamFor([6, 5], 0, 6)).toBeUndefined();
     expect(partyTeamFor([2, 5], 1, 6)).toBeUndefined();
   });
+
+  it('"play against me" puts the friend on the other team, with the same fairness', () => {
+    expect(partyTeamFor([1, 0], 0, 6, true)).toBe(1);
+    expect(partyTeamFor([1, 1], 1, 6, true)).toBe(0);
+    // Friends split 2 v 2, 3 v 3: every challenger lands opposite the host.
+    expect(partyTeamFor([3, 2], 0, 6, true)).toBe(1);
+    // Can't stack the other side either, or overfill it.
+    expect(partyTeamFor([0, 3], 0, 6, true)).toBeUndefined();
+    expect(partyTeamFor([5, 6], 0, 6, true)).toBeUndefined();
+  });
 });
 
 describe('chat limits', () => {

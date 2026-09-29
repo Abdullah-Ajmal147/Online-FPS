@@ -67,6 +67,11 @@ const RELOAD_REQUIRED_CODE = 426; // "Upgrade Required"
 const MAX_BAD_MESSAGES = 20;
 /** Close code for a connection whose player was taken over by a newer one (another tab). */
 export const REPLACED_CODE = 4410;
+/**
+ * Close codes the server itself chose (bad messages, banned, replaced by another tab): the
+ * player is out for good, no seat is held for a reconnection.
+ */
+const FINAL_CLOSE_CODES = new Set([4400, 4403, REPLACED_CODE]);
 /** Normal traffic is 60 inputs + 1 ping per second; a 15-input catch-up burst still fits. */
 const MAX_MESSAGES_PER_SECOND = 150;
 /** Pings closer together than this are ignored (the client pings once a second). */
@@ -124,6 +129,8 @@ const MAX_PRIVATE_ROOMS = Math.max(0, Number(process.env.SENTINEL_MAX_PRIVATE_RO
 let privateRooms = 0;
 /** Team switches (private matches) at most every 2 s per player. */
 const MIN_SWITCH_INTERVAL_MS = 2000;
+/** How long a dropped player's seat is held for them to reconnect. */
+const RECONNECT_SECONDS = 30;
 
 /**
  * Joins per IP (Phase 4 task 10): burst 20, then one per second. Stops join floods while
@@ -458,8 +465,10 @@ export class MatchRoom extends Room {
       secondary?: unknown;
       attachments?: unknown;
       perks?: unknown;
-      /** Party invite: the session id of the friend who shared the link (same team). */
+      /** Party invite: the invite token of the friend who shared the link (same team). */
       with?: unknown;
+      /** The link was "play against me": the other team from the friend (fairness permitting). */
+      against?: unknown;
       /** Friends may see and join this match (Settings). */
       allowJoin?: unknown;
     },
@@ -473,7 +482,8 @@ export class MatchRoom extends Room {
     // Keep teams even: pick the smaller team, and swap out a bot on it if the match is full.
     // Joining through a friend's invite puts you on their team if it has room for a human.
     const team =
-      this.partyTeam(options?.with) ?? (this.bots ? this.bots.teamForHuman() : undefined);
+      this.partyTeam(options?.with, options?.against === true) ??
+      (this.bots ? this.bots.teamForHuman() : undefined);
     if (this.bots && team !== undefined) this.bots.makeRoomFor(team);
     const guestId = auth?.guestId ?? null;
     const access = auth?.access ?? NEW_PLAYER;
@@ -562,13 +572,14 @@ export class MatchRoom extends Room {
    * room, and joining keeps teams fair: a party may put its team at most MAX_PARTY_LEAD
    * humans ahead of the other (so a leaked link can't stack one side).
    */
-  private partyTeam(token: unknown): number | undefined {
+  private partyTeam(token: unknown, against: boolean): number | undefined {
     const seat = this.seatByInvite(token);
     const host = seat && this.sim.players.get(seat.playerId);
     if (!host) return undefined;
     const humans: [number, number] = [0, 0];
     for (const p of this.sim.players.values()) if (!p.bot) humans[p.team as 0 | 1]++;
-    return partyTeamFor(humans, host.team, modes['team-deathmatch']!.playersPerTeam);
+    const perTeam = modes[this.modeId]?.playersPerTeam ?? 6;
+    return partyTeamFor(humans, host.team, perTeam, against);
   }
 
   private seatByInvite(token: unknown): Seat | undefined {
@@ -651,6 +662,39 @@ export class MatchRoom extends Room {
         inviteToken: this.seats.get(client.sessionId)?.inviteToken ?? '',
       }),
     );
+  }
+
+  /**
+   * A connection dropped without the player leaving (network blip, laptop lid, phone switching
+   * networks, a tab frozen for a few seconds): keep their seat, soldier and invite link for
+   * RECONNECT_SECONDS; the client reconnects on its own and carries on. Without this, a host
+   * whose connection hiccuped lost their friends' room: the empty room closed and the invite
+   * link led nowhere. Removals the server chose (bad messages, bans, another tab taking the
+   * seat) are final: no seat is held for them.
+   */
+  override onDrop(client: Client, code?: number): void {
+    const seat = this.seats.get(client.sessionId);
+    if (!seat || (code !== undefined && FINAL_CLOSE_CODES.has(code))) return;
+    log.info('player dropped, holding the seat', {
+      room: this.roomId,
+      player: seat.playerId,
+      code,
+      seconds: RECONNECT_SECONDS,
+    });
+    // Not coming back in time rejects this promise; Colyseus then calls onLeave (the seat is
+    // freed there). Handled here so the rejection is never an unhandled one.
+    void Promise.resolve(this.allowReconnection(client, RECONNECT_SECONDS)).catch(() => undefined);
+  }
+
+  override onReconnect(client: Client): void {
+    const seat = this.seats.get(client.sessionId);
+    if (!seat) return;
+    log.info('player reconnected', { room: this.roomId, player: seat.playerId });
+    // Everything they missed: who they are, the map, the match state (snapshots resume on
+    // their own). Their input seqs carry on from where the page left off.
+    const p = this.sim.players.get(seat.playerId);
+    if (p) this.sendHello(client, p.id, p.team);
+    this.sendMatchInfo();
   }
 
   override onLeave(client: Client): void {

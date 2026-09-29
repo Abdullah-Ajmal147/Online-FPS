@@ -89,15 +89,24 @@ export class Connection {
       let room: Room | undefined;
       if (invite) {
         try {
-          room = await client.joinById(invite.room, { ...options, with: invite.with });
+          room = await client.joinById(invite.room, {
+            ...options,
+            with: invite.with,
+            against: invite.against,
+          });
         } catch (err) {
           console.warn('[net] invite room unavailable, joining any match:', err);
+          setStatus({ inviteProblem: inviteProblemText(err) });
         }
       }
       if (!room && join.private)
         room = await joinWithPool(client, { ...options, private: true, ...join.private }, 'create');
       room ??= await joinWithPool(client, options);
       this.room = room;
+      // Reconnect even if the connection dropped again soon after a reconnect (a shaky
+      // network); the server holds the seat 30 s per drop. The SDK's default refuses within
+      // 5 s of (re)joining.
+      room.reconnection.minUptime = 1000;
 
       room.onMessage(MessageType.Hello, (payload: Uint8Array) => {
         const hello = decodeHello(payload);
@@ -110,6 +119,9 @@ export class Connection {
           net: { state: 'connected', text: `connected, protocol v${hello.protocolVersion}` },
           invite: hello.inviteToken
             ? inviteUrl(room.roomId, hello.inviteToken, server.region)
+            : null,
+          inviteVs: hello.inviteToken
+            ? inviteUrl(room.roomId, hello.inviteToken, server.region, true)
             : null,
           region: server.region,
         });
@@ -160,7 +172,19 @@ export class Connection {
         PING_INTERVAL_MS,
       );
 
+      // The connection dropped (network blip, frozen tab): the SDK reconnects by itself and the
+      // server holds our seat meanwhile (MatchRoom.onDrop). Say so instead of looking frozen.
+      room.onDrop((code: number) => {
+        console.warn('[net] connection dropped, reconnecting; close code', code);
+        setStatus({ net: { state: 'connecting', text: 'connection lost, reconnecting…' } });
+      });
+      room.onReconnect(() => {
+        console.info('[net] reconnected');
+        setStatus({ net: { state: 'connected', text: 'reconnected' } });
+      });
+
       room.onLeave((code: number) => {
+        console.warn('[net] left the match, close code', code);
         clearInterval(this.pingTimer);
         this.room = undefined;
         const text =
@@ -213,20 +237,42 @@ export class Connection {
   }
 }
 
+/** Why a friend's invite link didn't work, in words for the player. */
+export function inviteProblemText(err: unknown): string {
+  const msg = String((err as { message?: unknown })?.message ?? err);
+  if (/not found/i.test(msg))
+    return "Your friend's match has ended. You're in a new match instead.";
+  if (/PRIVATE/.test(msg))
+    return "That invite isn't valid any more. You're in a new match instead.";
+  if (/locked|full/i.test(msg))
+    return "Your friend's match is full. You're in a new match instead.";
+  return "Couldn't reach your friend's match. You're in a new match instead.";
+}
+
 /** Invite parameters from this page's URL, if it was opened from an invite link. */
-export function inviteFromUrl(): { room: string; with: string } | null {
+export function inviteFromUrl(): { room: string; with: string; against: boolean } | null {
   const q = new URLSearchParams(location.search);
   const room = q.get('room');
   const withId = q.get('with');
   const ok = (v: string | null): v is string => !!v && /^[A-Za-z0-9_-]{1,40}$/.test(v);
-  return ok(room) && ok(withId) ? { room, with: withId } : null;
+  return ok(room) && ok(withId) ? { room, with: withId, against: q.get('side') === 'vs' } : null;
 }
 
-/** A link that brings a friend into this match, on this player's team (server-issued token). */
-export function inviteUrl(roomId: string, token: string, region: string | null = null): string {
+/**
+ * A link that brings a friend into this match (server-issued token): on this player's team,
+ * or with `against`, on the other team ("play against me"; the server keeps it fair).
+ */
+export function inviteUrl(
+  roomId: string,
+  token: string,
+  region: string | null = null,
+  against = false,
+): string {
   const url = new URL(location.href);
   url.searchParams.set('room', roomId);
   url.searchParams.set('with', token);
+  if (against) url.searchParams.set('side', 'vs');
+  else url.searchParams.delete('side');
   // Rooms live on one server: the friend must join the same region.
   if (region) url.searchParams.set('region', region);
   else url.searchParams.delete('region');

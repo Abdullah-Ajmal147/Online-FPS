@@ -1042,6 +1042,11 @@ export async function startGame(
             loadMap(hello.mapId);
             prevState = predictor.state;
           }
+          const problem = getStatus().inviteProblem;
+          if (problem) {
+            announce('medal', 'INVITE DID NOT WORK', problem);
+            setTimeout(() => setStatus({ inviteProblem: null }), 8000);
+          }
           if (!joinedWorld || hello.mapId !== preparedMap) {
             joinedWorld = true;
             preparedMap = hello.mapId;

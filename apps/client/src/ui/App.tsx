@@ -63,6 +63,11 @@ function DeployScreen() {
           {team.name} · {team.motto}
         </div>
       )}
+      {status.inviteProblem && (
+        <div class="notice" data-testid="invite-problem">
+          {status.inviteProblem}
+        </div>
+      )}
       <div class="tip" data-testid="deploy-tip">
         <b>Tip</b> {tip}
       </div>

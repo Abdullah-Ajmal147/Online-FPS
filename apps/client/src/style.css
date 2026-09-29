@@ -2663,3 +2663,18 @@ body.headshot-flash::after {
     rgb(255 255 255 / 15%) 0
   );
 }
+
+/* In a match: the two invite links (Play screen of the pause menu). */
+.invite-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.invite-links .invite-manual {
+  flex: 1 1 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+}
