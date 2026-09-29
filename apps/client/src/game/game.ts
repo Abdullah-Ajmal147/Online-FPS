@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { SkyMesh } from 'three/addons/objects/SkyMesh.js';
-import { Post, type Grade } from './post.ts';
+import { Post, type Grade, type Haze } from './post.ts';
 import {
   MAP_ROTATION,
   modes,
@@ -59,6 +59,7 @@ import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { enterGameFullscreen, setLeaveGuard } from '../input/shortcutGuard.ts';
 import { Minimap } from './minimap.ts';
+import { Dust } from './dust.ts';
 import { viewerTeam } from './soldier/rim.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
@@ -274,6 +275,7 @@ export async function startGame(
   function draw(): void {
     sky.position.copy(camera.position);
     const preset = settings().graphics;
+    post?.updateSun();
     const q = GRAPHICS[preset];
     if (!q.post) {
       renderer.render(scene, camera);
@@ -284,7 +286,9 @@ export async function startGame(
       post = new Post(renderer, scene, camera, {
         ambientOcclusion: q.ambientOcclusion,
         bloom: q.bloom,
+        sunShafts: q.sunShafts,
       });
+      post.setHaze(HAZE[map?.lighting ?? 'day'], sun.position);
       postPreset = preset;
       post.setGrade(tuning.grade ?? LOOKS[map?.lighting ?? 'day']);
     }
@@ -317,6 +321,7 @@ export async function startGame(
   let predictor!: Predictor; // all assigned by loadMap() right below
   const effects = new Effects(scene, GRAPHICS[settings().graphics].post);
   const grenadeView = new GrenadeView(scene);
+  const dust = new Dust(scene);
   const pointMarkers = new PointMarkers(scene);
   const freshSim = (): SimState => {
     const spawn = map.spawns[0]!;
@@ -471,6 +476,7 @@ export async function startGame(
     sky.rayleigh.value = l.rayleigh;
     sky.cloudCoverage.value = l.clouds;
     tuning.mapGrade = LOOKS[preset];
+    post?.setHaze(HAZE[preset], sun.position);
     post?.setGrade(tuning.grade ?? LOOKS[preset]);
     bakeSkyLight();
   }
@@ -1539,6 +1545,7 @@ export async function startGame(
     if (!replaying) updateAimAndTags();
     feedback.update(camera, frame);
     effects.update(frame);
+    dust.update(frame, camera.position, GRAPHICS[settings().graphics].post);
     renderer.info.reset();
     if (worldReady) draw();
     devStats.push(frame * 1000);
@@ -1720,6 +1727,37 @@ const LIGHTING: Record<
   },
 };
 
+/**
+ * Ground haze per mood (Medium/High, see post.ts): colours in linear light at scene level
+ * (before exposure), so they sit with the lit map rather than on top of it.
+ */
+const HAZE: Record<GameMap['lighting'], Haze> = {
+  day: {
+    color: [0.95, 1.08, 1.25],
+    sunColor: [1.8, 1.6, 1.25],
+    density: 0.006,
+    falloff: 6,
+    max: 0.3,
+    shafts: 0.3,
+  },
+  golden: {
+    color: [1.2, 1.02, 0.88],
+    sunColor: [2.2, 1.45, 0.8],
+    density: 0.008,
+    falloff: 7,
+    max: 0.36,
+    shafts: 0.45,
+  },
+  dusk: {
+    color: [1.0, 0.8, 0.8],
+    sunColor: [2.0, 1.15, 0.7],
+    density: 0.009,
+    falloff: 8,
+    max: 0.38,
+    shafts: 0.4,
+  },
+};
+
 /** The graded look per mood (Medium/High, see post.ts). */
 const LOOKS: Record<GameMap['lighting'], Grade> = {
   day: {
@@ -1766,6 +1804,8 @@ const GRAPHICS: Record<
     post: boolean;
     /** Ambient occlusion: contact shadows in corners (half resolution). */
     ambientOcclusion: boolean;
+    /** Sun shafts between buildings (24 depth samples per pixel). */
+    sunShafts: boolean;
   }
 > = {
   low: {
@@ -1777,6 +1817,7 @@ const GRAPHICS: Record<
     skyLight: false,
     post: false,
     ambientOcclusion: false,
+    sunShafts: false,
   },
   medium: {
     shadowMapSize: 1024,
@@ -1787,6 +1828,7 @@ const GRAPHICS: Record<
     skyLight: true,
     post: true,
     ambientOcclusion: false,
+    sunShafts: false,
   },
   high: {
     shadowMapSize: 2048,
@@ -1797,5 +1839,6 @@ const GRAPHICS: Record<
     skyLight: true,
     post: true,
     ambientOcclusion: true,
+    sunShafts: true,
   },
 };

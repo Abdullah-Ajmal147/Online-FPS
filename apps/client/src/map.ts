@@ -3,6 +3,18 @@ import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Material } from '@sentinel/content';
 import type { Solid } from '@sentinel/shared';
+import {
+  abs,
+  attribute,
+  float,
+  materialColor,
+  mix,
+  mx_noise_float,
+  normalWorld,
+  positionWorld,
+  smoothstep,
+  vec3,
+} from 'three/tsl';
 
 /** Flat colours per material: used until the surface textures have loaded (and in tests). */
 const COLORS: Record<Material, number> = {
@@ -35,7 +47,22 @@ const THEME_METRES: Partial<Record<string, Partial<Record<Material, number>>>> =
 /** Shipping-container paint for props (the prop texture is bare grey corrugated steel). */
 const CONTAINER_PAINT = [0x8c3a2c, 0x2f5a86, 0x3d6a45, 0xa4652e, 0x7c7f84, 0x6e2f45];
 
-export type Surfaces = Record<Material, THREE.MeshStandardMaterial>;
+export type Surfaces = Record<Material, THREE.MeshStandardNodeMaterial>;
+
+/**
+ * Weathering on top of a surface texture: dirt splashed up the bottom metre of every wall
+ * and box side (the `lift` attribute: height above the solid's own base), and big soft stains
+ * from world-space noise so a texture repeated across a long wall or a yard never looks
+ * stamped. A colour multiplier (1 = unchanged).
+ */
+function weathering() {
+  const side = float(1).sub(abs(normalWorld.y));
+  const lift = attribute<'float'>('lift', 'float');
+  const dirt = side.mul(float(1).sub(smoothstep(0, 1.1, lift))).mul(0.5);
+  const grime = mix(vec3(1, 1, 1), vec3(0.52, 0.47, 0.41), dirt);
+  const stains = mx_noise_float(positionWorld.mul(vec3(0.22, 0.45, 0.22)));
+  return grime.mul(float(1).add(stains.mul(0.14)));
+}
 
 /** Surface themes (tools/assets/surfaces.json): a map's look, picked per map below. */
 export type Theme = 'yard' | 'depot' | 'town';
@@ -65,7 +92,7 @@ export function loadSurfaces(theme: Theme = 'yard'): Promise<Surfaces> {
           tex(m, 'normal', false),
           tex(m, 'rough', false),
         ]);
-        const mat = new THREE.MeshStandardMaterial({
+        const mat = new THREE.MeshStandardNodeMaterial({
           map,
           normalMap,
           roughnessMap,
@@ -73,6 +100,7 @@ export function loadSurfaces(theme: Theme = 'yard'): Promise<Surfaces> {
           metalness: SURFACE[m].metalness,
           vertexColors: true, // container paint on props; white elsewhere
         });
+        mat.colorNode = materialColor.mul(weathering());
         mat.name = `surface:${theme}:${m}`;
         return [m, mat] as const;
       }),
@@ -101,7 +129,18 @@ function solidGeometry(solid: Solid): THREE.BufferGeometry {
   }
   for (const name of Object.keys(geo.attributes))
     if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
+  addLift(geo);
   return geo;
+}
+
+/** Per vertex: height above the lowest point of this piece (dirt collects at the base). */
+function addLift(geo: THREE.BufferGeometry): void {
+  const p = geo.attributes.position!;
+  let base = Infinity;
+  for (let i = 0; i < p.count; i++) base = Math.min(base, p.getY(i));
+  const lift = new Float32Array(p.count);
+  for (let i = 0; i < p.count; i++) lift[i] = p.getY(i) - base;
+  geo.setAttribute('lift', new THREE.BufferAttribute(lift, 1));
 }
 
 /**
@@ -165,6 +204,7 @@ function containerTrim(solid: Extract<Solid, { shape: 'box' }>): THREE.BufferGeo
     g.applyMatrix4(m);
     for (const name of Object.keys(g.attributes))
       if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+    addLift(g);
   }
   return parts;
 }
