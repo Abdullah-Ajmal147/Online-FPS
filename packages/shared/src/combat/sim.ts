@@ -34,7 +34,7 @@ export function createSimContext(
 /** Where the eyes are (shots start here). */
 export function eyePosition(move: PlayerState, ctx: MovementContext): Vec3 {
   const t = ctx.tuning;
-  const y = move.position[1] + SKIN + capsuleHeight(t, move.crouching) - t.eyeOffset;
+  const y = move.position[1] + SKIN + capsuleHeight(t, move.crouching, move.prone) - t.eyeOffset;
   return [move.position[0], y, move.position[2]];
 }
 
@@ -76,6 +76,13 @@ export function stepSim(
       moving: speed > 1,
       airborne: !move.grounded,
       sprinting,
+      // Lying down steadies the weapon (movement.json).
+      steadyPct: move.prone
+        ? {
+            spread: Math.round(ctx.movement.tuning.proneSpread * 100),
+            recoil: Math.round(ctx.movement.tuning.proneRecoil * 100),
+          }
+        : undefined,
     },
   );
   return { state: { move, weapon }, shot };

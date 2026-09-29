@@ -169,6 +169,14 @@ export const MovementSchema = z
     capsuleRadius: z.number().positive(),
     standingHeight: z.number().positive(),
     crouchHeight: z.number().positive(),
+    /**
+     * Prone (lying down, Z): capsule height (at least its diameter), crawl speed, and how much
+     * steadier the weapon is (spread and recoil multipliers).
+     */
+    proneHeight: z.number().positive(),
+    proneSpeed: z.number().positive(),
+    proneSpread: z.number().min(0.1).max(1),
+    proneRecoil: z.number().min(0.1).max(1),
     /** Eye height below the top of the capsule. */
     eyeOffset: z.number().nonnegative(),
   })
@@ -181,6 +189,10 @@ export const MovementSchema = z
   .refine((m) => m.stepHeight < m.mantleMinHeight && m.mantleMinHeight < m.mantleMaxHeight, {
     message: 'mantle heights must satisfy step height < min < max',
   })
+  .refine((m) => m.proneHeight < m.crouchHeight && m.proneHeight >= 2 * m.capsuleRadius, {
+    message: 'prone height must be below crouch height and at least the capsule diameter',
+  })
+  .refine((m) => m.proneSpeed < m.crouchSpeed, { message: 'prone must be slower than crouch' })
   .refine((m) => m.crouchHeight < m.standingHeight && m.standingHeight > 2 * m.capsuleRadius, {
     message:
       'crouch height must be below standing height, and both taller than the capsule diameter',

@@ -562,3 +562,67 @@ describe('determinism', () => {
     for (const v of [...sim.state.position, ...sim.state.velocity]) expect(Math.fround(v)).toBe(v);
   });
 });
+
+describe('prone', () => {
+  const { Prone } = Button;
+  const press = (sim: Awaited<ReturnType<typeof createSim>>, buttons: number) => {
+    sim.run(1, { buttons });
+    sim.run(1, {});
+  };
+
+  it('Z lies down and crawls at prone speed; Z again stands up', async () => {
+    const sim = await createSim([0, 0, 15], { map: flatMap() });
+    press(sim, Prone);
+    expect(sim.state.prone).toBe(true);
+    expect(sim.state.crouching).toBe(false);
+    sim.run(TPS, { buttons: Forward });
+    expect(horizontalSpeed(sim.state)).toBeCloseTo(tuning.proneSpeed, 3);
+    press(sim, Prone);
+    expect(sim.state.prone).toBe(false);
+    sim.run(TPS / 2, { buttons: Forward });
+    expect(horizontalSpeed(sim.state)).toBeCloseTo(tuning.walkSpeed, 3);
+  });
+
+  it('a sprint press gets you up and running', async () => {
+    const sim = await createSim([0, 0, 15], { map: flatMap() });
+    press(sim, Prone);
+    sim.run(TPS, { buttons: Forward | Sprint });
+    expect(sim.state.prone).toBe(false);
+    expect(horizontalSpeed(sim.state)).toBeCloseTo(tuning.sprintSpeed, 3);
+  });
+
+  it('jump gets you up instead of jumping; crouch gets you to a crouch', async () => {
+    const sim = await createSim([0, 0, 0], { map: flatMap() });
+    press(sim, Prone);
+    sim.run(1, { buttons: Jump });
+    expect(sim.state.prone).toBe(false);
+    expect(sim.state.velocity[1]).toBe(0);
+    expect(sim.state.grounded).toBe(true);
+    press(sim, Prone);
+    sim.run(3, { buttons: Crouch });
+    expect(sim.state.prone).toBe(false);
+    expect(sim.state.crouching).toBe(true);
+  });
+
+  it('under a low bar you can crawl but not get up', async () => {
+    // A slab 0.9 m above the floor: room to lie down, not to crouch (1.2 m) or stand.
+    const low = flatMap([
+      { kind: 'box', center: [0, 1.4, 0], size: [6, 1, 6], yawDeg: 0, material: 'prop' },
+    ]);
+    const sim = await createSim([0, 0, 6], { map: low });
+    press(sim, Prone);
+    sim.run(TPS * 5, { buttons: Forward }); // crawl in under it
+    expect(Math.abs(sim.state.position[2])).toBeLessThan(2);
+    press(sim, Prone);
+    sim.run(1, { buttons: Jump });
+    expect(sim.state.prone).toBe(true);
+  });
+
+  it("can't slide, mantle or go prone in the air", async () => {
+    const sim = await createSim([0, 0, 0], { map: flatMap() });
+    sim.run(1, { buttons: Jump });
+    sim.run(2, { buttons: Prone });
+    expect(sim.state.grounded).toBe(false);
+    expect(sim.state.prone).toBe(false);
+  });
+});

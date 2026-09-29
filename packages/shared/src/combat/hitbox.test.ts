@@ -51,3 +51,24 @@ describe('damageAt', () => {
     expect(damageAt(22, 100, falloff)).toBe(18);
   });
 });
+
+describe('prone hitboxes', () => {
+  it('lie along the facing: head in front, legs behind, all low', () => {
+    // Facing -Z (yaw 0), shooting from the side (+X) at ground level.
+    const side = (z: number, y: number) =>
+      rayPlayer([5, y, z], [-1, 0, 0], [0, 0, 0], false, movement, 20, 0);
+    expect(side(-0.75, 0.3)?.zone).toBe('head');
+    expect(side(-0.2, 0.2)?.zone).toBe('torso');
+    expect(side(0.6, 0.12)?.zone).toBe('limbs');
+    // A standing chest-height shot passes over them.
+    expect(side(0, 1.1)).toBeNull();
+    // Standing, the same spot at chest height is a hit.
+    expect(rayPlayer([5, 1.1, 0], [-1, 0, 0], [0, 0, 0], false, movement, 20)?.zone).toBe('torso');
+  });
+
+  it('turn with the player: facing +X, the head is at +X', () => {
+    const quarterRight = 49152; // yaw 3/4 turn: faces +X
+    const down = rayPlayer([0.75, 2, 0], [0, -1, 0], [0, 0, 0], false, movement, 5, quarterRight);
+    expect(down?.zone).toBe('head');
+  });
+});

@@ -29,6 +29,8 @@ export interface MovementContext {
   /** Reused every tick to avoid garbage in the 60 Hz loop. */
   scratch: {
     standingCapsule: Capsule;
+    /** For getting up from prone into a crouch. */
+    crouchCapsule: Capsule;
     collision: CharacterCollision;
     desired: { x: number; y: number; z: number };
     /** Downward ray for ledge probes (origin moved per probe). */
@@ -71,6 +73,10 @@ export function createMovementContext(
         tuning.standingHeight / 2 - tuning.capsuleRadius,
         tuning.capsuleRadius,
       ),
+      crouchCapsule: new rapier.Capsule(
+        tuning.crouchHeight / 2 - tuning.capsuleRadius,
+        tuning.capsuleRadius,
+      ),
       collision: new rapier.CharacterCollision(),
       desired: { x: 0, y: 0, z: 0 },
       ray: new rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 }),
@@ -95,6 +101,6 @@ export function removePlayerBody(ctx: MovementContext, body: PlayerBody): void {
   ctx.world.removeCollider(body.collider, false);
 }
 
-export function capsuleHeight(tuning: Movement, crouching: boolean): number {
-  return crouching ? tuning.crouchHeight : tuning.standingHeight;
+export function capsuleHeight(tuning: Movement, crouching: boolean, prone = false): number {
+  return prone ? tuning.proneHeight : crouching ? tuning.crouchHeight : tuning.standingHeight;
 }

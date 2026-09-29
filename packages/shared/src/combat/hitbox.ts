@@ -6,7 +6,7 @@ import { SKIN } from '../movement/context.ts';
 export type HitZone = 'head' | 'torso' | 'limbs';
 export const HIT_ZONES: readonly HitZone[] = ['head', 'torso', 'limbs'];
 
-/** A vertical capsule (segment a→b with radius). A sphere is a capsule with a = b. */
+/** A capsule (segment a→b with radius). A sphere is a capsule with a = b. */
 interface Capsule {
   zone: HitZone;
   a: Vec3;
@@ -19,10 +19,17 @@ interface Capsule {
  * capsule height so crouching shrinks them. Head is a sphere, torso and legs are capsules.
  * Arms are not modelled separately: shots at the sides of the torso capsule count as torso.
  */
-export function hitboxes(feet: Vec3, crouching: boolean, tuning: Movement): Capsule[] {
-  const h = crouching ? tuning.crouchHeight : tuning.standingHeight;
+export function hitboxes(
+  feet: Vec3,
+  crouching: boolean,
+  tuning: Movement,
+  /** Lying down: the 16-bit yaw they face (the body lies along it, head in front). */
+  proneYaw?: number,
+): Capsule[] {
   const [x, y0, z] = feet;
   const y = y0 + SKIN;
+  if (proneYaw !== undefined) return proneHitboxes(x, y, z, proneYaw);
+  const h = crouching ? tuning.crouchHeight : tuning.standingHeight;
   const at = (frac: number): Vec3 => [x, y + h * frac, z];
   const head = at(0.9);
   return [
@@ -31,6 +38,22 @@ export function hitboxes(feet: Vec3, crouching: boolean, tuning: Movement): Caps
     // are never stolen by the torso capsule's rounded top.
     { zone: 'torso', a: at(0.52), b: at(0.7), r: 0.24 },
     { zone: 'limbs', a: at(0.1), b: at(0.47), r: 0.19 },
+  ];
+}
+
+/**
+ * Prone: head, torso and legs lie flat along the facing, centred on the feet position (the
+ * collision capsule stays upright and short; these are what shots hit). Numbers match the
+ * drawn prone soldier.
+ */
+function proneHitboxes(x: number, y: number, z: number, yaw: number): Capsule[] {
+  const [s, c] = detSinCos(yaw);
+  const at = (along: number, up: number): Vec3 => [x - s * along, y + up, z - c * along];
+  const head = at(0.75, 0.28);
+  return [
+    { zone: 'head', a: head, b: head, r: 0.14 },
+    { zone: 'torso', a: at(0.42, 0.22), b: at(-0.05, 0.2), r: 0.2 },
+    { zone: 'limbs', a: at(-0.22, 0.13), b: at(-0.9, 0.11), r: 0.14 },
   ];
 }
 
@@ -92,9 +115,11 @@ export function rayPlayer(
   crouching: boolean,
   tuning: Movement,
   maxDist: number,
+  /** Lying down: the 16-bit yaw they face (see hitboxes). */
+  proneYaw?: number,
 ): { zone: HitZone; distance: number } | null {
   let best: { zone: HitZone; distance: number } | null = null;
-  for (const box of hitboxes(feet, crouching, tuning)) {
+  for (const box of hitboxes(feet, crouching, tuning, proneYaw)) {
     const t = rayCapsule(origin, dir, box, maxDist);
     if (t !== null && (best === null || t < best.distance)) best = { zone: box.zone, distance: t };
   }

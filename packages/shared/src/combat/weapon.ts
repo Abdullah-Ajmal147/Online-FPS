@@ -153,6 +153,8 @@ export interface MoveInfo {
   moving: boolean;
   airborne: boolean;
   sprinting: boolean;
+  /** Steadier stance (prone): spread and recoil in percent of normal. */
+  steadyPct?: { spread: number; recoil: number } | undefined;
 }
 
 /** A shot the weapon fired this tick. The server resolves it into hits; the client only shows it. */
@@ -177,7 +179,8 @@ export function currentSpread(state: WeaponState, spec: WeaponSpec, move: MoveIn
   // the player can pull against, is what makes sustained ADS fire hard, not random spread).
   const bloom =
     state.bloom - Math.round((state.bloom * 85 * state.adsTicks) / (100 * spec.adsTicks));
-  return base + (move.moving ? s.moving : 0) + (move.airborne ? s.airborne : 0) + bloom;
+  const total = base + (move.moving ? s.moving : 0) + (move.airborne ? s.airborne : 0) + bloom;
+  return move.steadyPct ? Math.round((total * move.steadyPct.spread) / 100) : total;
 }
 
 /** Movement speed multiplier for the held weapon (slower while aiming). */
@@ -293,7 +296,9 @@ export function stepWeapon(
     cooldownTicks = spec.fireIntervalTicks;
     const [up, right] = spec.recoil[Math.min(shotIndex, spec.recoil.length - 1)]!;
     // Aiming reduces kick: blend between 100% and the ADS multiplier by how far in we are.
-    const pct = 100 + Math.round(((spec.recoilAdsMultiplierPct - 100) * adsTicks) / spec.adsTicks);
+    const adsPct =
+      100 + Math.round(((spec.recoilAdsMultiplierPct - 100) * adsTicks) / spec.adsTicks);
+    const pct = move.steadyPct ? Math.round((adsPct * move.steadyPct.recoil) / 100) : adsPct;
     recoilPitch += Math.round((up * pct) / 100);
     recoilYaw -= Math.round((right * pct) / 100); // right = negative yaw
     shotIndex++;

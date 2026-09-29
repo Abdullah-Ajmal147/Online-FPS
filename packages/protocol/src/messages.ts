@@ -191,10 +191,12 @@ export interface Snapshot {
 
 const OWN_GROUNDED = 1;
 const OWN_CROUCHING = 2;
+const OWN_PRONE = 4;
 const ENT_GROUNDED = 1;
 const ENT_CROUCHING = 2;
 const ENT_ALIVE = 4;
 const ENT_SCOPED = 8;
+const ENT_PRONE = 16;
 const PROJ_CLOUD = 0x80;
 
 function writeWeapon(w: BinaryWriter, s: WeaponState): void {
@@ -234,7 +236,9 @@ function writeOwn(w: BinaryWriter, own: OwnSnapshot): void {
   w.u8(m.slideTicks).u8(m.slideCooldownTicks);
   w.u8(m.mantleTicks).u16(m.mantleYaw);
   w.u8(m.tacSprintTicks).u8(m.tacCooldownTicks).u8(m.sprintTapTicks);
-  w.u8((m.grounded ? OWN_GROUNDED : 0) | (m.crouching ? OWN_CROUCHING : 0));
+  w.u8(
+    (m.grounded ? OWN_GROUNDED : 0) | (m.crouching ? OWN_CROUCHING : 0) | (m.prone ? OWN_PRONE : 0),
+  );
   w.u16(m.prevButtons);
   writeWeapon(w, own.sim.weapon);
   writeLoadout(w, own.loadout);
@@ -274,6 +278,7 @@ function readOwn(r: BinaryReader): OwnSnapshot {
         sprintTapTicks,
         grounded: (flags & OWN_GROUNDED) !== 0,
         crouching: (flags & OWN_CROUCHING) !== 0,
+        prone: (flags & OWN_PRONE) !== 0,
         prevButtons,
       },
       weapon,
@@ -308,7 +313,8 @@ export function encodeSnapshot(msg: Snapshot): Uint8Array {
       (e.grounded ? ENT_GROUNDED : 0) |
         (e.crouching ? ENT_CROUCHING : 0) |
         (e.alive ? ENT_ALIVE : 0) |
-        (e.scoped ? ENT_SCOPED : 0),
+        (e.scoped ? ENT_SCOPED : 0) |
+        (e.prone ? ENT_PRONE : 0),
     );
     for (const v of e.position) w.i16(clampI16(quantizePosition(v)));
     w.u16(e.yaw)
@@ -349,6 +355,7 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
       crouching: (flags & ENT_CROUCHING) !== 0,
       alive: (flags & ENT_ALIVE) !== 0,
       scoped: (flags & ENT_SCOPED) !== 0,
+      prone: (flags & ENT_PRONE) !== 0,
       position,
       yaw: r.u16(),
       pitch: r.i16(),

@@ -147,6 +147,14 @@ export class AimBrain implements Brain {
 }
 
 function torsoCenter(pose: RemotePose): Vec3 {
+  if (pose.prone) {
+    // Lying down: low, a little ahead of the feet point (see prone hitboxes).
+    return [
+      pose.position[0] - Math.sin(pose.yaw) * 0.2,
+      pose.position[1] + SKIN + 0.22,
+      pose.position[2] - Math.cos(pose.yaw) * 0.2,
+    ];
+  }
   const h = capsuleHeight(movement, pose.crouching);
   return [pose.position[0], pose.position[1] + SKIN + h * 0.61, pose.position[2]];
 }

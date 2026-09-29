@@ -171,9 +171,15 @@ export class RemotePlayers {
       r.body.rotation.x = -fall * (Math.PI / 2) * 0.95;
       r.body.position.y = -Math.max(0, r.deadFor - 1.8) * 0.8;
       r.root.visible = r.deadFor < 3;
+    } else if (pose.prone) {
+      // Lying down: tipped forward flat, centred on the feet point (like the prone hitboxes).
+      r.body.rotation.x = -Math.PI / 2;
+      r.body.position.set(0, 0.15, 0.9);
+      r.body.scale.y = 1;
+      r.root.visible = true;
     } else {
       r.body.rotation.x = 0;
-      r.body.position.y = 0;
+      r.body.position.set(0, 0, 0);
       r.root.visible = true;
       // Crouch: squash the body (the model is built at standing height).
       r.body.scale.y = pose.crouching ? movement.crouchHeight / movement.standingHeight : 1;

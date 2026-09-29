@@ -23,5 +23,9 @@
   "capsuleRadius": 0.35,
   "standingHeight": 1.8,
   "crouchHeight": 1.2,
+  "proneHeight": 0.72,
+  "proneSpeed": 1.1,
+  "proneSpread": 0.5,
+  "proneRecoil": 0.6,
   "eyeOffset": 0.15
 }

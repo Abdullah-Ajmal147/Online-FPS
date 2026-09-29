@@ -102,6 +102,8 @@ const vA = new THREE.Vector3();
 const vB = new THREE.Vector3();
 const vC = new THREE.Vector3();
 const vD = new THREE.Vector3();
+const vE = new THREE.Vector3();
+const vF = new THREE.Vector3();
 const vS = new THREE.Vector3();
 const mA = new THREE.Matrix4();
 const eA = new THREE.Euler();
@@ -252,6 +254,8 @@ export class SoldierRig {
   private vel = new THREE.Vector3();
   private vy = 0;
   private crouch = 0;
+  /** 0 standing/crouched → 1 lying down (eased: going prone takes ~0.4 s). */
+  private prone = 0;
   private legYaw = 0;
   private phase = 0;
   private dead = false;
@@ -425,9 +429,20 @@ export class SoldierRig {
 
   update(pose: RemotePose, dt: number): void {
     const [x, y, z] = pose.position;
-    this.root.position.set(x, y, z);
+    this.prone += ((pose.prone && pose.alive ? 1 : 0) - this.prone) * (1 - Math.exp(-dt * 7));
+    // Prone: the body tips forward flat along the facing (the model faces +Z, so a quarter turn
+    // about X lays the head forward), centred on the feet point like the prone hitboxes: moved
+    // back by most of its height and up by the chest's depth.
+    const lie = this.prone;
+    this.root.position.set(
+      x + Math.sin(pose.yaw) * 0.92 * lie,
+      y + 0.12 * lie,
+      z + Math.cos(pose.yaw) * 0.92 * lie,
+    );
     // The model faces +Z; yaw 0 faces -Z.
+    this.root.rotation.order = 'YXZ';
     this.root.rotation.y = pose.yaw + Math.PI;
+    this.root.rotation.x = lie * (Math.PI / 2);
 
     // Velocity from where we are drawn (smoothed; a jump in position is a respawn).
     if (this.last && dt > 0) {
@@ -440,6 +455,10 @@ export class SoldierRig {
     }
     (this.last ??= new THREE.Vector3()).set(x, y, z);
     this.crouch += ((pose.crouching ? 1 : 0) - this.crouch) * (1 - Math.exp(-dt * 12));
+    if (!pose.alive && this.prone > 0) {
+      // Killed lying down: stay flat (the death clip plays on the tilted body).
+      this.root.rotation.x = Math.PI / 2;
+    }
 
     if (!pose.alive) {
       if (!this.dead) this.die();
@@ -466,9 +485,11 @@ export class SoldierRig {
     hips = speed > 0.4 ? Math.max(-1.3, Math.min(1.3, hips)) : 0;
     this.legYaw += (hips - this.legYaw) * (1 - Math.exp(-dt * 8));
 
-    // Blend weights along the speed axis, standing and crouched.
+    // Blend weights along the speed axis, standing and crouched. Lying down, the legs hold the
+    // idle pose (straight out behind).
     const w = new Map<string, number>(LOCO.map((n) => [n, 0]));
-    const stand = 1 - this.crouch;
+    const upright = 1 - this.prone;
+    const stand = (1 - this.crouch) * upright;
     const pts: [string, number][] = [
       ['Idle_Loop', 0],
       ['Walk_Loop', 1.6],
@@ -487,8 +508,9 @@ export class SoldierRig {
       }
     }
     const c = Math.min(1, speed / 1.6);
-    w.set('Crouch_Idle_Loop', (1 - c) * this.crouch);
-    w.set('Crouch_Fwd_Loop', c * this.crouch);
+    w.set('Crouch_Idle_Loop', (1 - c) * this.crouch * upright);
+    w.set('Crouch_Fwd_Loop', c * this.crouch * upright);
+    w.set('Idle_Loop', (w.get('Idle_Loop') ?? 0) + this.prone);
     const airborne = Math.abs(this.vy) > 1.2 ? 1 : 0;
     this.fall.setEffectiveWeight(airborne);
 
@@ -563,13 +585,19 @@ export class SoldierRig {
     );
     const headBone = this.spine.hand;
     const centre = this.t1.copy(this.headCentre).applyMatrix4(headBone.matrixWorld);
-    const boneTarget = this.t2
-      .copy(this.root.position)
-      .setY(this.root.position.y + height * 0.9)
-      .sub(centre.sub(worldPos(headBone, vD)));
+    // Where the head hitbox is: over the feet (standing, crouched), or lying down in front of
+    // the feet point, low (prone hitboxes: 0.75 m ahead, 0.28 m up).
+    const [px, py, pz] = pose.position;
+    const headAt = vE.set(px, py + height * 0.9, pz);
+    if (this.prone > 0) {
+      headAt.lerp(vF.set(px, py + 0.3, pz).addScaledVector(flat, 0.75), this.prone);
+    }
+    const boneTarget = this.t2.copy(headAt).sub(centre.sub(worldPos(headBone, vD)));
+    // The back bends toward the pole: forward when upright, up (the chest raised off the
+    // ground, looking ahead) when lying down.
     const pole = worldPos(this.spine.upper, this.t3)
-      .addScaledVector(flat, 1)
-      .addScaledVector(UP, 0.3);
+      .addScaledVector(flat, 1 - this.prone)
+      .addScaledVector(UP, 0.3 + this.prone);
     solveArm(this.spine, boneTarget, pole);
     // The head looks along the aim.
     setWorldQuaternion(headBone, qA.copy(aim).multiply(this.headOffset));

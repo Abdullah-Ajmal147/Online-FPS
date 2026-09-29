@@ -4,6 +4,7 @@ import {
   SKIN,
   TICK_RATE,
   capsuleHeight,
+  detSinCos,
   createRng,
   pitchFromRadians,
   yawFromRadians,
@@ -368,6 +369,11 @@ const HUNT_REPLAN_TICKS = 4 * TICK_RATE;
 /** Where bots aim: upper torso. */
 function aimPoint(p: SimPlayer): Vec3 {
   const m = p.sim.move;
+  if (m.prone) {
+    // Lying down: the torso is low and a little ahead of the feet point (see prone hitboxes).
+    const [sy, cy] = detSinCos(m.yaw);
+    return [m.position[0] - sy * 0.2, m.position[1] + SKIN + 0.22, m.position[2] - cy * 0.2];
+  }
   const h = capsuleHeight(movement, m.crouching);
   return [m.position[0], m.position[1] + SKIN + h * 0.65, m.position[2]];
 }

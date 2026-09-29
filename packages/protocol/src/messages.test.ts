@@ -38,6 +38,7 @@ const own: OwnSnapshot = {
       velocity: [Math.fround(7.5), Math.fround(-3.3333), 0],
       grounded: false,
       crouching: true,
+      prone: false,
       slideTicks: 17,
       slideCooldownTicks: 36,
       mantleTicks: 21,
@@ -89,8 +90,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 19 (scope sway and breath in own weapon state; scoped entity flag)', () => {
-    expect(PROTOCOL_VERSION).toBe(19);
+  it('is 20 (prone: Button.Prone, own and entity prone flags)', () => {
+    expect(PROTOCOL_VERSION).toBe(20);
   });
 });
 

@@ -18,6 +18,8 @@ export const Button = {
   Tactical: 1 << 11,
   /** Melee strike on press (server-decided; the weapon is not locked). */
   Melee: 1 << 12,
+  /** Go prone / get up, on press. */
+  Prone: 1 << 13,
 } as const;
 
 /** Every defined button bit; anything else a client sends is ignored. */

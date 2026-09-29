@@ -6,6 +6,7 @@ export interface MeleeTarget {
   /** Feet, as the attacker saw them (lag-compensated like a shot). */
   position: Vec3;
   crouching: boolean;
+  prone: boolean;
   /** Where the target faces (16-bit yaw): a strike from behind does more. */
   yaw: number;
 }
@@ -30,7 +31,7 @@ export function meleeHit(
   for (const t of targets) {
     const chest: Vec3 = [
       t.position[0],
-      t.position[1] + SKIN + capsuleHeight(tuning, t.crouching) * 0.6,
+      t.position[1] + SKIN + capsuleHeight(tuning, t.crouching, t.prone) * 0.6,
       t.position[2],
     ];
     const d: Vec3 = [chest[0] - eye[0], chest[1] - eye[1], chest[2] - eye[2]];

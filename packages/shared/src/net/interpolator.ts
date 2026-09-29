@@ -16,6 +16,8 @@ export interface EntityState {
   shotCount: number;
   /** Fully aimed through a scope (a glint shows on them). */
   scoped?: boolean;
+  /** Lying down. */
+  prone?: boolean;
 }
 
 /** Remote players are drawn this far in the past: 2 snapshots (~66 ms), adaptive up to 100 ms. */
@@ -41,6 +43,8 @@ export interface RemotePose {
   team: number;
   /** Fully aimed through a scope (a glint shows on them). */
   scoped?: boolean;
+  /** Lying down (hitboxes lie along the yaw). */
+  prone?: boolean;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -116,6 +120,7 @@ function pose(a: EntityState, b: EntityState, t: number): RemotePose {
     alive: b.alive,
     team: b.team,
     scoped: b.scoped === true,
+    prone: (t < 0.5 ? a.prone : b.prone) === true,
   };
 }
 

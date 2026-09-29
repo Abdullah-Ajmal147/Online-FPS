@@ -118,6 +118,9 @@ interface HistoryEntry {
   tick: number;
   position: Vec3;
   crouching: boolean;
+  /** Lying down: hitboxes lie along `yaw` (16-bit). */
+  prone: boolean;
+  yaw: number;
   alive: boolean;
 }
 
@@ -475,6 +478,7 @@ export class MatchSim {
         alive: p.alive,
         grounded: m.grounded,
         crouching: m.crouching,
+        prone: m.prone,
         position: m.position,
         yaw: m.yaw,
         pitch: m.pitch,
@@ -497,6 +501,7 @@ export class MatchSim {
                 velocity: me.sim.move.velocity,
                 grounded: me.sim.move.grounded,
                 crouching: me.sim.move.crouching,
+                prone: me.sim.move.prone,
                 slideTicks: me.sim.move.slideTicks,
                 slideCooldownTicks: me.sim.move.slideCooldownTicks,
                 mantleTicks: me.sim.move.mantleTicks,
@@ -545,7 +550,13 @@ export class MatchSim {
       Math.min(this.tick, viewTick),
     );
     // Rewound poses are computed once per shot, not once per pellet.
-    const targets: { victim: SimPlayer; position: Vec3; crouching: boolean }[] = [];
+    const targets: {
+      victim: SimPlayer;
+      position: Vec3;
+      crouching: boolean;
+      prone: boolean;
+      yaw: number;
+    }[] = [];
     for (const target of this.players.values()) {
       if (target === shooter || target.team === shooter.team || !target.alive) continue;
       const pose = this.poseAt(target, rewindTick);
@@ -580,7 +591,15 @@ export class MatchSim {
 
       let best: { victim: SimPlayer; zone: HitZone; distance: number } | null = null;
       for (const t of targets) {
-        const hit = rayPlayer(origin, dir, t.position, t.crouching, this.tuning, maxDist);
+        const hit = rayPlayer(
+          origin,
+          dir,
+          t.position,
+          t.crouching,
+          this.tuning,
+          maxDist,
+          t.prone ? t.yaw : undefined,
+        );
         if (hit && (!best || hit.distance < best.distance)) best = { victim: t.victim, ...hit };
       }
 
@@ -897,7 +916,8 @@ export class MatchSim {
           id: t.id,
           position: pose.position,
           crouching: pose.crouching,
-          yaw: t.sim.move.yaw,
+          prone: pose.prone,
+          yaw: pose.yaw,
         });
     }
     const eye = eyePosition(p.sim.move, this.ctx.movement);
@@ -946,7 +966,7 @@ export class MatchSim {
       const m = p.sim.move;
       const chest: Vec3 = [
         m.position[0],
-        m.position[1] + capsuleHeight(this.tuning, m.crouching) * 0.6,
+        m.position[1] + capsuleHeight(this.tuning, m.crouching, m.prone) * 0.6,
         m.position[2],
       ];
       const dist = Math.hypot(chest[0] - at[0], chest[1] - at[1], chest[2] - at[2]);
@@ -982,7 +1002,7 @@ export class MatchSim {
       (this.tick - p.lastShotTick < PVS_SHOT_HEARD_TICKS && dist < PVS_SHOT_HEARD_METRES);
     let visible = heard;
     if (!visible) {
-      const h = capsuleHeight(this.tuning, m.crouching);
+      const h = capsuleHeight(this.tuning, m.crouching, m.prone);
       const v = m.velocity;
       const vv = viewer.sim.move.velocity;
       const head: Vec3 = [m.position[0], m.position[1] + h * 0.9, m.position[2]];
@@ -1015,7 +1035,7 @@ export class MatchSim {
   private hiddenBySmoke(eye: Vec3, p: SimPlayer): boolean {
     if (!this.grenades.hasClouds) return false;
     const m = p.sim.move;
-    const h = capsuleHeight(this.tuning, m.crouching);
+    const h = capsuleHeight(this.tuning, m.crouching, m.prone);
     const head: Vec3 = [m.position[0], m.position[1] + h * 0.9, m.position[2]];
     const chest: Vec3 = [m.position[0], m.position[1] + h * 0.6, m.position[2]];
     return this.grenades.smokeBlocks(eye, head) && this.grenades.smokeBlocks(eye, chest);
@@ -1055,6 +1075,8 @@ export class MatchSim {
         tick: this.tick,
         position: p.sim.move.position,
         crouching: p.sim.move.crouching,
+        prone: p.sim.move.prone,
+        yaw: p.sim.move.yaw,
         alive: p.alive,
       });
       if (p.history.length > HISTORY_TICKS) p.history.shift();
@@ -1081,6 +1103,8 @@ export class MatchSim {
         a.position[2] + (b.position[2] - a.position[2]) * t,
       ],
       crouching: t < 0.5 ? a.crouching : b.crouching,
+      prone: t < 0.5 ? a.prone : b.prone,
+      yaw: t < 0.5 ? a.yaw : b.yaw,
       alive: a.alive && b.alive,
     };
   }

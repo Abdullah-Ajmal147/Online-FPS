@@ -5,6 +5,7 @@ export interface PlayerDebug {
   speed: number;
   grounded: boolean;
   crouching: boolean;
+  prone: boolean;
   sliding: boolean;
 }
 

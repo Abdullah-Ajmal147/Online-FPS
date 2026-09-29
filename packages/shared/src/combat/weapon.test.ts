@@ -215,3 +215,13 @@ describe('scope sway and holding the breath', () => {
     expect(after.state.swayPct).toBe(100);
   });
 });
+
+describe('prone steadiness', () => {
+  it('scales spread and recoil by the stance', () => {
+    const prone: MoveInfo = { ...still, steadyPct: { spread: 50, recoil: 60 } };
+    const s = createWeaponState(loadout);
+    expect(currentSpread(s, rifle, prone)).toBe(Math.round(currentSpread(s, rifle, still) / 2));
+    const kick = (move: MoveInfo) => run(1, Button.Fire, undefined, move).state.recoilPitch;
+    expect(kick(prone)).toBe(Math.round((kick(still) * 60) / 100));
+  });
+});

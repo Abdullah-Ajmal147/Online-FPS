@@ -9,6 +9,7 @@ const ACTION_BUTTON: Partial<Record<Action, number>> = {
   right: Button.Right,
   jump: Button.Jump,
   crouch: Button.Crouch,
+  prone: Button.Prone,
   sprint: Button.Sprint,
   reload: Button.Reload,
   lethal: Button.Lethal,

@@ -52,6 +52,7 @@ export function step(
 
   let [vx, vy, vz] = prev.velocity;
   let crouching = prev.crouching;
+  let prone = prev.prone;
   let slideTicks = prev.slideTicks;
   let slideCooldownTicks = Math.max(0, prev.slideCooldownTicks - 1);
   const hSpeed = Math.sqrt(vx * vx + vz * vz);
@@ -62,8 +63,37 @@ export function step(
   let tacCooldownTicks = Math.max(0, prev.tacCooldownTicks - 1);
   let sprintTapTicks = Math.max(0, prev.sprintTapTicks - 1);
 
+  // --- Prone (Z): lie down on the ground, or get up. Jump, sprint (forward) or crouch also get
+  // you up: standing if there is room, else crouched (crouch goes to a crouch), else you stay
+  // down (under a low bar there is no getting up).
+  const getUp =
+    prone &&
+    ((pressed & Button.Prone) !== 0 ||
+      (pressed & Button.Jump) !== 0 ||
+      (pressed & Button.Crouch) !== 0 ||
+      ((pressed & Button.Sprint) !== 0 && fwd > 0));
+  if (getUp) {
+    const toCrouch = (held & Button.Crouch) !== 0;
+    if (
+      !toCrouch &&
+      hasRoom(prev.position, ctx, body, ctx.scratch.standingCapsule, t.standingHeight)
+    ) {
+      prone = false;
+      crouching = false;
+    } else if (hasRoom(prev.position, ctx, body, ctx.scratch.crouchCapsule, t.crouchHeight)) {
+      prone = false;
+      crouching = true;
+    }
+  } else if (!prone && pressed & Button.Prone && prev.grounded && prev.mantleTicks === 0) {
+    prone = true;
+    crouching = false;
+    slideTicks = 0;
+  }
+
   // --- Crouch / stand. Standing up needs head room. Releasing crouch ends a slide. ---
-  if (held & Button.Crouch) {
+  if (prone) {
+    // Lying down: crouch and slide don't apply.
+  } else if (held & Button.Crouch) {
     crouching = true;
   } else {
     slideTicks = 0;
@@ -81,12 +111,14 @@ export function step(
       sprintTapTicks = ctx.doubleTapTicks;
     }
   }
-  if (tacSprintTicks > 0 && (!sprintHeld || crouching)) tacSprintTicks = 0;
+  if (tacSprintTicks > 0 && (!sprintHeld || crouching || prone)) tacSprintTicks = 0;
 
   // --- Slide: press crouch while grounded and sprinting forward at sprint pace. ---
   // Needs Sprint + Forward held and no cooldown, so tapping crouch cannot chain slides.
   if (
     prev.grounded &&
+    !prone &&
+    !prev.prone &&
     pressed & Button.Crouch &&
     sprintHeld &&
     slideTicks === 0 &&
@@ -105,7 +137,7 @@ export function step(
   // just clear the ledge plus a forward push each tick, so the controller carries us up the
   // wall and over the top. Same ray/shape queries on client and server (deterministic).
   let jumped = false;
-  if (prev.grounded && pressed & Button.Jump) {
+  if (prev.grounded && pressed & Button.Jump && !prone && !prev.prone) {
     const ledge = fwd > 0 && !crouching ? findLedge(prev.position, sinY, cosY, ctx) : null;
     if (ledge !== null) {
       vy = Math.sqrt(2 * t.gravity * (ledge + MANTLE_CLEARANCE));
@@ -142,9 +174,11 @@ export function step(
     if (newSpeed < t.crouchSpeed) slideTicks = 0;
   } else {
     if (!prev.grounded) slideTicks = 0;
-    const sprinting = sprintHeld && !crouching;
+    const sprinting = sprintHeld && !crouching && !prone;
     const sprintSpeed = tacSprintTicks > 0 ? t.tacSprintSpeed : t.sprintSpeed;
-    let target = (crouching ? t.crouchSpeed : sprinting ? sprintSpeed : t.walkSpeed) * speedScale;
+    let target =
+      (prone ? t.proneSpeed : crouching ? t.crouchSpeed : sprinting ? sprintSpeed : t.walkSpeed) *
+      speedScale;
     if (groundRules) {
       // Accelerate towards the wish velocity; with no input, friction brings us to a stop.
       [vx, vz] = approach(
@@ -183,7 +217,7 @@ export function step(
   const dy = prev.grounded && !jumped ? 0 : ((vyStart + vy) / 2) * dt;
 
   // --- Move the capsule with Rapier's character controller. ---
-  const height = capsuleHeight(t, crouching);
+  const height = capsuleHeight(t, crouching, prone);
   placeCollider(prev.position, height, ctx, body);
   // No autostep while mantling: the hop alone decides how high we get (ledge + clearance), so
   // the push can't step us up onto something taller behind the ledge. The controller is
@@ -220,6 +254,7 @@ export function step(
     pitch: input.pitch,
     grounded,
     crouching,
+    prone,
     slideTicks,
     slideCooldownTicks,
     mantleTicks,
@@ -284,11 +319,22 @@ function placeCollider(feet: Vec3, height: number, ctx: MovementContext, body: P
 }
 
 function hasHeadroom(feet: Vec3, ctx: MovementContext, body: PlayerBody): boolean {
-  const center = { x: feet[0], y: feet[1] + SKIN + ctx.tuning.standingHeight / 2, z: feet[2] };
+  return hasRoom(feet, ctx, body, ctx.scratch.standingCapsule, ctx.tuning.standingHeight);
+}
+
+/** Whether a capsule of `height` fits with its feet at `feet` (ignoring our own body). */
+function hasRoom(
+  feet: Vec3,
+  ctx: MovementContext,
+  body: PlayerBody,
+  capsule: MovementContext['scratch']['standingCapsule'],
+  height: number,
+): boolean {
+  const center = { x: feet[0], y: feet[1] + SKIN + height / 2, z: feet[2] };
   const hit = ctx.world.intersectionWithShape(
     center,
     IDENTITY,
-    ctx.scratch.standingCapsule,
+    capsule,
     ctx.rapier.QueryFilterFlags.EXCLUDE_SENSORS,
     undefined,
     body.collider,

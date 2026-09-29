@@ -58,6 +58,9 @@ These numbers are the contract between client and server. Change them only with 
   client plays the swing at once and learns of a hit from the normal hit event.
 - Snapshots flag a remote player who is fully aimed through a scope (`scoped`), for the glint.
   Only players already sent (ADR 0009) carry it.
+- Prone (`Button.Prone`, a press) is movement like crouch: in `PlayerState.prone`, predicted
+  and reconciled. Prone hitboxes lie along the facing (head in front); the lag-compensation
+  history keeps `prone` and `yaw` per tick so a rewound shot tests the pose the shooter saw.
 
 ## Quantization
 

@@ -45,6 +45,7 @@ const toOwn = (s: SimState): OwnState => ({
     velocity: s.move.velocity,
     grounded: s.move.grounded,
     crouching: s.move.crouching,
+    prone: s.move.prone,
     slideTicks: s.move.slideTicks,
     slideCooldownTicks: s.move.slideCooldownTicks,
     mantleTicks: s.move.mantleTicks,

@@ -51,6 +51,7 @@ import {
   initPhysics,
   rayPlayer,
   yawFromDegrees,
+  yawFromRadians,
   yawToRadians,
   type MovementContext,
   type ShotRequest,
@@ -868,6 +869,7 @@ export async function startGame(
           team: myTeam(),
           alive: own.respawnTicks === 0,
           crouching: m.crouching,
+          prone: m.prone,
           grounded: m.grounded,
           position: m.position,
           yaw: predictor.state.move.yaw, // own look is not in the snapshot: ours
@@ -1124,7 +1126,9 @@ export async function startGame(
       let pelletHit = false;
       for (const pose of remotePoses.values()) {
         if (!pose.alive || pose.team === myTeam()) continue;
-        if (rayPlayer(eye, d, pose.position, pose.crouching, movement, wallDist)) pelletHit = true;
+        const proneYaw = pose.prone ? yawFromRadians(pose.yaw) : undefined;
+        if (rayPlayer(eye, d, pose.position, pose.crouching, movement, wallDist, proneYaw))
+          pelletHit = true;
       }
       playerHit ||= pelletHit;
       if (wall && !pelletHit) {
@@ -1145,7 +1149,7 @@ export async function startGame(
     const pose = remotePoses.get(id);
     if (!pose) return;
     const def = weaponCatalog[weapon];
-    const h = capsuleHeight(movement, pose.crouching);
+    const h = capsuleHeight(movement, pose.crouching, pose.prone);
     tmpA.set(
       pose.position[0],
       pose.position[1] + SKIN + h - movement.eyeOffset - 0.15,
@@ -1224,7 +1228,7 @@ export async function startGame(
         if (k) {
           camera.position.set(
             k.position[0],
-            k.position[1] + eyeHeightFor(k.crouching),
+            k.position[1] + eyeHeightFor(k.crouching, k.prone),
             k.position[2],
           );
           camera.rotation.set(k.pitch, k.yaw, 0);
@@ -1274,7 +1278,15 @@ export async function startGame(
         tags.set(id, { name: nameOf(id), head: remotePlayers.headOf(id, new THREE.Vector3()) });
       } else if (
         !onEnemy &&
-        rayPlayer(eye, dir, pose.position, pose.crouching, movement, wall) &&
+        rayPlayer(
+          eye,
+          dir,
+          pose.position,
+          pose.crouching,
+          movement,
+          wall,
+          pose.prone ? yawFromRadians(pose.yaw) : undefined,
+        ) &&
         !grenadeView.smokeBlocks(eye, pose.position)
       ) {
         onEnemy = true; // (never through smoke: the red crosshair must not reveal hidden enemies)
@@ -1287,7 +1299,7 @@ export async function startGame(
   // --- Frame loop ---
   const timer = new THREE.Timer();
   let accumulator = 0;
-  let eyeHeight = eyeHeightFor(predictor.state.move.crouching);
+  let eyeHeight = eyeHeightFor(predictor.state.move.crouching, predictor.state.move.prone);
   let bobPhase = 0;
   let lastHud = 0;
   let frames = 0;
@@ -1379,8 +1391,11 @@ export async function startGame(
     const py = lerp(prevState.move.position[1], m.position[1], a) + off[1];
     const pz = lerp(prevState.move.position[2], m.position[2], a) + off[2];
 
-    // Ease the eye between standing and crouching height (~0.1 s) instead of popping.
-    eyeHeight += (eyeHeightFor(m.crouching) - eyeHeight) * Math.min(1, frame * 15);
+    // Ease the eye between stances instead of popping: ~0.1 s for a crouch, slower (~0.4 s)
+    // going down to or up from prone.
+    const eyeTarget = eyeHeightFor(m.crouching, m.prone);
+    const eyeRate = m.prone || eyeHeight < eyeHeightFor(true) - 0.05 ? 6 : 15;
+    eyeHeight += (eyeTarget - eyeHeight) * Math.min(1, frame * eyeRate);
     const speed = Math.hypot(m.velocity[0], m.velocity[2]);
     let bob = 0;
     if (settings().headBob && m.grounded && speed > 0.5) {
@@ -1645,6 +1660,7 @@ export async function startGame(
           speed,
           grounded: m.grounded,
           crouching: m.crouching,
+          prone: m.prone,
           sliding: m.slideTicks > 0,
         },
         netStats: spawnedFromServer
@@ -1687,8 +1703,8 @@ export async function startGame(
   };
 }
 
-function eyeHeightFor(crouching: boolean): number {
-  return SKIN + capsuleHeight(movement, crouching) - movement.eyeOffset;
+function eyeHeightFor(crouching: boolean, prone = false): number {
+  return SKIN + capsuleHeight(movement, crouching, prone) - movement.eyeOffset;
 }
 
 function lerp(a: number, b: number, t: number): number {

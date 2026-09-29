@@ -13,6 +13,8 @@ export interface PlayerState {
   pitch: number;
   grounded: boolean;
   crouching: boolean;
+  /** Lying down (prone). Never together with crouching. */
+  prone: boolean;
   /** Ticks left in the current slide; 0 = not sliding. */
   slideTicks: number;
   /** Ticks until another slide may start; 0 = allowed. */
@@ -39,6 +41,7 @@ export function createPlayerState(position: Vec3, yaw: number): PlayerState {
     pitch: 0,
     grounded: false,
     crouching: false,
+    prone: false,
     slideTicks: 0,
     slideCooldownTicks: 0,
     mantleTicks: 0,
