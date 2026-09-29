@@ -44,8 +44,20 @@ const THEME_METRES: Partial<Record<string, Partial<Record<Material, number>>>> =
   town: { floor: 2.6, wall: 2.4 },
 };
 
+/**
+ * Colour per theme and surface, multiplied into the (mostly grey) texture: sun-bleached sand
+ * concrete and blue-painted steel in the yard, rust-red and teal sheds in the depot, warm stone
+ * in the town. A grey world reads as dull and makes soldiers hard to pick out; tinted
+ * surfaces give each area its own colour at no cost.
+ */
+const THEME_TINT: Partial<Record<string, Partial<Record<Material, number>>>> = {
+  yard: { wall: 0xfff1de, floor: 0xe8ddcc, platform: 0x9fc0dc, ramp: 0xe8c86a, stairs: 0xe8c86a },
+  depot: { wall: 0x7fb3b8, floor: 0xf2eee8, platform: 0xe9d9bd, ramp: 0xe8c86a, stairs: 0xe8c86a },
+  town: { wall: 0xffd9c2, floor: 0xf0dcc0, ramp: 0xd98a6a },
+};
+
 /** Shipping-container paint for props (the prop texture is bare grey corrugated steel). */
-const CONTAINER_PAINT = [0x8c3a2c, 0x2f5a86, 0x3d6a45, 0xa4652e, 0x7c7f84, 0x6e2f45];
+const CONTAINER_PAINT = [0xa8382a, 0x2c66a6, 0x2f7c48, 0xc4782c, 0xb89a2a, 0x8a3050];
 
 export type Surfaces = Record<Material, THREE.MeshStandardNodeMaterial>;
 
@@ -61,7 +73,7 @@ function weathering() {
   const dirt = side.mul(float(1).sub(smoothstep(0, 1.1, lift))).mul(0.5);
   const grime = mix(vec3(1, 1, 1), vec3(0.52, 0.47, 0.41), dirt);
   const stains = mx_noise_float(positionWorld.mul(vec3(0.22, 0.45, 0.22)));
-  return grime.mul(float(1).add(stains.mul(0.14)));
+  return grime.mul(float(1).add(stains.mul(0.08)));
 }
 
 /** Surface themes (tools/assets/surfaces.json): a map's look, picked per map below. */
@@ -112,6 +124,7 @@ export function loadSurfaces(theme: Theme = 'yard'): Promise<Surfaces> {
         });
         if (weatheringOn) mat.colorNode = materialColor.mul(weathering());
         mat.name = `surface:${theme}:${m}`;
+        mat.color.setHex(THEME_TINT[theme]?.[m] ?? 0xffffff);
         return [m, mat] as const;
       }),
     );

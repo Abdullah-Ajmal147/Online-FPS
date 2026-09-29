@@ -1086,6 +1086,19 @@ function SettingsScreen({
               <option value="high">High</option>
             </select>
           </label>
+          <label class="row">
+            <span>Look</span>
+            <select
+              value={settings.look}
+              data-testid="look"
+              onChange={(e) =>
+                set('look', (e.target as HTMLSelectElement).value as Settings['look'])
+              }
+            >
+              <option value="vivid">Vivid (bright, clear colours)</option>
+              <option value="realistic">Realistic (muted, hazy)</option>
+            </select>
+          </label>
           <p class="hint">
             Shadows and anti-aliasing change after a reload; resolution right away.
           </p>

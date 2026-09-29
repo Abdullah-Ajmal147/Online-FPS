@@ -15,6 +15,17 @@
   ],
   "patches": [
     {
+      "version": "0.9.9",
+      "date": "2026-09-29",
+      "title": "Friends first, and more colour",
+      "notes": [
+        "Invite links are sturdier: if your connection drops for a moment, your seat is kept for 30 seconds and you rejoin by yourself. Your friends' links keep working.",
+        "New: 'Invite to play against me'. Send it and your friend joins the other team, so you can face each other. 'Invite to my team' still puts them beside you.",
+        "If a link can't be used (the match ended, is full, or the invite is no longer valid), the game now tells you instead of quietly putting you in another match.",
+        "A brighter, more colourful look (Settings → Graphics → Look: Vivid). Sun-warm concrete, painted steel, colourful containers, a bluer sky and clear air at fighting range. Prefer the old style? Choose Realistic."
+      ]
+    },
+    {
       "version": "0.9.8",
       "date": "2026-09-29",
       "title": "Melee, prone and a sharper look",

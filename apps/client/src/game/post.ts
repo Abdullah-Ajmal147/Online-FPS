@@ -59,6 +59,8 @@ export interface Haze {
   falloff: number;
   /** Most it can cover (0–1): distant buildings stay readable. */
   max: number;
+  /** No haze nearer than this (metres): the fighting range stays clear. */
+  start?: number;
   /** Strength of the sun shafts (High). */
   shafts: number;
 }
@@ -85,6 +87,7 @@ export class Post {
     hazeDensity: uniform(0),
     hazeFalloff: uniform(6),
     hazeMax: uniform(0.5),
+    hazeStart: uniform(0),
     shafts: uniform(0),
     /** Direction to the sun (world), and where it is on screen (uv) and how much it faces us. */
     sunDir: uniform(new THREE.Vector3(0, 1, 0)),
@@ -133,7 +136,7 @@ export class Post {
     const rayDir = ray.div(max(dist, 0.001));
     const low = exp(max(worldPos.y, 0).negate().div(u.hazeFalloff));
     const amount = float(1)
-      .sub(exp(dist.mul(u.hazeDensity).negate()))
+      .sub(exp(max(dist.sub(u.hazeStart), 0).mul(u.hazeDensity).negate()))
       .mul(low)
       .min(u.hazeMax)
       .mul(depth.lessThan(0.99999).select(float(1), float(0)));
@@ -203,6 +206,7 @@ export class Post {
     u.hazeDensity.value = h.density;
     u.hazeFalloff.value = h.falloff;
     u.hazeMax.value = h.max;
+    u.hazeStart.value = h.start ?? 0;
     u.shafts.value = h.shafts;
     u.sunDir.value.copy(sunDirection).normalize();
   }

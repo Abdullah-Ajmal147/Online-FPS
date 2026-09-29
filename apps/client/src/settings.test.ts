@@ -44,3 +44,11 @@ describe('settings', () => {
     expect(keyLabel('Space')).toBe('Space');
   });
 });
+
+describe('look', () => {
+  it('defaults to vivid; keeps realistic; anything else is vivid', () => {
+    expect(normalizeSettings(null).look).toBe('vivid');
+    expect(normalizeSettings({ look: 'realistic' }).look).toBe('realistic');
+    expect(normalizeSettings({ look: 'neon' }).look).toBe('vivid');
+  });
+});

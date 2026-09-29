@@ -649,6 +649,28 @@ Learned: two headless pages in one browser throttle each other (a scoped player 
 aiming"); use a browser per player in multi-client scratch tests. After editing files, a
 running Vite can serve two copies of a module to `import()` probes: restart it.
 
+## v2 work, 2026-09-29: friends' matches and colour
+
+Owner: friends playing together by link is the top priority; also "graphics not colourful".
+
+- Found (server log, CPU-starved test run): a host whose connection dropped lost the room at
+  once (seat freed, empty room closed), so every friend's link led to "room not found" and
+  friends silently landed in stranger matches. Now `MatchRoom.onDrop` holds the seat 30 s
+  (`allowReconnection`) and the SDK reconnects on its own (min uptime lowered to 1 s so a
+  second drop soon after still reconnects); server-chosen closes (4400/4403/4410) stay final.
+- A failed invite link says why (ended / full / invalid) on the deploy card and in the match.
+- "Invite to play against me" (`side=vs` → join option `against`): the other team, under the
+  same party fairness rule. Both links are one-click copy buttons in the match menu.
+- Test browsers render at half resolution, and the effect pools share materials (310 → 9):
+  test pages had starved each other of CPU until pages froze. New e2e `friends-vs` (own
+  humans-only arena server :2575).
+- Look setting: Vivid (default) or Realistic. Vivid: brighter exposure, more saturation, warm
+  light and cooler shade, haze only beyond ~40 m, and per-theme surface tints (sand concrete,
+  painted steel, yellow ramps, warm stone), stronger container paint, bluer day sky.
+
+Learned: pinning the whole suite to 2 cores is harsher than CI (4-core runners) and failed on
+the old code too; 4 cores matches CI. Colyseus close 4003 = the client's reconnect failed.
+
 ## Outstanding (2026-09-26)
 
 Needs the owner:

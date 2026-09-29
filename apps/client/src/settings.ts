@@ -59,6 +59,11 @@ export interface Settings {
   bindings: Record<Action, string>;
   /** Graphics preset: low = no shadows, 1× pixels (integrated GPUs); high = sharp shadows. */
   graphics: GraphicsPreset;
+  /**
+   * Colour look (Medium/High grade, exposure, haze): vivid = bright, saturated, clear at a
+   * distance (default); realistic = muted, hazy, filmic.
+   */
+  look: 'vivid' | 'realistic';
   /** Fraction of the screen resolution rendered (0.5–1): lower is faster, blurrier. */
   renderScale: number;
   /** Lower the resolution automatically when frames run slow. */
@@ -101,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   volumeMusic: 0.6,
   volumeEffects: 0.9,
   graphics: 'medium',
+  look: 'vivid',
   renderScale: 1,
   autoResolution: true,
   primary: 'kestrel-ar',
@@ -165,6 +171,7 @@ export function normalizeSettings(raw: unknown): Settings {
     graphics: GRAPHICS_PRESETS.includes(r.graphics as GraphicsPreset)
       ? (r.graphics as GraphicsPreset)
       : defaultGraphics(),
+    look: r.look === 'realistic' ? 'realistic' : 'vivid',
     renderScale: clamp(
       r.renderScale,
       LIMITS.renderScale.min,

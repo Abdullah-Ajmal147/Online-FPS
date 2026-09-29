@@ -142,7 +142,8 @@ export async function startGame(
   renderer.shadowMap.enabled = true;
   // Filmic tone mapping: bright sun and sky roll off like a real camera instead of clipping.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = EXPOSURE;
+  const lookSet = () => LOOK_SETS[settings().look];
+  renderer.toneMappingExposure = lookSet().exposure;
   await renderer.init();
   // Draw calls and triangles are counted over a whole frame (the post pass renders several
   // times per frame), reset by the frame loop; the F1 panel shows them.
@@ -299,9 +300,9 @@ export async function startGame(
         bloom: q.bloom,
         sunShafts: q.sunShafts,
       });
-      post.setHaze(HAZE[map?.lighting ?? 'day'], sun.position);
+      post.setHaze(lookSet().haze[map?.lighting ?? 'day'], sun.position);
       postPreset = preset;
-      post.setGrade(tuning.grade ?? LOOKS[map?.lighting ?? 'day']);
+      post.setGrade(tuning.grade ?? lookSet().grade[map?.lighting ?? 'day']);
     }
     post.render();
   }
@@ -488,9 +489,9 @@ export async function startGame(
     sky.turbidity.value = l.turbidity;
     sky.rayleigh.value = l.rayleigh;
     sky.cloudCoverage.value = l.clouds;
-    tuning.mapGrade = LOOKS[preset];
-    post?.setHaze(HAZE[preset], sun.position);
-    post?.setGrade(tuning.grade ?? LOOKS[preset]);
+    tuning.mapGrade = lookSet().grade[preset];
+    post?.setHaze(lookSet().haze[preset], sun.position);
+    post?.setGrade(tuning.grade ?? lookSet().grade[preset]);
     bakeSkyLight();
   }
 
@@ -1324,6 +1325,7 @@ export async function startGame(
   let tilt = 0;
   let sprintFov = 0;
   let tuningVersion = -1;
+  let appliedLook = '';
   renderer.setAnimationLoop((time) => {
     timer.update(time);
     const frame = timer.getDelta();
@@ -1564,11 +1566,16 @@ export async function startGame(
     tuning.weapon = spec.def;
     effects.tracerSpeed = f.tracerSpeed;
     effects.tracerLength = f.tracerLength;
-    if (tuning.version !== tuningVersion) {
-      // The F1 panel changed the look: apply its override (or go back to the map's own).
+    if (tuning.version !== tuningVersion || settings().look !== appliedLook) {
+      // The F1 panel or the Look setting changed: apply (panel overrides win).
       tuningVersion = tuning.version;
-      post?.setGrade(tuning.grade ?? LOOKS[map.lighting]);
-      renderer.toneMappingExposure = tuning.exposure ?? EXPOSURE;
+      appliedLook = settings().look;
+      const set = lookSet();
+      tuning.mapGrade = set.grade[map.lighting];
+      tuning.mapExposure = set.exposure;
+      post?.setGrade(tuning.grade ?? set.grade[map.lighting]);
+      post?.setHaze(set.haze[map.lighting], sun.position);
+      renderer.toneMappingExposure = tuning.exposure ?? set.exposure;
     }
     audio.setListener(camera.position.x, camera.position.y, camera.position.z, input.look.yaw);
     if (w.slot !== lastSlot) audio.click();
@@ -1740,9 +1747,6 @@ async function webgpuAvailable(timeoutMs = 2000): Promise<boolean> {
   }
 }
 
-/** Tone-mapping exposure (the physical sky is scaled for ~0.5; lights doubled). */
-const EXPOSURE = 0.58;
-
 /** How strong the sky's own light is, and how much of the flat fill light remains with it. */
 const SKY_LIGHT = 0.12;
 const HEMI_UNDER_SKY_LIGHT = 0.6;
@@ -1779,7 +1783,7 @@ const LIGHTING: Record<
     sunIntensity: 6.2,
     sunPosition: [26, 30, 18],
     turbidity: 3,
-    rayleigh: 1.4,
+    rayleigh: 2,
     clouds: 0.4,
   },
   // Late afternoon: warm low sun, long shadows, blue shade.
@@ -1817,7 +1821,7 @@ const LIGHTING: Record<
  * Ground haze per mood (Medium/High, see post.ts): colours in linear light at scene level
  * (before exposure), so they sit with the lit map rather than on top of it.
  */
-const HAZE: Record<GameMap['lighting'], Haze> = {
+const HAZE_REALISTIC: Record<GameMap['lighting'], Haze> = {
   day: {
     color: [0.95, 1.08, 1.25],
     sunColor: [1.8, 1.6, 1.25],
@@ -1845,7 +1849,7 @@ const HAZE: Record<GameMap['lighting'], Haze> = {
 };
 
 /** The graded look per mood (Medium/High, see post.ts). */
-const LOOKS: Record<GameMap['lighting'], Grade> = {
+const LOOKS_REALISTIC: Record<GameMap['lighting'], Grade> = {
   day: {
     contrast: 1.07,
     saturation: 1.07,
@@ -1871,6 +1875,48 @@ const LOOKS: Record<GameMap['lighting'], Grade> = {
     grain: 0.028,
   },
 };
+
+/**
+ * Vivid (the default look): brighter and more saturated, warm light against cool shade so
+ * sunlit and shaded surfaces separate, a light vignette, little grain, and haze only far
+ * past fighting range. Easier on the eye and makes soldiers stand out.
+ */
+const LOOKS_VIVID: Record<GameMap['lighting'], Grade> = {
+  day: {
+    contrast: 1.12,
+    saturation: 1.22,
+    shadowTint: [-0.006, 0, 0.012],
+    highlightTint: [0.032, 0.016, -0.016],
+    vignette: 0.2,
+    grain: 0.01,
+  },
+  golden: {
+    contrast: 1.12,
+    saturation: 1.24,
+    shadowTint: [-0.006, 0, 0.014],
+    highlightTint: [0.048, 0.022, -0.026],
+    vignette: 0.22,
+    grain: 0.012,
+  },
+  dusk: {
+    contrast: 1.12,
+    saturation: 1.2,
+    shadowTint: [-0.006, -0.002, 0.016],
+    highlightTint: [0.052, 0.014, -0.012],
+    vignette: 0.24,
+    grain: 0.012,
+  },
+};
+const HAZE_VIVID: Record<GameMap['lighting'], Haze> = {
+  day: { ...HAZE_REALISTIC.day, density: 0.004, max: 0.16, start: 40 },
+  golden: { ...HAZE_REALISTIC.golden, density: 0.005, max: 0.2, start: 40 },
+  dusk: { ...HAZE_REALISTIC.dusk, density: 0.006, max: 0.22, start: 35 },
+};
+/** Look → grade, haze and exposure. */
+const LOOK_SETS = {
+  vivid: { grade: LOOKS_VIVID, haze: HAZE_VIVID, exposure: 0.72 },
+  realistic: { grade: LOOKS_REALISTIC, haze: HAZE_REALISTIC, exposure: 0.58 },
+} as const;
 
 /**
  * Per preset: shadow map size (0 = no shadows), whether shadows are redrawn every frame (with
