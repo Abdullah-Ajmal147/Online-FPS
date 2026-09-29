@@ -5,7 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { hitboxes } from '@sentinel/shared';
-import { movement } from '@sentinel/content';
+import { feel, kickFor, movement } from '@sentinel/content';
 
 // The lab always draws the models (automated tests otherwise get simple soldiers).
 (window as { __sentinelSoldierModels?: boolean }).__sentinelSoldierModels = true;
@@ -342,6 +342,9 @@ if (view === 'fp') {
       switching: 0,
       speed: 0,
       grounded: true,
+      kick: kickFor(feel, w),
+      sway: 1,
+      gunBob: 1,
       turnYaw: 0,
       turnPitch: 0,
     });

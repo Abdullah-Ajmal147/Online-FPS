@@ -161,6 +161,10 @@ export function HelpGuide({
                 <td>Network and FPS stats</td>
                 <td>{k('F3')}</td>
               </tr>
+              <tr>
+                <td>Tuning panel (frame graph, weapon feel, time to kill)</td>
+                <td>{k('F1')}</td>
+              </tr>
             </tbody>
           </table>
           <p class="muted">

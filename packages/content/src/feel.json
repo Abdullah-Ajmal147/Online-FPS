@@ -1,0 +1,75 @@
+{
+  "tracerEvery": 3,
+  "tracerSpeed": 420,
+  "tracerLength": 3.5,
+  "sprintFovBoost": 4,
+  "tacSprintFovBoost": 7,
+  "strafeTilt": 1.4,
+  "shotShake": 0.12,
+  "sway": 1,
+  "gunBob": 1,
+  "kick": {
+    "rifle": {
+      "back": 0.032,
+      "up": 0.008,
+      "pitch": 2.4,
+      "yaw": 0.7,
+      "roll": 1.4,
+      "frequency": 26,
+      "dampingRatio": 0.75,
+      "adsScale": 0.4
+    },
+    "smg": {
+      "back": 0.022,
+      "up": 0.005,
+      "pitch": 1.6,
+      "yaw": 0.9,
+      "roll": 1.8,
+      "frequency": 32,
+      "dampingRatio": 0.7,
+      "adsScale": 0.45
+    },
+    "shotgun": {
+      "back": 0.075,
+      "up": 0.02,
+      "pitch": 8,
+      "yaw": 1.2,
+      "roll": 3,
+      "frequency": 16,
+      "dampingRatio": 0.85,
+      "adsScale": 0.6
+    },
+    "marksman": {
+      "back": 0.06,
+      "up": 0.016,
+      "pitch": 5.5,
+      "yaw": 0.8,
+      "roll": 1.5,
+      "frequency": 18,
+      "dampingRatio": 0.8,
+      "adsScale": 0.5
+    },
+    "sidearm": {
+      "back": 0.03,
+      "up": 0.018,
+      "pitch": 6,
+      "yaw": 1,
+      "roll": 2,
+      "frequency": 24,
+      "dampingRatio": 0.7,
+      "adsScale": 0.55
+    }
+  },
+  "weaponKick": {
+    "varga-47": {
+      "back": 0.04,
+      "up": 0.011,
+      "pitch": 3.2,
+      "yaw": 1,
+      "roll": 1.8,
+      "frequency": 22,
+      "dampingRatio": 0.7,
+      "adsScale": 0.45
+    }
+  }
+}

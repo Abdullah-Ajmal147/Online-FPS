@@ -9,6 +9,7 @@ import { MatchUi } from './MatchUi.tsx';
 import { primerDone } from '../primer.ts';
 import { Primer } from './Primer.tsx';
 import { Menu } from './Menu.tsx';
+import { TuningPanel } from './TuningPanel.tsx';
 
 interface Props {
   settings: Settings;
@@ -39,6 +40,7 @@ export function App(props: Props) {
       <DebugOverlay />
       {deploying && status.playing && <DeployScreen />}
       {!status.playing && <Menu {...props} />}
+      <TuningPanel />
     </>
   );
 }

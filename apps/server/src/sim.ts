@@ -50,12 +50,13 @@ import {
   type WeaponSpec,
   type SimState,
   type Vec3,
+  MAX_HEALTH,
 } from '@sentinel/shared';
 import { SNAP_DEGREES, newAimStats, type AimStats } from './anticheat.ts';
 import { Grenades, type Detonation } from './grenades.ts';
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
-export const MAX_HEALTH = 100;
+export { MAX_HEALTH } from '@sentinel/shared';
 /** Damage multiplier while the armor streak reward lasts (content streaks.json). */
 const ARMOR_TAKEN = streakRewards.find((s) => s.reward === 'armor')?.damageTaken ?? 1;
 /** Respawn 3 s after death (Phase 2 task 6). */

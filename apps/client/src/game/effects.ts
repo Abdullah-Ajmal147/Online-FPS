@@ -63,6 +63,8 @@ class Pool<T extends THREE.Object3D> {
 
 type Faded = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
 
+const FORWARD = new THREE.Vector3(0, 0, 1);
+
 /** A ray's hit on the map: distance along the ray, the point and the surface normal. */
 export interface MapHit {
   distance: number;
@@ -74,7 +76,7 @@ export type MapRaycast = (origin: THREE.Vector3, dir: THREE.Vector3, max: number
 /** Short-lived shot effects in the world: tracers, remote muzzle flashes, impact marks. */
 export class Effects {
   private raycast: MapRaycast | null = null;
-  private readonly tracers: Pool<THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>;
+  private readonly tracers: Pool<Faded>;
   private readonly flashes: Pool<Faded>;
   private readonly impacts: Pool<Faded>;
   private readonly blasts: Pool<Faded>;
@@ -108,13 +110,23 @@ export class Effects {
         geo,
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite }),
       ) as Faded;
+    // A tracer: a thin glowing rod, 1 m long along +Z (scaled to the streak's length), bright
+    // enough to catch the bloom on High.
+    const rodGeo = new THREE.CylinderGeometry(0.009, 0.009, 1, 5, 1, true);
+    rodGeo.rotateX(Math.PI / 2);
     this.tracers = new Pool(scene, 48, () => {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-      return new THREE.Line(
-        geo,
-        new THREE.LineBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.8 }),
-      );
+      const m = new THREE.Mesh(
+        rodGeo,
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xffd08a).multiplyScalar(3),
+          transparent: true,
+          opacity: 0.9,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      ) as Faded;
+      m.userData = { from: new THREE.Vector3(), dir: new THREE.Vector3(), dist: 0, life: 0 };
+      return m;
     });
     this.flashes = new Pool(scene, 24, () => mesh(flashGeo, 0xffd27a, 1));
     this.impacts = new Pool(scene, 96, () => mesh(markGeo, 0x15171a, 0.85, false));
@@ -193,14 +205,24 @@ export class Effects {
     return this.raycast?.(origin, dir, max) ?? null;
   }
 
+  /** Tracer speed (m/s) and streak length (m): feel.json, live from the tuning panel. */
+  tracerSpeed = 420;
+  tracerLength = 3.5;
+
+  /** A tracer round: a short bright streak that flies from the muzzle to where it hit. */
   tracer(from: THREE.Vector3, to: THREE.Vector3): void {
-    const line = this.tracers.take(0.06);
-    line.position.set(0, 0, 0);
-    const pos = line.geometry.getAttribute('position') as THREE.BufferAttribute;
-    pos.setXYZ(0, from.x, from.y, from.z);
-    pos.setXYZ(1, to.x, to.y, to.z);
-    pos.needsUpdate = true;
-    line.geometry.computeBoundingSphere();
+    const dist = from.distanceTo(to);
+    if (dist < 0.3) return;
+    const life = dist / this.tracerSpeed + this.tracerLength / this.tracerSpeed;
+    const m = this.tracers.take(life);
+    const u = m.userData as { from: THREE.Vector3; dir: THREE.Vector3; dist: number; life: number };
+    u.from.copy(from);
+    u.dir.subVectors(to, from).divideScalar(dist);
+    u.dist = dist;
+    u.life = life;
+    m.quaternion.setFromUnitVectors(FORWARD, u.dir);
+    m.scale.set(1, 1, 0.001);
+    m.position.copy(from);
   }
 
   muzzleFlash(at: THREE.Vector3): void {
@@ -294,7 +316,18 @@ export class Effects {
       for (const p of this.pools()) p.warm(show);
     }
     const fade = (base: number) => (o: Faded, k: number) => (o.material.opacity = base * (1 - k));
-    this.tracers.update(frame, (o, k) => (o.material.opacity = 0.8 * (1 - k)));
+    this.tracers.update(frame, (o, k) => {
+      const u = o.userData as {
+        from: THREE.Vector3;
+        dir: THREE.Vector3;
+        dist: number;
+        life: number;
+      };
+      const head = Math.min(u.dist, k * u.life * this.tracerSpeed);
+      const tail = Math.max(0, head - this.tracerLength);
+      o.position.copy(u.from).addScaledVector(u.dir, (head + tail) / 2);
+      o.scale.set(1, 1, Math.max(0.001, head - tail));
+    });
     this.flashes.update(frame, fade(1));
     this.impacts.update(frame, fade(0.85));
     this.puffs.update(frame, (o, k) => {

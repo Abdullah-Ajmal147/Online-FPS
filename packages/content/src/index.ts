@@ -3,6 +3,8 @@ import {
   LoreSchema,
   NewsSchema,
   EquipmentSchema,
+  FeelSchema,
+  type Feel,
   PerkSchema,
   StreakRewardSchema,
   type StreakReward,
@@ -34,6 +36,7 @@ import newsJson from './news.json' with { type: 'json' };
 import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
 import streaksJson from './streaks.json' with { type: 'json' };
+import feelJson from './feel.json' with { type: 'json' };
 import { challengeData } from './challenges.ts';
 import { hasAttachment, hasPerk, hasWeapon, progression, type Access } from './progression.ts';
 import { weaponFiles } from './weapons/catalog.gen.ts';
@@ -145,6 +148,20 @@ export const streakRewards: readonly StreakReward[] = (() => {
     throw new Error('streaks.json: a reward kind appears twice');
   return list;
 })();
+
+/**
+ * Feel on your own screen: gun kick per class, tracers, camera (client only, not hashed:
+ * the server never uses it).
+ */
+export const feel: Feel = FeelSchema.parse(feelJson);
+
+/** The kick of a weapon: its own if feel.json has one, else its class's. */
+export function kickFor(
+  f: Feel,
+  weapon: Pick<Weapon, 'id' | 'class'>,
+): Feel['kick'][Weapon['class']] {
+  return f.weaponKick[weapon.id] ?? f.kick[weapon.class];
+}
 
 export const MAX_ATTACHMENTS = 3;
 const SLOT_ORDER: readonly Attachment['slot'][] = ['optic', 'barrel', 'magazine', 'grip', 'stock'];

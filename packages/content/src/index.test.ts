@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  feel,
+  kickFor,
   news,
   NewsSchema,
   MapSchema,
@@ -602,5 +604,13 @@ describe('news (patch notes, tips)', () => {
   it('rejects non-https community links', () => {
     const bad = { ...news, community: { ...news.community, discord: 'http://example.com' } };
     expect(() => NewsSchema.parse(bad)).toThrow();
+  });
+});
+
+describe('feel', () => {
+  it('gives every weapon a gun kick, and per-weapon kicks only name real weapons', () => {
+    for (const w of weaponCatalog) expect(kickFor(feel, w).frequency).toBeGreaterThan(0);
+    const ids = new Set(weaponCatalog.map((w) => w.id));
+    for (const id of Object.keys(feel.weaponKick)) expect(ids.has(id)).toBe(true);
   });
 });

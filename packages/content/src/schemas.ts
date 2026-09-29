@@ -510,3 +510,50 @@ export const StreakRewardSchema = z
     message: 'armor needs damageTaken',
   });
 export type StreakReward = z.infer<typeof StreakRewardSchema>;
+
+// ---------------------------------------------------------------------------
+// Feel: how shooting and moving look and feel on your own screen (client only: the gun's kick,
+// tracers, camera). Nothing here changes a hit or a number the server decides, so it is not
+// part of CONTENT_HASH. The F1 tuning panel edits a live copy and can copy it back as JSON.
+// ---------------------------------------------------------------------------
+
+/**
+ * The first-person gun's kick on each shot: a spring pulled by every shot and settling back.
+ * Distances in metres, angles in degrees (yaw and roll pick a random side per shot).
+ */
+export const KickSchema = z.object({
+  back: z.number().min(0).max(0.2),
+  up: z.number().min(0).max(0.1),
+  pitch: z.number().min(0).max(20),
+  yaw: z.number().min(0).max(10),
+  roll: z.number().min(0).max(15),
+  /** Spring speed (rad/s): higher snaps back faster. */
+  frequency: z.number().min(5).max(80),
+  /** 1 = settles without wobble; below 1 wobbles a little. */
+  dampingRatio: z.number().min(0.2).max(2),
+  /** Kick while aiming, as a fraction of the hip kick. */
+  adsScale: z.number().min(0).max(1),
+});
+export type Kick = z.infer<typeof KickSchema>;
+
+export const FeelSchema = z.object({
+  /** Our own tracers: one visible round in every N (1 = every round). */
+  tracerEvery: z.number().int().min(1).max(10),
+  /** How fast a tracer streak flies (m/s) and how long it looks (m). */
+  tracerSpeed: z.number().min(50).max(2000),
+  tracerLength: z.number().min(0.2).max(20),
+  /** Field of view widening while sprinting and tactical sprinting (degrees). */
+  sprintFovBoost: z.number().min(0).max(15),
+  tacSprintFovBoost: z.number().min(0).max(20),
+  /** Camera roll toward the way you strafe, at full speed (degrees). */
+  strafeTilt: z.number().min(0).max(6),
+  /** Camera shake from each of our own shots (0 = none). */
+  shotShake: z.number().min(0).max(1),
+  /** Weapon sway from turning, and walking bob of the gun (1 = as designed). */
+  sway: z.number().min(0).max(3),
+  gunBob: z.number().min(0).max(3),
+  kick: z.record(z.enum(['rifle', 'smg', 'shotgun', 'marksman', 'sidearm']), KickSchema),
+  /** Per-weapon kick (by weapon id) instead of its class's. */
+  weaponKick: z.record(z.string(), KickSchema).default({}),
+});
+export type Feel = z.infer<typeof FeelSchema>;

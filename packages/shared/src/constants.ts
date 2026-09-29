@@ -7,3 +7,5 @@ export const INPUT_REDUNDANCY = 3;
 /** Lag-compensation cap (ADR 0006: RTT + interpolation + input buffer at 150 ms ping ≈ 283 ms). */
 export const MAX_REWIND_MS = 300;
 export const MAX_PLAYERS_PER_MATCH = 12;
+/** Health of a soldier at spawn (the server's damage and regen work from this). */
+export const MAX_HEALTH = 100;

@@ -1,4 +1,5 @@
-import type { Weapon } from '@sentinel/content';
+import type { Kick, Weapon } from '@sentinel/content';
+import { KickSpring } from './kickSpring.ts';
 import * as THREE from 'three/webgpu';
 import { loadSoldierAssets, type SoldierAssets } from './soldier/assets.ts';
 import { FirstPersonArms } from './soldier/fpArms.ts';
@@ -14,7 +15,9 @@ export class Viewmodel {
   /** One model per weapon class; the loadout picks which two are used. */
   private readonly models: Record<Weapon['class'], THREE.Group>;
   private guns: [THREE.Group, THREE.Group];
-  private kick = 0;
+  /** The gun's kick (springs pushed by each shot) and how long the flash still shows. */
+  private readonly kick = new KickSpring();
+  private flashLeft = 0;
   private bobPhase = 0;
   private readonly flash: THREE.Mesh;
   private readonly camera: THREE.Camera;
@@ -126,8 +129,10 @@ export class Viewmodel {
     this.pickGuns();
   }
 
-  onShot(): void {
-    this.kick = 1;
+  /** A shot: the gun kicks (by the weapon's kick, less when aiming) and flashes. */
+  onShot(kick: Kick, ads: number): void {
+    this.kick.fire(kick, ads, Math.random() * 2 - 1, Math.random() < 0.5 ? -1 : 1);
+    this.flashLeft = 0.03;
     this.flash.visible = true;
   }
 
@@ -158,15 +163,21 @@ export class Viewmodel {
       /** How far the view turned this frame (radians): the gun lags behind, then settles. */
       turnYaw: number;
       turnPitch: number;
+      /** The drawn weapon's kick (feel.json), and sway / gun bob strength (1 = normal). */
+      kick: Kick;
+      sway: number;
+      gunBob: number;
     },
   ): void {
     for (const g of Object.values(this.real ?? this.models)) g.visible = g === this.guns[o.slot];
-    this.kick = Math.max(0, this.kick - frame * 14);
-    if (this.flash.visible && this.kick < 0.6) this.flash.visible = false;
+    this.kick.update(frame, o.kick);
+    this.flashLeft -= frame;
+    if (this.flash.visible && this.flashLeft <= 0) this.flash.visible = false;
+    const k5 = this.kick.offset; // back, up, pitch, yaw, roll
     if (o.grounded && o.speed > 0.5) this.bobPhase += frame * o.speed * 1.6;
-    const bob = (1 - o.ads) * Math.min(1, o.speed / 5);
+    const bob = (1 - o.ads) * Math.min(1, o.speed / 5) * o.gunBob;
     // Sway: the weapon trails fast turns a little (weight), much less when aiming.
-    const hold = 1 - 0.75 * o.ads;
+    const hold = (1 - 0.75 * o.ads) * o.sway;
     const rate = frame > 0 ? 1 / frame : 0;
     const targetYaw = Math.max(-0.07, Math.min(0.07, o.turnYaw * rate * 0.01)) * hold;
     const targetPitch = Math.max(-0.05, Math.min(0.05, o.turnPitch * rate * 0.01)) * hold;
@@ -184,13 +195,14 @@ export class Viewmodel {
         o.ads * 0.058 -
         Math.abs(Math.cos(this.bobPhase)) * 0.01 * bob -
         o.reloading * 0.12 -
-        o.switching * 0.25,
-      -0.32 + this.kick * 0.04,
+        o.switching * 0.25 +
+        k5[1]!,
+      -0.32 + k5[0]!,
     );
     this.root.rotation.set(
-      this.kick * 0.06 - o.reloading * 0.6 - this.swayPitch,
-      -this.swayYaw,
-      o.reloading * 0.3 + this.swayYaw * 0.6,
+      k5[2]! - o.reloading * 0.6 - this.swayPitch,
+      k5[3]! - this.swayYaw,
+      k5[4]! + o.reloading * 0.3 + this.swayYaw * 0.6,
     );
     const gun = this.guns[o.slot]!;
     this.flash.position.set(

@@ -11,6 +11,7 @@ import {
   streakRewards,
   weaponCatalog,
   buildLoadout,
+  kickFor,
   loadoutFromWire,
   loadoutToWire,
   type GameMap,
@@ -76,6 +77,7 @@ import {
   voteBridge,
 } from '../store.ts';
 import { Effects } from './effects.ts';
+import { devStats, tuning } from './tuning.ts';
 import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
 import { RemotePlayers } from './remotePlayers.ts';
@@ -133,12 +135,16 @@ export async function startGame(
   renderer.shadowMap.enabled = true;
   // Filmic tone mapping: bright sun and sky roll off like a real camera instead of clipping.
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.58; // the physical sky is scaled for ~0.5; lights doubled
+  renderer.toneMappingExposure = EXPOSURE;
   await renderer.init();
+  // Draw calls and triangles are counted over a whole frame (the post pass renders several
+  // times per frame), reset by the frame loop; the F1 panel shows them.
+  renderer.info.autoReset = false;
   const backend = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
     ? 'WebGPU'
     : 'WebGL 2';
   console.info(`[renderer] backend: ${backend}`);
+  devStats.backend = backend;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8ec3ef);
@@ -279,7 +285,7 @@ export async function startGame(
         bloom: q.bloom,
       });
       postPreset = preset;
-      post.setGrade(LOOKS[map?.lighting ?? 'day']);
+      post.setGrade(tuning.grade ?? LOOKS[map?.lighting ?? 'day']);
     }
     post.render();
   }
@@ -450,7 +456,8 @@ export async function startGame(
     sky.turbidity.value = l.turbidity;
     sky.rayleigh.value = l.rayleigh;
     sky.cloudCoverage.value = l.clouds;
-    post?.setGrade(LOOKS[preset]);
+    tuning.mapGrade = LOOKS[preset];
+    post?.setGrade(tuning.grade ?? LOOKS[preset]);
     bakeSkyLight();
   }
 
@@ -1042,6 +1049,8 @@ export async function startGame(
   }
 
   // --- Shots ---
+  /** Our shots fired this session (every `tracerEvery`-th one is a tracer round). */
+  let ownShots = 0;
   const tmpA = new THREE.Vector3();
   const tmpB = new THREE.Vector3();
   const tmpDir = new THREE.Vector3();
@@ -1049,7 +1058,10 @@ export async function startGame(
   /** Our predicted shot: effects now, and a faint "predicted" hit marker if we saw a hit. */
   function ownShot(shot: ShotRequest): void {
     const spec = simCtx.loadout[shot.slot];
-    viewmodel.onShot();
+    const f = tuning.feel;
+    viewmodel.onShot(kickFor(f, spec.def), adsFraction(predictor.state.weapon, spec));
+    // Tracer rounds: one in every `tracerEvery` (a shotgun shows a couple of its pellets).
+    const tracerRound = ownShots++ % f.tracerEvery === 0;
     audio.shot(spec.def.class);
     const eye = eyePosition(predictor.state.move, moveCtx);
     const range = spec.def.maxRange;
@@ -1063,7 +1075,7 @@ export async function startGame(
       camRight,
       camUp,
     );
-    kick(0.12); // a little shake on every shot
+    kick(f.shotShake); // a little shake on every shot
     let playerHit = false;
     // Visual spread guess, one ray per pellet (the server rolls the real ones).
     const cone = shot.spread + spec.pelletSpread;
@@ -1085,7 +1097,8 @@ export async function startGame(
       }
       playerHit ||= pelletHit;
       if (wall && !pelletHit) effects.impact(wall);
-      effects.tracer(tmpB, tmpA.clone().addScaledVector(tmpDir, Math.min(wallDist, 80)));
+      if (tracerRound && i < 2)
+        effects.tracer(tmpB, tmpA.clone().addScaledVector(tmpDir, Math.min(wallDist, 120)));
     }
     if (playerHit && performance.now() - hud.hitAt > 120) {
       hud.hitAt = performance.now();
@@ -1245,6 +1258,10 @@ export async function startGame(
   let lastReload = 0;
 
   let orbit = 0;
+  /** Camera roll from strafing, and the sprint field-of-view widening (both eased). */
+  let tilt = 0;
+  let sprintFov = 0;
+  let tuningVersion = -1;
   renderer.setAnimationLoop((time) => {
     timer.update(time);
     const frame = timer.getDelta();
@@ -1263,6 +1280,7 @@ export async function startGame(
       camera.lookAt(0, 1, 0);
       viewmodel.root.visible = false;
       effects.update(frame);
+      renderer.info.reset();
       draw();
       return;
     }
@@ -1330,10 +1348,18 @@ export async function startGame(
     const t = performance.now() / 1000;
     const sx = shake * 0.012 * Math.sin(t * 71.3);
     const sy = shake * 0.012 * Math.sin(t * 57.1 + 1.7);
+    // Strafe tilt: the view leans a degree or two into the way we strafe (off with head bob).
+    const f = tuning.feel;
+    const lateral =
+      m.velocity[0] * Math.cos(input.look.yaw) - m.velocity[2] * Math.sin(input.look.yaw);
+    const tiltTarget = settings().headBob
+      ? (-lateral / movement.sprintSpeed) * f.strafeTilt * (Math.PI / 180)
+      : 0;
+    tilt += (tiltTarget - tilt) * (1 - Math.exp(-frame * 8));
     camera.rotation.set(
       input.look.pitch + w.recoilPitch * RAD_PER_UNIT + sx,
       input.look.yaw + w.recoilYaw * RAD_PER_UNIT + sy,
-      shake * 0.006 * Math.sin(t * 43.9),
+      shake * 0.006 * Math.sin(t * 43.9) + tilt,
     );
     // How far the view turned since the last frame (weapon sway).
     let turnYaw = input.look.yaw - lastLookYaw;
@@ -1408,7 +1434,13 @@ export async function startGame(
         : killT >= 0 && killT < 1
           ? Math.sin(Math.PI * killT) * 0.035
           : 0;
-    const vfov = verticalFovDegrees(zoomedFov * (1 - punch), camera.aspect);
+    // Sprinting widens the view a little (tactical sprint more); never while aiming.
+    const sprinting =
+      m.grounded && !m.crouching && m.slideTicks === 0 && speed > movement.walkSpeed + 0.5;
+    const fovBoost =
+      (m.tacSprintTicks > 0 ? f.tacSprintFovBoost : sprinting ? f.sprintFovBoost : 0) * (1 - ads);
+    sprintFov += (fovBoost - sprintFov) * (1 - Math.exp(-frame * 6));
+    const vfov = verticalFovDegrees((zoomedFov + sprintFov) * (1 - punch), camera.aspect);
     if (Math.abs(camera.fov - vfov) > 0.01) {
       camera.fov = vfov;
       camera.updateProjectionMatrix();
@@ -1424,7 +1456,19 @@ export async function startGame(
       grounded: m.grounded,
       turnYaw,
       turnPitch,
+      kick: kickFor(f, spec.def),
+      sway: f.sway,
+      gunBob: f.gunBob,
     });
+    tuning.weapon = spec.def;
+    effects.tracerSpeed = f.tracerSpeed;
+    effects.tracerLength = f.tracerLength;
+    if (tuning.version !== tuningVersion) {
+      // The F1 panel changed the look: apply its override (or go back to the map's own).
+      tuningVersion = tuning.version;
+      post?.setGrade(tuning.grade ?? LOOKS[map.lighting]);
+      renderer.toneMappingExposure = tuning.exposure ?? EXPOSURE;
+    }
     audio.setListener(camera.position.x, camera.position.y, camera.position.z, input.look.yaw);
     if (w.slot !== lastSlot) audio.click();
     else if (w.reloadTicks > 0 && lastReload === 0) audio.reload(w.reloadTicks / TICK_RATE);
@@ -1466,7 +1510,14 @@ export async function startGame(
     if (!replaying) updateAimAndTags();
     feedback.update(camera, frame);
     effects.update(frame);
+    renderer.info.reset();
     if (worldReady) draw();
+    devStats.push(frame * 1000);
+    devStats.drawCalls = renderer.info.render.drawCalls;
+    devStats.triangles = renderer.info.render.triangles;
+    devStats.geometries = renderer.info.memory.geometries;
+    devStats.textures = renderer.info.memory.textures;
+    devStats.renderScale = settings().renderScale * dynamicScale;
 
     // HUD values that change every frame: ammo/reload. Push to the store only when changed.
     const mag = w.ammo[w.slot];
@@ -1566,6 +1617,9 @@ async function webgpuAvailable(timeoutMs = 2000): Promise<boolean> {
     return false;
   }
 }
+
+/** Tone-mapping exposure (the physical sky is scaled for ~0.5; lights doubled). */
+const EXPOSURE = 0.58;
 
 /** How strong the sky's own light is, and how much of the flat fill light remains with it. */
 const SKY_LIGHT = 0.12;
