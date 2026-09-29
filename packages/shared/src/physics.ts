@@ -19,7 +19,12 @@ export function initPhysics(): Promise<Rapier> {
  * Build the static collision world for a map. Players are kinematic (moved by the
  * character controller), so the world has no gravity and is never stepped for dynamics.
  */
-export function buildWorld(rapier: Rapier, solids: readonly Solid[]): PhysicsWorld {
+export function buildWorld(
+  rapier: Rapier,
+  solids: readonly Solid[],
+  /** Told each solid's collider handle (the client looks up what a ray hit: metal, brick…). */
+  onCollider?: (handle: number, solid: Solid) => void,
+): PhysicsWorld {
   const world = new rapier.World({ x: 0, y: 0, z: 0 });
 
   for (const solid of solids) {
@@ -36,7 +41,8 @@ export function buildWorld(rapier: Rapier, solids: readonly Solid[]): PhysicsWor
       if (!hull) throw new Error('map contains a degenerate convex hull');
       desc = hull;
     }
-    world.createCollider(desc);
+    const collider = world.createCollider(desc);
+    onCollider?.(collider.handle, solid);
   }
 
   // Scene queries (ray casts, character controller) only see colliders after an update.

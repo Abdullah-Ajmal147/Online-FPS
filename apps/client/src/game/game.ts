@@ -76,7 +76,8 @@ import {
   chatBridge,
   voteBridge,
 } from '../store.ts';
-import { Effects } from './effects.ts';
+import { Effects, type MapHit } from './effects.ts';
+import { surfaceKind, type SurfaceKind } from './surfaceKinds.ts';
 import { devStats, tuning } from './tuning.ts';
 import { advanceFixedStep } from './fixedStep.ts';
 import { Feedback } from './feedback.ts';
@@ -389,7 +390,14 @@ export async function startGame(
     })();
   }
   // Visual ray casts against the map (effects, crosshair): the physics world, reused objects.
-  const mapHit = { distance: 0, point: new THREE.Vector3(), normal: new THREE.Vector3() };
+  const mapHit: MapHit = {
+    surface: 'concrete',
+    distance: 0,
+    point: new THREE.Vector3(),
+    normal: new THREE.Vector3(),
+  };
+  /** What each map collider is made of (by collider handle), for impacts and footsteps. */
+  const surfaceOf = new Map<number, SurfaceKind>();
   const mapRay = new rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
   function loadMap(id: string): void {
     const next = maps[id];
@@ -405,7 +413,12 @@ export async function startGame(
     applyLighting(map.lighting);
     sun.shadow.needsUpdate = true; // static shadows: draw the new map's once
     setStatus({ mapName: map.name, mapId: map.id });
-    moveCtx = createMovementContext(rapier, buildWorld(rapier, solids), movement);
+    surfaceOf.clear();
+    const theme = themeOf(map.id);
+    const physicsWorld = buildWorld(rapier, solids, (handle, solid) =>
+      surfaceOf.set(handle, surfaceKind(theme, solid.material)),
+    );
+    moveCtx = createMovementContext(rapier, physicsWorld, movement);
     const world = moveCtx.world;
     effects.setRaycast((origin, dir, max) => {
       mapRay.origin.x = origin.x;
@@ -421,6 +434,7 @@ export async function startGame(
         rapier.QueryFilterFlags.EXCLUDE_SENSORS,
       );
       if (!hit) return null;
+      mapHit.surface = surfaceOf.get(hit.collider.handle) ?? 'concrete';
       mapHit.distance = hit.timeOfImpact;
       mapHit.point.copy(origin).addScaledVector(dir, hit.timeOfImpact);
       mapHit.normal.set(hit.normal.x, hit.normal.y, hit.normal.z);
@@ -1096,7 +1110,10 @@ export async function startGame(
         if (rayPlayer(eye, d, pose.position, pose.crouching, movement, wallDist)) pelletHit = true;
       }
       playerHit ||= pelletHit;
-      if (wall && !pelletHit) effects.impact(wall);
+      if (wall && !pelletHit) {
+        if (i === 0) audio.impact(wall.surface, [wall.point.x, wall.point.y, wall.point.z]);
+        effects.impact(wall);
+      }
       if (tracerRound && i < 2)
         effects.tracer(tmpB, tmpA.clone().addScaledVector(tmpDir, Math.min(wallDist, 120)));
     }
@@ -1128,11 +1145,19 @@ export async function startGame(
     effects.tracer(muzzle, tmpA.clone().addScaledVector(tmpDir, wall?.distance ?? 80));
     // Where their bullet lands (a guess from their view; the server decides hits): being shot
     // at should look like it, chips and dust off the wall next to you.
-    if (wall) effects.impact(wall, 2);
+    if (wall) {
+      audio.impact(wall.surface, [wall.point.x, wall.point.y, wall.point.z]);
+      effects.impact(wall, true);
+    }
     audio.shot(def?.class ?? 'rifle', [tmpA.x, tmpA.y, tmpA.z]);
   }
 
   const aimDir = new THREE.Vector3();
+  const DOWN = new THREE.Vector3(0, -1, 0);
+  /** What is under a player's feet (position = feet): footstep sounds. */
+  function groundSurface(x: number, y: number, z: number): SurfaceKind {
+    return effects.castMap(tmpA.set(x, y + 0.3, z), DOWN, 0.8)?.surface ?? 'concrete';
+  }
   /** Crosshair turns red over a visible enemy; teammates get name tags. */
   /**
    * Other players' footsteps, placed where they walk: how far they moved since last frame.
@@ -1159,7 +1184,7 @@ export async function startGame(
     if (last.walked >= length) {
       last.walked = 0;
       const loud = pose.crouching ? 0.12 : Math.min(1, speed / movement.sprintSpeed);
-      audio.footstep(loud, [x, y, z]);
+      audio.footstep(loud, [x, y, z], groundSurface(x, y, z));
     }
   }
 
@@ -1479,7 +1504,11 @@ export async function startGame(
       const length = m.crouching ? 1.3 : sprinting ? 2.3 : 1.9;
       if (stride >= length) {
         stride = 0;
-        audio.footstep(m.crouching ? 0.08 : sprinting ? 0.4 : 0.28);
+        audio.footstep(
+          m.crouching ? 0.08 : sprinting ? 0.4 : 0.28,
+          undefined,
+          groundSurface(m.position[0], m.position[1], m.position[2]),
+        );
       }
     }
     lastSlot = w.slot;

@@ -1,4 +1,5 @@
 import type { Weapon } from '@sentinel/content';
+import type { SurfaceKind } from '../game/surfaceKinds.ts';
 import { Music, type MusicState } from './music.ts';
 
 type WeaponClass = Weapon['class'];
@@ -340,7 +341,7 @@ export class GameAudio {
    * A footstep: soft low thud + grit. `loud` 0–1 (crouch-walking is nearly silent, sprinting
    * loud). Our own steps have no position; others' are placed where they walk.
    */
-  footstep(loud: number, at?: Vec3): void {
+  footstep(loud: number, at?: Vec3, surface: SurfaceKind = 'concrete'): void {
     const ctx = this.ctx;
     if (loud <= 0) return;
     const out = this.output(at, 2.5, 0.08, { hrtf: false, maxDistance: 25, lifeS: 0.2 });
@@ -349,6 +350,56 @@ export class GameAudio {
     const v = loud * (0.85 + Math.random() * 0.3);
     this.noiseBurst(out, t, 0.06, 0.35 * v, 'lowpass', 500 + Math.random() * 200, 0.8);
     this.noiseBurst(out, t + 0.01, 0.035, 0.12 * v, 'bandpass', 2600 + Math.random() * 900, 1.5);
+    // What we walk on: steel plate rings a little, timber sounds hollow.
+    if (surface === 'metal') {
+      const f = 820 + Math.random() * 160;
+      this.tone(f, 0.09, 0.05 * v, 0, 'triangle', out);
+      this.tone(f * 1.51, 0.06, 0.03 * v, 0, 'sine', out);
+    } else if (surface === 'wood') {
+      this.noiseBurst(out, t, 0.09, 0.3 * v, 'bandpass', 240 + Math.random() * 60, 2.5);
+    }
+  }
+
+  /**
+   * A bullet hitting a surface near the listener: a sharp crack off concrete and brick, a
+   * dull thunk off wood, a metallic ping off steel (now and then a ricochet whine).
+   */
+  impact(surface: SurfaceKind, at: Vec3): void {
+    const ctx = this.ctx;
+    const out = this.output(at, 1.5, 0.12, { hrtf: false, maxDistance: 30, lifeS: 0.35 });
+    if (!ctx || !out) return;
+    const t = ctx.currentTime;
+    const vary = 0.9 + Math.random() * 0.2;
+    if (surface === 'metal') {
+      this.noiseBurst(out, t, 0.02, 0.28, 'highpass', 3000, 0.7);
+      for (const [f, v, len] of [
+        [1900, 0.09, 0.14],
+        [2870, 0.06, 0.1],
+        [4150, 0.04, 0.07],
+      ] as const)
+        this.tone(f * vary, len, v, 0, 'sine', out);
+      if (Math.random() < 0.2) {
+        // Ricochet: a falling whine.
+        const osc = ctx.createOscillator();
+        osc.frequency.setValueAtTime(2800 * vary, t);
+        osc.frequency.exponentialRampToValueAtTime(700, t + 0.28);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        osc.connect(g).connect(out);
+        osc.start(t);
+        osc.stop(t + 0.32);
+      }
+    } else if (surface === 'wood') {
+      this.noiseBurst(out, t, 0.07, 0.4, 'lowpass', 750 * vary, 0.9);
+      this.tone(180 * vary, 0.06, 0.12, 0, 'triangle', out);
+    } else {
+      // Concrete (brighter) and brick (a bit lower): crack plus a little falling grit.
+      const f = surface === 'brick' ? 1150 : 1700;
+      this.noiseBurst(out, t, 0.05, 0.36, 'bandpass', f * vary, 1.1);
+      this.noiseBurst(out, t, 0.04, 0.18, 'lowpass', 380, 0.7);
+      this.noiseBurst(out, t + 0.05, 0.08, 0.05, 'highpass', 4500, 0.7);
+    }
   }
 
   /** Reload: magazine out, magazine in, bolt/slide, spread over the reload time. */

@@ -1,4 +1,5 @@
 import * as THREE from 'three/webgpu';
+import { IMPACT, type SurfaceKind } from './surfaceKinds.ts';
 
 /**
  * A fixed set of reusable objects, all in the scene from the start, shown when used. The
@@ -64,9 +65,15 @@ class Pool<T extends THREE.Object3D> {
 type Faded = THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
 
 const FORWARD = new THREE.Vector3(0, 0, 1);
+const tmp = new THREE.Vector3();
+/** Bullet marks kept on the map at once, and how long each stays (seconds). */
+const MARKS = 200;
+const MARK_SECONDS = 40;
 
 /** A ray's hit on the map: distance along the ray, the point and the surface normal. */
 export interface MapHit {
+  /** What was hit (dust, chips, sparks, the mark, the sound). */
+  surface: SurfaceKind;
   distance: number;
   point: THREE.Vector3;
   normal: THREE.Vector3;
@@ -78,7 +85,10 @@ export class Effects {
   private raycast: MapRaycast | null = null;
   private readonly tracers: Pool<Faded>;
   private readonly flashes: Pool<Faded>;
+  /** Bullet marks: up to MARKS on the map, the oldest reused first. */
   private readonly impacts: Pool<Faded>;
+  /** Chips and splinters knocked off concrete, brick and wood. */
+  private readonly chips: Pool<Faded>;
   private readonly blasts: Pool<Faded>;
   private readonly dust: Pool<Faded>;
   private readonly scorches: Pool<Faded>;
@@ -129,7 +139,30 @@ export class Effects {
       return m;
     });
     this.flashes = new Pool(scene, 24, () => mesh(flashGeo, 0xffd27a, 1));
-    this.impacts = new Pool(scene, 96, () => mesh(markGeo, 0x15171a, 0.85, false));
+    const holeMap = bulletHole();
+    const holeGeo = new THREE.PlaneGeometry(0.11, 0.11);
+    this.impacts = new Pool(scene, MARKS, () => {
+      const m = new THREE.Mesh(
+        holeGeo,
+        new THREE.MeshBasicMaterial({
+          map: holeMap,
+          transparent: true,
+          depthWrite: false,
+          // Drawn onto the wall, not in front of it: no fighting with the surface.
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+        }),
+      ) as Faded;
+      return m;
+    });
+    const chipGeo = new THREE.BoxGeometry(0.018, 0.012, 0.03);
+    this.chips = new Pool(scene, 64, () => {
+      const m = mesh(chipGeo, 0x888888, 1, true);
+      m.material.transparent = false;
+      m.userData.v = new THREE.Vector3();
+      m.userData.spin = new THREE.Vector3();
+      return m;
+    });
     this.blasts = new Pool(scene, 4, () => mesh(flashGeo, 0xffb347, 1));
     this.dust = new Pool(scene, 4, () => mesh(flashGeo, 0x5b5048, 0.7, false));
     this.scorches = new Pool(scene, 12, () => {
@@ -237,24 +270,42 @@ export class Effects {
   }
 
   /**
-   * A bullet hitting the map: a hole, a puff of dust off the surface, and a few sparks.
-   * `sparks`: more of them (metal surfaces).
+   * A bullet hitting the map, by what it hit: a mark that stays (MARKS at most, oldest
+   * reused), a puff of dust in the surface's colour, chips or splinters off masonry and wood,
+   * sparks off metal. `far`: someone else's shot (a lighter version).
    */
-  impact(hit: MapHit, sparks = 3): void {
-    const m = this.impacts.take(10);
+  impact(hit: MapHit, far = false): void {
+    const look = IMPACT[hit.surface];
     const normal = hit.normal;
-    m.position.copy(hit.point).addScaledVector(normal, 0.01);
-    m.lookAt(m.position.clone().add(normal));
+    const m = this.impacts.take(MARK_SECONDS);
+    m.material.color.setHex(look.mark);
+    m.scale.setScalar(look.markSize * (0.85 + Math.random() * 0.3));
+    m.position.copy(hit.point).addScaledVector(normal, 0.004);
+    m.lookAt(tmp.copy(m.position).add(normal));
+    m.rotateZ(Math.random() * Math.PI * 2);
     const puff = this.puffs.take(0.7);
+    puff.material.color.setHex(look.dust);
+    puff.userData.size = look.dustSize;
     puff.position.copy(hit.point).addScaledVector(normal, 0.08);
     (puff.userData.v as THREE.Vector3).copy(normal).multiplyScalar(0.6).y += 0.25;
-    for (let i = 0; i < sparks; i++) {
-      const s = this.sparks.take(0.18 + Math.random() * 0.15);
-      s.position.copy(hit.point).addScaledVector(normal, 0.02);
-      (s.userData.v as THREE.Vector3)
+    const share = far ? 0.5 : 1;
+    for (let i = 0; i < Math.round(look.sparks * share); i++) {
+      const sp = this.sparks.take(0.18 + Math.random() * 0.15);
+      sp.position.copy(hit.point).addScaledVector(normal, 0.02);
+      (sp.userData.v as THREE.Vector3)
         .set(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5)
         .multiplyScalar(4)
         .addScaledVector(normal, 3.5);
+    }
+    for (let i = 0; i < Math.round(look.chips * share); i++) {
+      const c = this.chips.take(0.6 + Math.random() * 0.4);
+      c.material.color.setHex(look.chipColor);
+      c.position.copy(hit.point).addScaledVector(normal, 0.03);
+      (c.userData.v as THREE.Vector3)
+        .set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5)
+        .multiplyScalar(2.5)
+        .addScaledVector(normal, 1.5 + Math.random() * 2);
+      (c.userData.spin as THREE.Vector3).set(Math.random() * 25, Math.random() * 25, 0);
     }
   }
 
@@ -274,6 +325,8 @@ export class Effects {
     }
     for (let i = 0; i < 2; i++) {
       const p = this.puffs.take(0.9);
+      p.material.color.setHex(0xb3a592);
+      p.userData.size = 1;
       p.position.copy(at).setY(at.y + 0.5 + i * 0.6);
       (p.userData.v as THREE.Vector3).set(0, 0.6, 0);
     }
@@ -329,10 +382,19 @@ export class Effects {
       o.scale.set(1, 1, Math.max(0.001, head - tail));
     });
     this.flashes.update(frame, fade(1));
-    this.impacts.update(frame, fade(0.85));
+    // Marks stay, then fade out over the last fifth of their time.
+    this.impacts.update(frame, (o, k) => (o.material.opacity = k < 0.8 ? 1 : (1 - k) / 0.2));
+    this.chips.update(frame, (o) => {
+      const v = o.userData.v as THREE.Vector3;
+      v.addScaledVector(this.gravity, frame);
+      o.position.addScaledVector(v, frame);
+      const spin = o.userData.spin as THREE.Vector3;
+      o.rotation.x += spin.x * frame;
+      o.rotation.y += spin.y * frame;
+    });
     this.puffs.update(frame, (o, k) => {
       o.position.addScaledVector(o.userData.v as THREE.Vector3, frame);
-      o.scale.setScalar(0.16 + 0.75 * Math.sqrt(k));
+      o.scale.setScalar((0.16 + 0.75 * Math.sqrt(k)) * ((o.userData.size as number) ?? 1));
       o.material.opacity = 0.62 * (1 - k);
     });
     this.sparks.update(frame, (o, k) => {
@@ -371,6 +433,7 @@ export class Effects {
       this.tracers,
       this.flashes,
       this.impacts,
+      this.chips,
       this.blasts,
       this.dust,
       this.scorches,
@@ -392,6 +455,52 @@ function softDisc(): THREE.CanvasTexture {
   grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/**
+ * A bullet hole, drawn once: a dark core, a torn ragged rim and a few hairline cracks, on
+ * transparent. White-ish, so each surface tints it (dark on concrete, bright on metal).
+ */
+function bulletHole(): THREE.CanvasTexture {
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  const mid = size / 2;
+  // Scorched halo.
+  const halo = g.createRadialGradient(mid, mid, 4, mid, mid, mid);
+  halo.addColorStop(0, 'rgba(255,255,255,0.55)');
+  halo.addColorStop(0.45, 'rgba(255,255,255,0.22)');
+  halo.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, size, size);
+  // Ragged rim and core.
+  g.beginPath();
+  for (let i = 0; i <= 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    const r = size * (0.12 + Math.random() * 0.06);
+    g.lineTo(mid + Math.cos(a) * r, mid + Math.sin(a) * r);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.95)';
+  g.fill();
+  // Cracks.
+  g.strokeStyle = 'rgba(255,255,255,0.5)';
+  g.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) {
+    let a = Math.random() * Math.PI * 2;
+    let r = size * 0.14;
+    g.beginPath();
+    g.moveTo(mid + Math.cos(a) * r, mid + Math.sin(a) * r);
+    for (let j = 0; j < 3; j++) {
+      a += (Math.random() - 0.5) * 0.6;
+      r += size * (0.05 + Math.random() * 0.06);
+      g.lineTo(mid + Math.cos(a) * r, mid + Math.sin(a) * r);
+    }
+    g.stroke();
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
