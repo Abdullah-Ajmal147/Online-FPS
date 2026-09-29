@@ -71,6 +71,16 @@ export const themeOf = (mapId: string): Theme => THEME_FOR_MAP[mapId] ?? 'yard';
 
 const surfaces = new Map<Theme, Promise<Surfaces>>();
 
+/**
+ * Weathering (wall grime, stains) costs a noise lookup on every map pixel: Medium/High only.
+ * Set once at start-up from the graphics preset, before any surfaces load (a preset change
+ * applies after a reload, like shadows).
+ */
+let weatheringOn = true;
+export function setWeathering(on: boolean): void {
+  weatheringOn = on;
+}
+
 /** Load a theme's surface textures once (in the background). */
 export function loadSurfaces(theme: Theme = 'yard'): Promise<Surfaces> {
   let loading = surfaces.get(theme);
@@ -100,7 +110,7 @@ export function loadSurfaces(theme: Theme = 'yard'): Promise<Surfaces> {
           metalness: SURFACE[m].metalness,
           vertexColors: true, // container paint on props; white elsewhere
         });
-        mat.colorNode = materialColor.mul(weathering());
+        if (weatheringOn) mat.colorNode = materialColor.mul(weathering());
         mat.name = `surface:${theme}:${m}`;
         return [m, mat] as const;
       }),

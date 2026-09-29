@@ -8,33 +8,38 @@ const myTeam = (p: Page) =>
 test('three friends join by one invite link and play on the same team', async ({ browser }) => {
   test.setTimeout(150_000); // three players join one after another
   const host = await (await browser.newContext()).newPage();
-  await deploy(host, '/?server=http://localhost:2572');
-  // The invite link (Squad screen) from the game's state.
-  await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
-  const link = (await status(host)).invite!;
-  expect(link).toContain('room=');
-  await expect.poll(() => myTeam(host), { timeout: 15_000 }).not.toBeNull();
-  const team = await myTeam(host);
-
   const friends: Page[] = [];
-  for (let i = 0; i < 2; i++) {
-    const page = await (await browser.newContext()).newPage();
-    await deploy(page, link);
-    friends.push(page);
+  // Close every window even when the test fails: left open, they keep drawing 3D in software
+  // and starve the retry (and the next tests) of CPU.
+  try {
+    await deploy(host, '/?server=http://localhost:2572');
+    // The invite link (Squad screen) from the game's state.
+    await expect.poll(async () => (await status(host)).invite, { timeout: 15_000 }).not.toBeNull();
+    const link = (await status(host)).invite!;
+    expect(link).toContain('room=');
+    await expect.poll(() => myTeam(host), { timeout: 15_000 }).not.toBeNull();
+    const team = await myTeam(host);
+
+    for (let i = 0; i < 2; i++) {
+      const page = await (await browser.newContext()).newPage();
+      await deploy(page, link);
+      friends.push(page);
+    }
+    for (const f of friends) await expect.poll(() => myTeam(f), { timeout: 15_000 }).toBe(team);
+    // Everyone is in the same match: the host sees two more humans on its team.
+    await expect
+      .poll(
+        () =>
+          host.evaluate(async () => {
+            const m = (await import('/src/store.ts')).getStatus().match;
+            return m?.players.filter((p) => !p.bot && p.team === m.myTeam).length ?? 0;
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(3);
+  } finally {
+    for (const p of [host, ...friends]) await p.context().close();
   }
-  for (const f of friends) await expect.poll(() => myTeam(f), { timeout: 15_000 }).toBe(team);
-  // Everyone is in the same match: the host sees two more humans on its team.
-  await expect
-    .poll(
-      () =>
-        host.evaluate(async () => {
-          const m = (await import('/src/store.ts')).getStatus().match;
-          return m?.players.filter((p) => !p.bot && p.team === m.myTeam).length ?? 0;
-        }),
-      { timeout: 15_000 },
-    )
-    .toBe(3);
-  for (const p of [host, ...friends]) await p.context().close();
 });
 
 const chatText = (p: Page) =>

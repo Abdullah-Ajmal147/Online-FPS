@@ -34,7 +34,8 @@ jobs:
   # 3D in software on two cores, and the multi-player tests open three game windows at once.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Room for a retry of the slow multi-player tests without the whole shard being cancelled.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
