@@ -406,6 +406,12 @@ export function HelpGuide({
             Browsers only start sound after you click the page. Check Settings → Audio and your tab
             isn't muted.
           </Faq>
+          <Faq q="Ctrl+W (or another shortcut) closed the game">
+            Browsers keep shortcuts like Ctrl+W for themselves in a normal window. In fullscreen the
+            game locks the keyboard so they reach the game instead: keep Settings → Game →
+            Fullscreen while playing on (Chrome and Edge). In every browser, closing the tab during
+            a match asks first.
+          </Faq>
           <Faq q="The page asks me to reload">
             A new version of the game is out. Reload the page to get it.
           </Faq>

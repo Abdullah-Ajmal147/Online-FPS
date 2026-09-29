@@ -48,6 +48,8 @@ export interface Settings {
   /** Horizontal field of view in degrees. */
   fov: number;
   toggleSprint: boolean;
+  /** Fullscreen with the keyboard locked while playing: Ctrl+W / Ctrl+T can't close the game. */
+  fullscreen: boolean;
   headBob: boolean;
   /** KeyboardEvent.code per action. */
   bindings: Record<Action, string>;
@@ -84,6 +86,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 0.06,
   fov: 90,
   toggleSprint: false,
+  fullscreen: true,
   headBob: false,
   mode: 'team-deathmatch',
   map: 'any',
@@ -174,6 +177,7 @@ export function normalizeSettings(raw: unknown): Settings {
     toggleSprint:
       typeof r.toggleSprint === 'boolean' ? r.toggleSprint : DEFAULT_SETTINGS.toggleSprint,
     headBob: typeof r.headBob === 'boolean' ? r.headBob : DEFAULT_SETTINGS.headBob,
+    fullscreen: typeof r.fullscreen === 'boolean' ? r.fullscreen : DEFAULT_SETTINGS.fullscreen,
     killcam: typeof r.killcam === 'boolean' ? r.killcam : DEFAULT_SETTINGS.killcam,
     allowJoin: typeof r.allowJoin === 'boolean' ? r.allowJoin : DEFAULT_SETTINGS.allowJoin,
     autoResolution:

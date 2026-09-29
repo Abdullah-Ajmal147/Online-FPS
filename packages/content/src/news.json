@@ -15,6 +15,16 @@
   ],
   "patches": [
     {
+      "version": "0.9.7",
+      "date": "2026-09-29",
+      "title": "Smoother starts, safer keys",
+      "notes": [
+        "No more freezes in the first seconds of a match: the map, soldiers and effects are prepared behind the Deploying card.",
+        "Smoother firefights: enemies stepping back into view no longer hitch, and the crosshair and bullet impacts cost far less each frame.",
+        "Ctrl+W no longer closes the game by accident: the game goes fullscreen with the keyboard locked when you play (Chrome, Edge; Settings → Game), and closing the tab mid-match asks first."
+      ]
+    },
+    {
       "version": "0.9.6",
       "date": "2026-09-28",
       "title": "See the enemy, feel the fight",

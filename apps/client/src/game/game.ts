@@ -56,6 +56,7 @@ import {
 } from '@sentinel/shared';
 import { gameAudio } from '../audio/index.ts';
 import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
+import { enterGameFullscreen, setLeaveGuard } from '../input/shortcutGuard.ts';
 import { Minimap } from './minimap.ts';
 import { viewerTeam } from './soldier/rim.ts';
 import { InputCapture } from '../input/capture.ts';
@@ -985,6 +986,7 @@ export async function startGame(
   const join = (opts?: { private?: { map: string; bots: boolean } }) =>
     (joining ??= (async () => {
       setStatus({ net: { state: 'connecting', text: 'connecting…' }, inMatch: true });
+      setLeaveGuard(true); // closing the tab mid-match asks first
       const guest = await ensureGuest(); // signed guest token (XP); the game works without it
       joined = true;
       await joinMatch(guest?.token ?? null, opts?.private);
@@ -1524,6 +1526,7 @@ export async function startGame(
     backend,
     join,
     leave: () => {
+      setLeaveGuard(false); // leaving on purpose: no "Leave site?" question
       // A fresh page is the cleanest way out: no half-torn-down match state survives.
       const url = new URL(location.href);
       url.searchParams.delete('room');
@@ -1533,6 +1536,8 @@ export async function startGame(
     switchTeam: () => conn.switchTeam(),
     requestPlay: () => {
       audio.unlock();
+      // Fullscreen with the keyboard locked (setting, default on): Ctrl+W can't close the game.
+      if (settings().fullscreen) void enterGameFullscreen();
       return input.requestLock();
     },
   };

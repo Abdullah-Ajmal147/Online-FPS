@@ -983,6 +983,15 @@ function SettingsScreen({
             />
           </label>
           <label class="row">
+            <span>Fullscreen while playing (Ctrl+W / Ctrl+T can't close the game)</span>
+            <input
+              type="checkbox"
+              data-testid="setting-fullscreen"
+              checked={settings.fullscreen}
+              onChange={(e) => set('fullscreen', (e.target as HTMLInputElement).checked)}
+            />
+          </label>
+          <label class="row">
             <span>Head bob</span>
             <input
               type="checkbox"
