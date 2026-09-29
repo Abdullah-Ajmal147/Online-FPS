@@ -61,6 +61,10 @@ const own: OwnSnapshot = {
       recoilPitch: 1500,
       recoilYaw: -320,
       bloom: 400,
+      scopeTicks: 61000,
+      breathTicks: 200,
+      recoverTicks: 90,
+      swayPct: 160,
     },
   },
   loadout: { primary: 3, secondary: 4, attachments: [0, 5, 9], perks: [2] },
@@ -85,8 +89,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 18 (melee: Button.Melee in InputCmd)', () => {
-    expect(PROTOCOL_VERSION).toBe(18);
+  it('is 19 (scope sway and breath in own weapon state; scoped entity flag)', () => {
+    expect(PROTOCOL_VERSION).toBe(19);
   });
 });
 

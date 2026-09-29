@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { defaultLoadout } from '@sentinel/content';
+import { defaultLoadout, weapons } from '@sentinel/content';
 import { Button, type PlayerInput } from '../input.ts';
 import {
   UNITS_PER_DEGREE,
   compileWeapon,
   createWeaponState,
   currentSpread,
+  scopeSway,
   stepWeapon,
   weaponSpeedScale,
   type MoveInfo,
@@ -157,5 +158,60 @@ describe('aiming, spread and recoil', () => {
       still,
     );
     expect(r.shot).toMatchObject({ yaw: 1234, pitch: -500, slot: 0 });
+  });
+});
+
+describe('scope sway and holding the breath', () => {
+  const halberd = compileWeapon(weapons['halberd-mr']!);
+  const scoped = [halberd, pistol] as const;
+  const aim = (ticks: number, buttons = Button.Aim, start?: WeaponState) => {
+    let state = start ?? createWeaponState(scoped);
+    let prevButtons = 0;
+    const path: [number, number][] = [];
+    for (let i = 0; i < ticks; i++) {
+      state = stepWeapon(state, { buttons, yaw: 0, pitch: 0 }, prevButtons, scoped, still).state;
+      prevButtons = buttons;
+      path.push(scopeSway(state, halberd));
+    }
+    return { state, path };
+  };
+  const widest = (path: [number, number][]) => Math.max(...path.map(([y]) => Math.abs(y)));
+
+  it('drifts only when fully aimed through a scope, and never for other weapons', () => {
+    const { path } = aim(400);
+    expect(path[halberd.adsTicks - 2]).toEqual([0, 0]); // still raising the rifle
+    expect(widest(path)).toBeGreaterThan(halberd.scope!.sway * 0.8);
+    expect(widest(path)).toBeLessThanOrEqual(halberd.scope!.sway);
+    expect(scopeSway(run(60, Button.Aim).state, rifle)).toEqual([0, 0]);
+  });
+
+  it('the shot goes where the drifting scope points', () => {
+    const { state } = aim(100);
+    const [yaw, pitch] = scopeSway(
+      { ...state, scopeTicks: state.scopeTicks + 1, swayPct: state.swayPct },
+      halberd,
+    );
+    const r = stepWeapon(
+      state,
+      { buttons: Button.Aim | Button.Fire, yaw: 0, pitch: 0 },
+      Button.Aim,
+      scoped,
+      still,
+    );
+    expect(r.shot).toMatchObject({ yaw: yaw & 0xffff, pitch });
+  });
+
+  it('holding the breath (sprint while aimed) steadies it, then it runs out and sways more', () => {
+    const settled = aim(120).state;
+    const held = aim(60, Button.Aim | Button.Sprint, settled);
+    expect(held.state.swayPct).toBe(10);
+    expect(widest(held.path.slice(20))).toBeLessThan(halberd.scope!.sway * 0.2);
+    // Past the hold time: forced to breathe, wider sway for a while.
+    const out = aim(halberd.scope!.holdTicks, Button.Aim | Button.Sprint, held.state);
+    expect(out.state.recoverTicks).toBeGreaterThan(0);
+    expect(out.state.swayPct).toBeGreaterThan(100);
+    // Recovered: normal again.
+    const after = aim(halberd.scope!.recoverTicks + 60, Button.Aim, out.state);
+    expect(after.state.swayPct).toBe(100);
   });
 });

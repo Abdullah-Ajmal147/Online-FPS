@@ -194,6 +194,7 @@ const OWN_CROUCHING = 2;
 const ENT_GROUNDED = 1;
 const ENT_CROUCHING = 2;
 const ENT_ALIVE = 4;
+const ENT_SCOPED = 8;
 const PROJ_CLOUD = 0x80;
 
 function writeWeapon(w: BinaryWriter, s: WeaponState): void {
@@ -201,6 +202,7 @@ function writeWeapon(w: BinaryWriter, s: WeaponState): void {
   for (const a of s.ammo) w.u8(a.ammo).u16(a.reserve);
   w.u8(s.cooldownTicks).u8(s.reloadTicks).u8(s.switchTicks).u8(s.adsTicks).u8(s.shotIndex);
   w.i16(s.recoilPitch).i16(s.recoilYaw).u16(s.bloom);
+  w.u16(s.scopeTicks).u8(s.breathTicks).u8(s.recoverTicks).u8(s.swayPct);
 }
 
 function readWeapon(r: BinaryReader): WeaponState {
@@ -218,6 +220,10 @@ function readWeapon(r: BinaryReader): WeaponState {
     recoilPitch: r.i16(),
     recoilYaw: r.i16(),
     bloom: r.u16(),
+    scopeTicks: r.u16(),
+    breathTicks: r.u8(),
+    recoverTicks: r.u8(),
+    swayPct: r.u8(),
   };
 }
 
@@ -284,13 +290,13 @@ const clampI16 = (v: number) => Math.max(-0x8000, Math.min(0x7fff, v));
 
 /**
  * Layout: serverTick u32, lastProcessedSeq u32, inputQueueDepth u8, serverTickMicros u16,
- * hasOwn u8, [own: move 35 + weapon 18 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 62–68 bytes], entityCount u8,
+ * hasOwn u8, [own: move 35 + weapon 23 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 62–68 bytes], entityCount u8,
  * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, weapon, shots).
  * then projectileCount u8, projectiles × 8 bytes (id, kind|cloud, x/y/z i16).
  * Full snapshots, no delta compression (ADR 0004); 12 players stay under 10 KB/s.
  */
 export function encodeSnapshot(msg: Snapshot): Uint8Array {
-  const w = new BinaryWriter(96 + msg.entities.length * 15 + msg.projectiles.length * 8);
+  const w = new BinaryWriter(104 + msg.entities.length * 15 + msg.projectiles.length * 8);
   w.u32(msg.serverTick).u32(msg.lastProcessedSeq).u8(Math.min(255, msg.inputQueueDepth));
   w.u16(Math.min(0xffff, Math.round(msg.serverTickMicros)));
   w.u8(msg.own ? 1 : 0);
@@ -301,7 +307,8 @@ export function encodeSnapshot(msg: Snapshot): Uint8Array {
     w.u8(
       (e.grounded ? ENT_GROUNDED : 0) |
         (e.crouching ? ENT_CROUCHING : 0) |
-        (e.alive ? ENT_ALIVE : 0),
+        (e.alive ? ENT_ALIVE : 0) |
+        (e.scoped ? ENT_SCOPED : 0),
     );
     for (const v of e.position) w.i16(clampI16(quantizePosition(v)));
     w.u16(e.yaw)
@@ -341,6 +348,7 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
       grounded: (flags & ENT_GROUNDED) !== 0,
       crouching: (flags & ENT_CROUCHING) !== 0,
       alive: (flags & ENT_ALIVE) !== 0,
+      scoped: (flags & ENT_SCOPED) !== 0,
       position,
       yaw: r.u16(),
       pitch: r.i16(),

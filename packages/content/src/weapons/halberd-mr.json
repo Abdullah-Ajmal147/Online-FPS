@@ -40,5 +40,10 @@
     "recoveryPerSecond": 9
   },
   "moveSpeedMultiplier": 0.92,
-  "adsMoveSpeedMultiplier": 0.55
+  "adsMoveSpeedMultiplier": 0.55,
+  "scope": {
+    "sway": 0.3,
+    "holdBreath": 4,
+    "recover": 2.5
+  }
 }

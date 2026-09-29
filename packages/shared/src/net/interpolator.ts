@@ -14,6 +14,8 @@ export interface EntityState {
   /** Held weapon: index in @sentinel/content weaponCatalog (255 = none). */
   weapon: number;
   shotCount: number;
+  /** Fully aimed through a scope (a glint shows on them). */
+  scoped?: boolean;
 }
 
 /** Remote players are drawn this far in the past: 2 snapshots (~66 ms), adaptive up to 100 ms. */
@@ -37,6 +39,8 @@ export interface RemotePose {
   crouching: boolean;
   alive: boolean;
   team: number;
+  /** Fully aimed through a scope (a glint shows on them). */
+  scoped?: boolean;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -111,6 +115,7 @@ function pose(a: EntityState, b: EntityState, t: number): RemotePose {
     crouching: t < 0.5 ? a.crouching : b.crouching,
     alive: b.alive,
     team: b.team,
+    scoped: b.scoped === true,
   };
 }
 

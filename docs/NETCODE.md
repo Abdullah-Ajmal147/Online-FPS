@@ -49,6 +49,15 @@ These numbers are the contract between client and server. Change them only with 
   the server's own eye position with the given angles → restore → apply damage.
 - The client plays muzzle flash, tracer and a _predicted_ hit marker; the damage
   number/kill only shows once the server confirms.
+- Scoped rifles drift (sway) while fully aimed; holding sprint holds the breath. The drift is
+  part of the weapon state (`scopeTicks`, `breathTicks`, `recoverTicks`, `swayPct`, integers on
+  the deterministic sine), so the client predicts it exactly and the server adds the same
+  offset to the shot's angles. The view shows it; the shot goes where the view points.
+- Melee (`Button.Melee`, a press) is server-only like a grenade throw: resolved against the
+  same rewound poses as a shot, reach and aim angle from `melee.json`, blocked by walls. The
+  client plays the swing at once and learns of a hit from the normal hit event.
+- Snapshots flag a remote player who is fully aimed through a scope (`scoped`), for the glint.
+  Only players already sent (ADR 0009) carry it.
 
 ## Quantization
 

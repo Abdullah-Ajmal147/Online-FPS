@@ -480,6 +480,8 @@ export class MatchSim {
         pitch: m.pitch,
         weapon: p.weaponIdx[p.sim.weapon.slot]!,
         shotCount: p.shotCount,
+        // Fully aimed through a scope: others see a glint (only while alive).
+        scoped: p.alive && scopeSwayActive(p),
       });
     }
     return {
@@ -1129,3 +1131,9 @@ function asLoadout(l: Loadout | readonly [Weapon, Weapon] | undefined): Loadout 
 }
 
 const roundTo = (v: number, step: number) => Math.round(v / step) * step;
+
+/** Aimed all the way in with a scoped rifle (the scope glints for the other players). */
+function scopeSwayActive(p: SimPlayer): boolean {
+  const spec = p.ctx.loadout[p.sim.weapon.slot];
+  return spec.scope !== null && p.sim.weapon.adsTicks === spec.adsTicks;
+}

@@ -1,6 +1,6 @@
 import type { Weapon } from '@sentinel/content';
 import { TICK_RATE } from '../constants.ts';
-import { ANGLE_STEPS } from '../detmath.ts';
+import { ANGLE_STEPS, detSinCos } from '../detmath.ts';
 import { Button, type PlayerInput } from '../input.ts';
 
 /** Degrees → 16-bit angle units (65536 per turn), the unit the simulation aims in. */
@@ -36,6 +36,8 @@ export interface WeaponSpec {
   recoilRecoveryPerTick: number;
   /** Recovery between shots of a spray (a fraction of recoilRecoveryPerTick). */
   recoilSprayRecoveryPerTick: number;
+  /** Scoped rifles: sway at its widest (angle units), breath hold and recovery in ticks. */
+  scope: { sway: number; holdTicks: number; recoverTicks: number } | null;
 }
 
 export function compileWeapon(def: Weapon): WeaponSpec {
@@ -63,6 +65,13 @@ export function compileWeapon(def: Weapon): WeaponSpec {
     recoilSprayRecoveryPerTick: toUnits(
       (def.recoil.recoveryPerSecond / TICK_RATE) * def.recoil.sprayRecovery,
     ),
+    scope: def.scope
+      ? {
+          sway: toUnits(def.scope.sway),
+          holdTicks: toTicks(def.scope.holdBreath),
+          recoverTicks: toTicks(def.scope.recover),
+        }
+      : null,
   };
 }
 
@@ -86,6 +95,13 @@ export interface WeaponState {
   recoilYaw: number;
   /** Extra spread from recent shots, angle units. */
   bloom: number;
+  /** Scoped rifles: ticks spent fully aimed (drives the sway's path; wraps at 16 bits). */
+  scopeTicks: number;
+  /** Ticks the breath has been held, and ticks of wider sway left after letting it go. */
+  breathTicks: number;
+  recoverTicks: number;
+  /** Sway size in percent (10 holding breath, 100 normal, 160 recovering), eased per tick. */
+  swayPct: number;
 }
 
 export function createWeaponState(loadout: readonly [WeaponSpec, WeaponSpec]): WeaponState {
@@ -103,7 +119,34 @@ export function createWeaponState(loadout: readonly [WeaponSpec, WeaponSpec]): W
     recoilPitch: 0,
     recoilYaw: 0,
     bloom: 0,
+    scopeTicks: 0,
+    breathTicks: 0,
+    recoverTicks: 0,
+    swayPct: 100,
   };
+}
+
+/** Sway size while holding the breath, normally, and while catching it again (percent). */
+const SWAY_HOLD = 10;
+const SWAY_NORMAL = 100;
+const SWAY_RECOVER = 160;
+/** How fast the sway size eases toward its target, percent per tick. */
+const SWAY_EASE = 6;
+
+/**
+ * Where a scoped rifle's aim has drifted to (angle units, [yaw, pitch]): a slow figure-of-eight
+ * that grows in over the first half second of aiming, scaled by the breath. Integer maths on
+ * the deterministic sine, so client and server agree. [0, 0] unless fully aimed with a scope.
+ */
+export function scopeSway(state: WeaponState, spec: WeaponSpec): [number, number] {
+  const scope = spec.scope;
+  if (!scope || state.adsTicks < spec.adsTicks) return [0, 0];
+  const settle = Math.min(30, state.scopeTicks);
+  const amp = Math.round((scope.sway * state.swayPct * settle) / (100 * 30));
+  // One loop every ~4.3 s sideways, the up-down twice as fast: a figure of eight.
+  const [sx] = detSinCos(state.scopeTicks * 256);
+  const [sy] = detSinCos(state.scopeTicks * 512 + 8192);
+  return [Math.round(amp * sx), Math.round(amp * 0.6 * sy)];
 }
 
 export interface MoveInfo {
@@ -170,6 +213,7 @@ export function stepWeapon(
   let adsTicks = prev.adsTicks;
   let shotIndex = prev.shotIndex;
   let { recoilPitch, recoilYaw, bloom } = prev;
+  let { scopeTicks, breathTicks, recoverTicks, swayPct } = prev;
 
   // --- Switch weapons (cancels a reload). ---
   if (wantedSlot !== slot) {
@@ -204,17 +248,42 @@ export function stepWeapon(
     (held & Button.Aim) !== 0 && !move.sprinting && switchTicks === 0 && reloadTicks === 0;
   adsTicks = canAds ? Math.min(spec.adsTicks, adsTicks + 1) : Math.max(0, adsTicks - 1);
 
+  // --- Scope sway and holding the breath (scoped rifles, fully aimed). Sprint = hold breath. ---
+  const scoped = spec.scope !== null && adsTicks === spec.adsTicks;
+  scopeTicks = scoped ? (scopeTicks + 1) & 0xffff : 0;
+  if (recoverTicks > 0) recoverTicks--;
+  const holding =
+    scoped &&
+    spec.scope !== null &&
+    (held & Button.Sprint) !== 0 &&
+    recoverTicks === 0 &&
+    breathTicks < spec.scope.holdTicks;
+  if (holding) {
+    breathTicks++;
+  } else if (breathTicks > 0 && spec.scope) {
+    // Let go (or ran out): catch your breath, longer after a longer hold.
+    recoverTicks = Math.ceil((spec.scope.recoverTicks * breathTicks) / spec.scope.holdTicks);
+    breathTicks = 0;
+  }
+  const swayTarget = holding ? SWAY_HOLD : recoverTicks > 0 ? SWAY_RECOVER : SWAY_NORMAL;
+  swayPct =
+    swayPct < swayTarget
+      ? Math.min(swayTarget, swayPct + SWAY_EASE)
+      : Math.max(swayTarget, swayPct - SWAY_EASE);
+
   // --- Fire. Auto: while held. Semi: once per press. ---
   const trigger =
     spec.def.fireMode === 'auto' ? (held & Button.Fire) !== 0 : (pressed & Button.Fire) !== 0;
   let shot: ShotRequest | null = null;
   const ready = cooldownTicks === 0 && reloadTicks === 0 && switchTicks === 0 && !move.sprinting;
   if (trigger && ready && mag.ammo > 0) {
-    const nextState = { ...prev, adsTicks, bloom };
+    const nextState = { ...prev, adsTicks, bloom, scopeTicks, swayPct };
+    // The shot goes where the drifting scope points (the view shows the same drift).
+    const [swayYaw, swayPitch] = scopeSway(nextState, spec);
     shot = {
       slot,
-      yaw: (input.yaw + recoilYaw) & 0xffff,
-      pitch: Math.max(-16383, Math.min(16383, input.pitch + recoilPitch)),
+      yaw: (input.yaw + recoilYaw + swayYaw) & 0xffff,
+      pitch: Math.max(-16383, Math.min(16383, input.pitch + recoilPitch + swayPitch)),
       spread: Math.min(
         currentSpread(nextState, spec, move),
         spec.spread.max + spec.spread.airborne,
@@ -254,6 +323,10 @@ export function stepWeapon(
       recoilPitch,
       recoilYaw,
       bloom,
+      scopeTicks,
+      breathTicks,
+      recoverTicks,
+      swayPct,
     },
     shot,
   };

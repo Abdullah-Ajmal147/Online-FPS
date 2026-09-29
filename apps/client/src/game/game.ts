@@ -43,6 +43,7 @@ import {
   createSimContext,
   createWeaponState,
   currentSpread,
+  scopeSway,
   directionFromAngles,
   expandMap,
   type Solid,
@@ -61,13 +62,14 @@ import { verticalFovDegrees, zoomedFovDegrees } from '../camera.ts';
 import { enterGameFullscreen, setLeaveGuard } from '../input/shortcutGuard.ts';
 import { Minimap } from './minimap.ts';
 import { Dust } from './dust.ts';
+import { Glints } from './glints.ts';
 import { viewerTeam } from './soldier/rim.ts';
 import { InputCapture } from '../input/capture.ts';
 import { buildMapMeshes, loadSurfaces, themeOf, type Surfaces, type Theme } from '../map.ts';
 import { Connection } from '../net.ts';
 import { ServerClock, inputPacing, TARGET_QUEUE_DEPTH } from '@sentinel/shared';
 import { InterpolationDelay, RemoteBuffer, type RemotePose } from '@sentinel/shared';
-import { loadoutChoice, type GraphicsPreset, type Settings } from '../settings.ts';
+import { keyLabel, loadoutChoice, type GraphicsPreset, type Settings } from '../settings.ts';
 import { ensureGuest, refreshProfile } from '../profile.ts';
 import { isMuted, rememberRecentPlayers } from '../social.ts';
 import {
@@ -236,6 +238,12 @@ export async function startGame(
   scopeEl.dataset.testid = 'scope';
   canvas.after(scopeEl); // over the 3D view, under the HUD (health, ammo stay readable)
   // Zoom level while aiming ("2×"), just under the crosshair.
+  // Hold-breath meter inside the scope view.
+  const breathEl = document.createElement('div');
+  breathEl.className = 'scope-breath';
+  breathEl.dataset.testid = 'scope-breath';
+  breathEl.append(document.createElement('span'), document.createElement('b'));
+  scopeEl.append(breathEl);
   const zoomEl = document.createElement('div');
   zoomEl.className = 'zoom-level';
   zoomEl.dataset.testid = 'zoom-level';
@@ -323,6 +331,8 @@ export async function startGame(
   const effects = new Effects(scene, GRAPHICS[settings().graphics].post);
   const grenadeView = new GrenadeView(scene);
   const dust = new Dust(scene);
+  const glints = new Glints(scene);
+  const lensAt = new THREE.Vector3();
   const pointMarkers = new PointMarkers(scene);
   const freshSim = (): SimState => {
     const spawn = map.spawns[0]!;
@@ -1398,9 +1408,17 @@ export async function startGame(
       ? (-lateral / movement.sprintSpeed) * f.strafeTilt * (Math.PI / 180)
       : 0;
     tilt += (tiltTarget - tilt) * (1 - Math.exp(-frame * 8));
+    // Scoped rifle drift (the simulation's, so the shot goes where the view shows), eased
+    // between the last two ticks like the position.
+    const swaySpec = simCtx.loadout[w.slot];
+    const [swayNowYaw, swayNowPitch] = scopeSway(w, swaySpec);
+    const [swayPrevYaw, swayPrevPitch] =
+      prevState.weapon.slot === w.slot ? scopeSway(prevState.weapon, swaySpec) : [0, 0];
+    const swayYaw = lerp(swayPrevYaw, swayNowYaw, a) * RAD_PER_UNIT;
+    const swayPitch = lerp(swayPrevPitch, swayNowPitch, a) * RAD_PER_UNIT;
     camera.rotation.set(
-      input.look.pitch + w.recoilPitch * RAD_PER_UNIT + sx,
-      input.look.yaw + w.recoilYaw * RAD_PER_UNIT + sy,
+      input.look.pitch + w.recoilPitch * RAD_PER_UNIT + sx + swayPitch,
+      input.look.yaw + w.recoilYaw * RAD_PER_UNIT + sy + swayYaw,
       shake * 0.006 * Math.sin(t * 43.9) + tilt,
     );
     // How far the view turned since the last frame (weapon sway).
@@ -1458,6 +1476,19 @@ export async function startGame(
     const scoped = marksman && ads > 0.85 && hud.alive;
     scopeEl.classList.toggle('on', scoped);
     document.body.classList.toggle('scoped', scoped);
+    if (scoped && spec.scope) {
+      // Breath left (holding) or catching it again (recovering: the bar refills, red).
+      const breath =
+        w.recoverTicks > 0
+          ? 1 - w.recoverTicks / spec.scope.recoverTicks
+          : 1 - w.breathTicks / spec.scope.holdTicks;
+      breathEl.style.setProperty('--breath', breath.toFixed(3));
+      breathEl.classList.toggle('recovering', w.recoverTicks > 0);
+      breathEl.classList.toggle('holding', w.breathTicks > 0);
+      const hint = `Hold ${keyLabel(settings().bindings.sprint)} to steady`;
+      if (breathEl.lastElementChild!.textContent !== hint)
+        breathEl.lastElementChild!.textContent = hint;
+    }
     const showZoom = hud.alive && ads > 0.5 && levels.length > 1;
     zoomEl.classList.toggle('on', showZoom);
     if (showZoom) zoomEl.textContent = `${level}×`;
@@ -1544,13 +1575,28 @@ export async function startGame(
     if (serverNow !== null && !replaying) {
       const renderTick = serverNow - interpDelay.ticks;
       remotePlayers.beginFrame();
+      glints.begin();
       for (const [id, buf] of remoteBuffers) {
         const pose = buf.sample(renderTick);
         if (!pose) continue;
         remotePoses.set(id, pose);
         remotePlayers.update(id, pose, frame);
         remoteFootsteps(id, pose, frame);
+        // Scope glint: an enemy aimed in through a scope (their lens, just ahead of the head).
+        if (
+          pose.scoped &&
+          pose.alive &&
+          pose.team !== myTeam() &&
+          remotePlayers.headOf(id, lensAt)
+        ) {
+          const cp = Math.cos(pose.pitch);
+          lensAt.x += -Math.sin(pose.yaw) * cp * 0.3;
+          lensAt.y += Math.sin(pose.pitch) * 0.3 - 0.4; // headOf is the name-tag point, above the head
+          lensAt.z += -Math.cos(pose.yaw) * cp * 0.3;
+          glints.add(pose, lensAt, camera.position, performance.now() / 1000);
+        }
       }
+      glints.end();
       grenadeView.update(renderTick, performance.now());
     }
     if (!replaying) updateAimAndTags();

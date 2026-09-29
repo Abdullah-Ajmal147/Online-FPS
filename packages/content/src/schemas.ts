@@ -256,6 +256,18 @@ export const WeaponSchema = z
     }),
     moveSpeedMultiplier: z.number().positive().max(1.5),
     adsMoveSpeedMultiplier: z.number().positive().max(1.5),
+    /**
+     * Scoped rifles: fully aimed, the view drifts (sway, degrees at its widest). Holding sprint
+     * while aimed holds your breath: nearly still for up to `holdBreath` seconds, then the
+     * sway is wider for a while (`recover` seconds after a full hold, less after a short one).
+     */
+    scope: z
+      .object({
+        sway: z.number().positive().max(3),
+        holdBreath: z.number().positive().max(4.25),
+        recover: z.number().positive().max(4.25),
+      })
+      .optional(),
   })
   .refine((w) => w.falloff.end > w.falloff.start, {
     message: 'falloff.end must be beyond falloff.start',

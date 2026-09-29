@@ -2625,3 +2625,41 @@ body.headshot-flash::after {
   flex: 1;
   padding: 4px;
 }
+
+/* Hold-breath meter under the scope reticle. */
+.scope-breath {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 22vmin);
+  min-width: 16vmin;
+  transform: translateX(-50%);
+  text-align: center;
+  white-space: nowrap;
+  font:
+    600 11px/1.4 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  color: rgb(230 237 243 / 70%);
+  text-transform: uppercase;
+}
+.scope-breath span {
+  display: block;
+  height: 3px;
+  margin-bottom: 4px;
+  background: linear-gradient(
+    90deg,
+    #e6edf3 calc(var(--breath, 1) * 100%),
+    rgb(255 255 255 / 15%) 0
+  );
+}
+.scope-breath.holding b,
+.scope-breath.recovering b {
+  visibility: hidden;
+}
+.scope-breath.recovering span {
+  background: linear-gradient(
+    90deg,
+    #ff5a4f calc(var(--breath, 1) * 100%),
+    rgb(255 255 255 / 15%) 0
+  );
+}
