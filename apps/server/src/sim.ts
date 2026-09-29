@@ -1,5 +1,7 @@
 import {
   KILL_SOURCE_FRAG,
+  KILL_SOURCE_MELEE,
+  melee,
   buildLoadout,
   defaultBuiltLoadout,
   equipment,
@@ -54,6 +56,7 @@ import {
 } from '@sentinel/shared';
 import { SNAP_DEGREES, newAimStats, type AimStats } from './anticheat.ts';
 import { Grenades, type Detonation } from './grenades.ts';
+import { meleeHit, type MeleeTarget } from './melee.ts';
 import { InputQueue, type TickInput } from './inputQueue.ts';
 
 export { MAX_HEALTH } from '@sentinel/shared';
@@ -160,6 +163,9 @@ export interface SimPlayer {
   throwArmed: boolean;
   /** No new throw before this tick (throw cooldown). */
   nextThrowTick: number;
+  /** Like throwArmed, for the melee key; and no new strike before nextMeleeTick. */
+  meleeArmed: boolean;
+  nextMeleeTick: number;
   kills: number;
   deaths: number;
   /** Kills this life (kill-streak rewards); 0 after a death. */
@@ -362,6 +368,8 @@ export class MatchSim {
       smokes: equipment.smoke.perLife,
       throwArmed: false,
       nextThrowTick: 0,
+      meleeArmed: false,
+      nextMeleeTick: 0,
       kills: 0,
       deaths: 0,
       streak: 0,
@@ -427,6 +435,7 @@ export class MatchSim {
       const r = stepSim(p.sim, input, p.ctx, p.body);
       p.sim = r.state;
       this.maybeThrow(p, before);
+      this.maybeMelee(p, before);
       if (r.shot) {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
@@ -764,6 +773,7 @@ export class MatchSim {
     p.frags = equipment.frag.perLife;
     p.smokes = equipment.smoke.perLife;
     p.throwArmed = false;
+    p.meleeArmed = false;
     // Every life starts without a streak or armor (after a death, a team switch, or the
     // countdown's respawn from warm-up into the live match).
     p.streak = 0;
@@ -853,6 +863,55 @@ export class MatchSim {
     else p.smokes--;
     p.nextThrowTick = this.tick + Math.round(def.cooldown * TICK_RATE);
     p.protectedUntil = 0; // attacking ends spawn protection
+  }
+
+  /**
+   * V pressed this tick: a melee strike at whoever is within reach in front, as the attacker
+   * saw them (lag-compensated like a shot, same rewind rules). Kills from behind; from the
+   * front it takes two. Like throwing, it doesn't lock the gun (no client prediction needed:
+   * the client plays the swing at once, the hit arrives as a normal hit event).
+   */
+  private maybeMelee(p: SimPlayer, before: SimState): void {
+    const held = p.sim.move.prevButtons;
+    if (!p.meleeArmed) {
+      if ((held & Button.Melee) === 0) p.meleeArmed = true;
+      return;
+    }
+    const pressed = held & ~before.move.prevButtons;
+    if ((pressed & Button.Melee) === 0 || this.tick < p.nextMeleeTick) return;
+    p.nextMeleeTick = this.tick + Math.round(melee.cooldown * TICK_RATE);
+    p.protectedUntil = 0; // attacking ends spawn protection
+    const rewindTick = Math.max(
+      this.tick - MAX_REWIND_TICKS,
+      this.mapChangedTick,
+      Math.min(this.tick, p.viewTick),
+    );
+    const targets: MeleeTarget[] = [];
+    for (const t of this.players.values()) {
+      if (t === p || t.team === p.team || !t.alive) continue;
+      const pose = this.poseAt(t, rewindTick);
+      if (pose?.alive)
+        targets.push({
+          id: t.id,
+          position: pose.position,
+          crouching: pose.crouching,
+          yaw: t.sim.move.yaw,
+        });
+    }
+    const eye = eyePosition(p.sim.move, this.ctx.movement);
+    const hit = meleeHit(
+      eye,
+      p.sim.move.yaw,
+      p.sim.move.pitch,
+      targets,
+      this.tuning,
+      melee,
+      (from, to) => this.clearLine(from, to),
+    );
+    const victim = hit ? this.players.get(hit.id) : undefined;
+    if (!hit || !victim) return;
+    const amount = hit.back ? melee.damageBack : melee.damageFront;
+    this.damage(victim, p, amount, 'torso', KILL_SOURCE_MELEE);
   }
 
   /**

@@ -12,6 +12,7 @@ import {
   weaponCatalog,
   buildLoadout,
   kickFor,
+  melee as meleeTuning,
   loadoutFromWire,
   loadoutToWire,
   type GameMap,
@@ -1282,6 +1283,8 @@ export async function startGame(
   let frames = 0;
   let lastSlot = 0;
   let fireWasDown = false;
+  let meleeWasDown = false;
+  let nextMeleeAt = 0;
   /** Metres walked since the last footstep (own). */
   let stride = 0;
   /** Remote players' last drawn position and distance walked, for their footsteps. */
@@ -1339,6 +1342,14 @@ export async function startGame(
       if (firing && !fireWasDown && hud.alive && !frozen && wpn.ammo[wpn.slot].ammo === 0)
         audio.dryFire();
       fireWasDown = firing;
+      // Melee (V): the swing plays at once; the server decides whether it lands (hit event).
+      const meleePressed = (sample.buttons & Button.Melee) !== 0 && !meleeWasDown;
+      meleeWasDown = (sample.buttons & Button.Melee) !== 0;
+      if (meleePressed && hud.alive && !frozen && performance.now() >= nextMeleeAt) {
+        nextMeleeAt = performance.now() + meleeTuning.cooldown * 1000;
+        viewmodel.melee();
+        audio.melee();
+      }
       if (conn.connected && spawnedFromServer) {
         conn.sendInput({ ackServerTick: latestServerTick, inputs: predictor.recentInputs() });
       }

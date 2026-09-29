@@ -13,6 +13,7 @@ export const ACTIONS = [
   'reload',
   'lethal',
   'tactical',
+  'melee',
   'primary',
   'secondary',
   'turnLeft',
@@ -31,6 +32,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   reload: 'Reload',
   lethal: 'Frag grenade',
   tactical: 'Smoke grenade',
+  melee: 'Melee strike',
   primary: 'Primary weapon',
   secondary: 'Sidearm',
   turnLeft: 'Turn left',
@@ -115,6 +117,7 @@ export const DEFAULT_SETTINGS: Settings = {
     reload: 'KeyR',
     lethal: 'KeyG',
     tactical: 'KeyQ',
+    melee: 'KeyV',
     primary: 'Digit1',
     secondary: 'Digit2',
     // Turning with keys: works when the OS switches a laptop touchpad off while keys are held.

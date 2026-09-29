@@ -557,3 +557,24 @@ export const FeelSchema = z.object({
   weaponKick: z.record(z.string(), KickSchema).default({}),
 });
 export type Feel = z.infer<typeof FeelSchema>;
+
+// ---------------------------------------------------------------------------
+// Melee: a quick strike with the weapon (V), decided on the server like a shot.
+// ---------------------------------------------------------------------------
+
+export const MeleeSchema = z
+  .object({
+    /** Kill-feed name. */
+    name: z.string().min(1),
+    /** Reach from the attacker's eyes to the target's chest, metres. */
+    range: z.number().positive().max(4),
+    /** How far off the view the target may be (degrees from the aim). */
+    angleDeg: z.number().positive().max(90),
+    /** Damage from the front, and from behind (a back strike is meant to kill outright). */
+    damageFront: z.number().int().positive().max(255),
+    damageBack: z.number().int().positive().max(255),
+    /** Seconds between strikes. */
+    cooldown: z.number().positive().max(5),
+  })
+  .refine((m) => m.damageBack >= m.damageFront, { message: 'damageBack must be >= damageFront' });
+export type Melee = z.infer<typeof MeleeSchema>;

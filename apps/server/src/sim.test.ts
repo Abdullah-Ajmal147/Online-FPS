@@ -4,6 +4,8 @@ import {
   maps,
   movement,
   KILL_SOURCE_FRAG,
+  KILL_SOURCE_MELEE,
+  melee,
   equipment,
   buildLoadout,
   resolveLoadout,
@@ -1057,5 +1059,83 @@ describe('switchTeam (private matches)', () => {
     expect(
       spawn.some((s) => Math.hypot(s.position[0] - pos[0], s.position[2] - pos[2]) < 1.5),
     ).toBe(true);
+  });
+});
+
+describe('MatchSim: melee', () => {
+  const HALF_TURN = 32768;
+  function strike(sim: MatchSim, p: SimPlayer) {
+    feed(sim, p, 1, 0);
+    feed(sim, p, 1, Button.Melee);
+    feed(sim, p, 1, 0);
+  }
+
+  it('from behind kills in one strike, credited as a melee kill', () => {
+    const sim = newSim(arena);
+    const attacker = sim.addPlayer({ team: 0 });
+    const victim = sim.addPlayer({ team: 1 });
+    place(attacker, [0, 0, 1.2]);
+    place(victim, [0, 0, 0]); // both face -Z: the victim has their back to us
+    feed(sim, attacker, 3, 0);
+    let kill: unknown;
+    feed(sim, attacker, 1, Button.Melee);
+    for (let i = 0; i < 2; i++) {
+      feed(sim, attacker, 1, 0);
+      for (const e of sim.events) if (e.event.type === 'kill') kill = e.event;
+    }
+    expect(victim.alive).toBe(false);
+    expect(kill).toMatchObject({ killer: attacker.id, weapon: KILL_SOURCE_MELEE });
+  });
+
+  it('from the front takes two strikes, with a cooldown between them', () => {
+    const sim = newSim(arena);
+    const attacker = sim.addPlayer({ team: 0 });
+    const victim = sim.addPlayer({ team: 1 });
+    place(attacker, [0, 0, 1.2]);
+    place(victim, [0, 0, 0]);
+    victim.sim.move.yaw = HALF_TURN; // facing us
+    feed(sim, attacker, 3, 0);
+    strike(sim, attacker);
+    expect(victim.health).toBe(MAX_HEALTH - melee.damageFront);
+    strike(sim, attacker); // inside the cooldown: nothing
+    expect(victim.health).toBe(MAX_HEALTH - melee.damageFront);
+    feed(sim, attacker, Math.round(melee.cooldown * 60), 0);
+    strike(sim, attacker);
+    expect(victim.alive).toBe(false);
+  });
+
+  it('misses out of reach, off to the side, teammates, and through walls', () => {
+    const sim = newSim(arena);
+    const attacker = sim.addPlayer({ team: 0 });
+    const far = sim.addPlayer({ team: 1 });
+    const side = sim.addPlayer({ team: 1 });
+    const mate = sim.addPlayer({ team: 0 });
+    place(attacker, [0, 0, 1.2]);
+    place(far, [0, 0, -2.5]);
+    place(side, [1.6, 0, 1.2]);
+    place(mate, [0, 0, 0]);
+    feed(sim, attacker, 3, 0);
+    strike(sim, attacker);
+    expect([far.health, side.health, mate.health]).toEqual([MAX_HEALTH, MAX_HEALTH, MAX_HEALTH]);
+
+    // The arena's cover wall spans x −2..2 at z = −20 (1 m thick): strike through it.
+    const walled = newSim(arena);
+    const a = walled.addPlayer({ team: 0 });
+    const v = walled.addPlayer({ team: 1 });
+    place(a, [0, 0, -19.1]);
+    place(v, [0, 0, -20.9]); // 1.8 m apart: in reach, but the wall is between
+    feed(walled, a, 3, 0);
+    strike(walled, a);
+    expect(v.health).toBe(MAX_HEALTH);
+  });
+
+  it('V held through a respawn does not strike until released and pressed again', () => {
+    const sim = newSim(arena);
+    const attacker = sim.addPlayer({ team: 0 });
+    const victim = sim.addPlayer({ team: 1 });
+    place(attacker, [0, 0, 1.2]);
+    place(victim, [0, 0, 0]);
+    feed(sim, attacker, 10, Button.Melee);
+    expect(victim.health).toBe(MAX_HEALTH);
   });
 });

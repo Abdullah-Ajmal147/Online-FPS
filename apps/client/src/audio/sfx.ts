@@ -415,6 +415,28 @@ export class GameAudio {
     this.mech(out, t + seconds * 0.88, 2600, 0.2);
   }
 
+  /** Melee strike: a quick swish of air and cloth. */
+  melee(): void {
+    const ctx = this.ctx;
+    const out = this.output(undefined, 1, 0.04);
+    if (!ctx || !out || !this.noise) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 1.4;
+    f.frequency.setValueAtTime(500, t);
+    f.frequency.exponentialRampToValueAtTime(2600, t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.32, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    src.connect(f).connect(g).connect(out);
+    src.start(t, Math.random() * 0.5);
+    src.stop(t + 0.22);
+  }
+
   /** Weapon switch: cloth rustle and a click. */
   click(): void {
     const out = this.output(undefined, 1, 0.03);

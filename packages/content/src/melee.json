@@ -1,0 +1,8 @@
+{
+  "name": "Melee",
+  "range": 1.9,
+  "angleDeg": 40,
+  "damageFront": 55,
+  "damageBack": 100,
+  "cooldown": 0.8
+}

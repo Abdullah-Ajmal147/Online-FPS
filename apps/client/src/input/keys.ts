@@ -13,6 +13,7 @@ const ACTION_BUTTON: Partial<Record<Action, number>> = {
   reload: Button.Reload,
   lethal: Button.Lethal,
   tactical: Button.Tactical,
+  melee: Button.Melee,
 };
 
 /**

@@ -4,6 +4,8 @@ import {
   NewsSchema,
   EquipmentSchema,
   FeelSchema,
+  MeleeSchema,
+  type Melee,
   type Feel,
   PerkSchema,
   StreakRewardSchema,
@@ -37,6 +39,7 @@ import fragJson from './equipment/frag.json' with { type: 'json' };
 import smokeJson from './equipment/smoke.json' with { type: 'json' };
 import streaksJson from './streaks.json' with { type: 'json' };
 import feelJson from './feel.json' with { type: 'json' };
+import meleeJson from './melee.json' with { type: 'json' };
 import { challengeData } from './challenges.ts';
 import { hasAttachment, hasPerk, hasWeapon, progression, type Access } from './progression.ts';
 import { weaponFiles } from './weapons/catalog.gen.ts';
@@ -117,10 +120,16 @@ export const equipment = {
  * 255 = no weapon (a fall).
  */
 export const KILL_SOURCE_FRAG = 200;
+/** Kill source code of a melee strike. */
+export const KILL_SOURCE_MELEE = 201;
+
+/** Melee strike tuning (V). */
+export const melee: Melee = MeleeSchema.parse(meleeJson);
 
 /** Name to show in the kill feed for a kill source code. */
 export function killSourceName(code: number): string {
   if (code === KILL_SOURCE_FRAG) return equipment.frag.name;
+  if (code === KILL_SOURCE_MELEE) return melee.name;
   return weaponCatalog[code]?.name ?? '';
 }
 
@@ -334,6 +343,7 @@ export const CONTENT_HASH: string = (() => {
     attachmentCatalog,
     perkCatalog,
     streakRewards,
+    melee,
   ]);
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {

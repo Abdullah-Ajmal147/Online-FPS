@@ -10,6 +10,9 @@ import { HOLDS, modelFor, WEAPON_MODEL_IDS, type WeaponModelId } from './soldier
  * aiming, dips during reload and drops out/in on weapon switch. Drawn with the real weapon models
  * held by the player's own gloved arms once those load (soldier/), before that as simple shapes.
  */
+/** Length of the melee strike animation, seconds. */
+const MELEE_SECONDS = 0.35;
+
 export class Viewmodel {
   readonly root = new THREE.Group();
   /** One model per weapon class; the loadout picks which two are used. */
@@ -136,6 +139,12 @@ export class Viewmodel {
     this.flash.visible = true;
   }
 
+  /** A melee strike: the gun is driven forward and across (0.35 s). */
+  melee(): void {
+    this.meleeLeft = MELEE_SECONDS;
+  }
+  private meleeLeft = 0;
+
   /** World position of the muzzle (for tracers). */
   muzzleWorld(slot: number, out: THREE.Vector3): THREE.Vector3 {
     const gun = this.guns[slot]!;
@@ -174,6 +183,11 @@ export class Viewmodel {
     this.flashLeft -= frame;
     if (this.flash.visible && this.flashLeft <= 0) this.flash.visible = false;
     const k5 = this.kick.offset; // back, up, pitch, yaw, roll
+    this.meleeLeft = Math.max(0, this.meleeLeft - frame);
+    // Strike curve: a fast drive out, a slower pull back (0 → 1 → 0).
+    const mt = 1 - this.meleeLeft / MELEE_SECONDS;
+    const strike = this.meleeLeft > 0 ? (mt < 0.35 ? mt / 0.35 : (1 - mt) / 0.65) : 0;
+    const bash = strike * strike * (3 - 2 * strike);
     if (o.grounded && o.speed > 0.5) this.bobPhase += frame * o.speed * 1.6;
     const bob = (1 - o.ads) * Math.min(1, o.speed / 5) * o.gunBob;
     // Sway: the weapon trails fast turns a little (weight), much less when aiming.
@@ -196,13 +210,14 @@ export class Viewmodel {
         Math.abs(Math.cos(this.bobPhase)) * 0.01 * bob -
         o.reloading * 0.12 -
         o.switching * 0.25 +
-        k5[1]!,
-      -0.32 + k5[0]!,
+        k5[1]! +
+        bash * 0.05,
+      -0.32 + k5[0]! - bash * 0.16,
     );
     this.root.rotation.set(
-      k5[2]! - o.reloading * 0.6 - this.swayPitch,
-      k5[3]! - this.swayYaw,
-      k5[4]! + o.reloading * 0.3 + this.swayYaw * 0.6,
+      k5[2]! - o.reloading * 0.6 - this.swayPitch - bash * 0.25,
+      k5[3]! - this.swayYaw + bash * 0.55,
+      k5[4]! + o.reloading * 0.3 + this.swayYaw * 0.6 + bash * 0.5,
     );
     const gun = this.guns[o.slot]!;
     this.flash.position.set(

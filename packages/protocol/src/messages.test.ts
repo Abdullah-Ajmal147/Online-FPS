@@ -85,8 +85,8 @@ const entity = (id: number, position: Vec3): EntityState => ({
 });
 
 describe('protocol version', () => {
-  it('is 17 (map vote: MatchInfo.vote and VoteMap)', () => {
-    expect(PROTOCOL_VERSION).toBe(17);
+  it('is 18 (melee: Button.Melee in InputCmd)', () => {
+    expect(PROTOCOL_VERSION).toBe(18);
   });
 });
 
