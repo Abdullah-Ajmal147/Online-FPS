@@ -57,6 +57,32 @@ function proneHitboxes(x: number, y: number, z: number, yaw: number): Capsule[] 
   ];
 }
 
+/**
+ * Points on a player's body to test lines of sight against (visibility, smoke, blasts): head
+ * and chest when upright; lying down, the head, torso and legs where the prone hitboxes are.
+ * The torso/chest point is always second.
+ */
+export function sightPoints(
+  feet: Vec3,
+  crouching: boolean,
+  prone: boolean,
+  yaw: number,
+  tuning: Movement,
+): Vec3[] {
+  const [x, y0, z] = feet;
+  const y = y0 + SKIN;
+  if (prone) {
+    const [s, c] = detSinCos(yaw);
+    const at = (along: number, up: number): Vec3 => [x - s * along, y + up, z - c * along];
+    return [at(0.75, 0.28), at(0.18, 0.22), at(-0.6, 0.12)];
+  }
+  const h = crouching ? tuning.crouchHeight : tuning.standingHeight;
+  return [
+    [x, y + h * 0.9, z],
+    [x, y + h * 0.55, z],
+  ];
+}
+
 /** Distance along a unit ray to the first hit on a capsule, or null. */
 export function rayCapsule(origin: Vec3, dir: Vec3, c: Capsule, maxDist: number): number | null {
   // Closest approach between the ray and the capsule's segment, then a sphere test there.

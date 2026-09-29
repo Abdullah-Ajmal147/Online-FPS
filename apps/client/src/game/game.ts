@@ -48,6 +48,7 @@ import {
   expandMap,
   type Solid,
   eyePosition,
+  eyeHeight as eyeHeightOf,
   initPhysics,
   rayPlayer,
   yawFromDegrees,
@@ -1367,7 +1368,14 @@ export async function startGame(
       // Melee (V): the swing plays at once; the server decides whether it lands (hit event).
       const meleePressed = (sample.buttons & Button.Melee) !== 0 && !meleeWasDown;
       meleeWasDown = (sample.buttons & Button.Melee) !== 0;
-      if (meleePressed && hud.alive && !frozen && performance.now() >= nextMeleeAt) {
+      // (The server refuses a strike in the same moment as a shot: mirror that here.)
+      if (
+        meleePressed &&
+        hud.alive &&
+        !frozen &&
+        performance.now() >= nextMeleeAt &&
+        predictor.state.weapon.cooldownTicks === 0
+      ) {
         nextMeleeAt = performance.now() + meleeTuning.cooldown * 1000;
         viewmodel.melee();
         audio.melee();
@@ -1704,7 +1712,7 @@ export async function startGame(
 }
 
 function eyeHeightFor(crouching: boolean, prone = false): number {
-  return SKIN + capsuleHeight(movement, crouching, prone) - movement.eyeOffset;
+  return eyeHeightOf(movement, crouching, prone);
 }
 
 function lerp(a: number, b: number, t: number): number {

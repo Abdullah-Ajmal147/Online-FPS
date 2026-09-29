@@ -52,7 +52,9 @@ These numbers are the contract between client and server. Change them only with 
 - Scoped rifles drift (sway) while fully aimed; holding sprint holds the breath. The drift is
   part of the weapon state (`scopeTicks`, `breathTicks`, `recoverTicks`, `swayPct`, integers on
   the deterministic sine), so the client predicts it exactly and the server adds the same
-  offset to the shot's angles. The view shows it; the shot goes where the view points.
+  offset to the shot's angles. The view shows it; the shot goes where the view points. Like recoil, a
+  modified client could counter the drift exactly (it knows the state); the aim-stat checks
+  (anticheat.ts) are the answer to that, not hiding the state.
 - Melee (`Button.Melee`, a press) is server-only like a grenade throw: resolved against the
   same rewound poses as a shot, reach and aim angle from `melee.json`, blocked by walls. The
   client plays the swing at once and learns of a hit from the normal hit event.
@@ -60,7 +62,12 @@ These numbers are the contract between client and server. Change them only with 
   Only players already sent (ADR 0009) carry it.
 - Prone (`Button.Prone`, a press) is movement like crouch: in `PlayerState.prone`, predicted
   and reconciled. Prone hitboxes lie along the facing (head in front); the lag-compensation
-  history keeps `prone` and `yaw` per tick so a rewound shot tests the pose the shooter saw.
+  history keeps `prone` and `yaw` per tick so a rewound shot tests the pose the shooter saw. The
+  prone eye sits at the prone head's height (never above the hitboxes: no shooting over low
+  cover untouchable); a prone hit only counts if the body's middle has a clear line to the hit
+  point (legs through a thin wall can't be shot); visibility and smoke checks use the prone
+  head, torso and legs. Melee strikes are queued and resolved after the tick's movement, like
+  shots, and refused in the same moment as a shot.
 
 ## Quantization
 

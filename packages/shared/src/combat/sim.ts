@@ -1,4 +1,4 @@
-import type { Weapon } from '@sentinel/content';
+import type { Movement, Weapon } from '@sentinel/content';
 import { Button, sanitizeInput, type PlayerInput } from '../input.ts';
 import type { Vec3 } from '../map/solids.ts';
 import { SKIN, capsuleHeight, type MovementContext, type PlayerBody } from '../movement/context.ts';
@@ -31,10 +31,20 @@ export function createSimContext(
   return { movement, loadout: [compileWeapon(loadout[0]), compileWeapon(loadout[1])] };
 }
 
+/**
+ * Eye height above the feet. Lying down it is at the prone head's height (movement.json
+ * proneEyeHeight), never above the prone hitboxes: an eye that clears low cover the body
+ * can't be hit behind would let a prone player shoot over it untouchable.
+ */
+export function eyeHeight(tuning: Movement, crouching: boolean, prone = false): number {
+  if (prone) return SKIN + tuning.proneEyeHeight;
+  return SKIN + capsuleHeight(tuning, crouching) - tuning.eyeOffset;
+}
+
 /** Where the eyes are (shots start here). */
 export function eyePosition(move: PlayerState, ctx: MovementContext): Vec3 {
   const t = ctx.tuning;
-  const y = move.position[1] + SKIN + capsuleHeight(t, move.crouching, move.prone) - t.eyeOffset;
+  const y = move.position[1] + eyeHeight(t, move.crouching, move.prone);
   return [move.position[0], y, move.position[2]];
 }
 

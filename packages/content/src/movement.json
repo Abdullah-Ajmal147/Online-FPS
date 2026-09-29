@@ -24,6 +24,7 @@
   "standingHeight": 1.8,
   "crouchHeight": 1.2,
   "proneHeight": 0.72,
+  "proneEyeHeight": 0.3,
   "proneSpeed": 1.1,
   "proneSpread": 0.5,
   "proneRecoil": 0.6,

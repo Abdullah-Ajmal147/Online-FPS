@@ -295,7 +295,7 @@ const clampI16 = (v: number) => Math.max(-0x8000, Math.min(0x7fff, v));
 
 /**
  * Layout: serverTick u32, lastProcessedSeq u32, inputQueueDepth u8, serverTickMicros u16,
- * hasOwn u8, [own: move 35 + weapon 23 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 62–68 bytes], entityCount u8,
+ * hasOwn u8, [own: move 35 + weapon 23 + loadout 4–10 + health/lifeId/respawn 3 + grenades 2 = 67–73 bytes], entityCount u8,
  * entities × 15 bytes (id, team, flags, x/y/z i16 at 1/64 m, yaw u16, pitch i16, weapon, shots).
  * then projectileCount u8, projectiles × 8 bytes (id, kind|cloud, x/y/z i16).
  * Full snapshots, no delta compression (ADR 0004); 12 players stay under 10 KB/s.

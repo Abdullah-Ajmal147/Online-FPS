@@ -174,6 +174,8 @@ export const MovementSchema = z
      * steadier the weapon is (spread and recoil multipliers).
      */
     proneHeight: z.number().positive(),
+    /** Prone eye above the feet: at the prone head, below the top of the prone hitboxes. */
+    proneEyeHeight: z.number().positive().max(0.44),
     proneSpeed: z.number().positive(),
     proneSpread: z.number().min(0.1).max(1),
     proneRecoil: z.number().min(0.1).max(1),

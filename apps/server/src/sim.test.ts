@@ -1139,3 +1139,122 @@ describe('MatchSim: melee', () => {
     expect(victim.health).toBe(MAX_HEALTH);
   });
 });
+
+describe('MatchSim: prone', () => {
+  const HALF_TURN = 32768;
+  const lie = (sim: MatchSim, p: SimPlayer, yaw = 0) => {
+    feed(sim, p, 1, 0, { yaw });
+    feed(sim, p, 1, Button.Prone, { yaw });
+    feed(sim, p, 2, 0, { yaw });
+    expect(p.sim.move.prone).toBe(true);
+  };
+
+  it('behind low cover a prone player can neither shoot over it nor be shot', () => {
+    // A 0.5 m high wall between them: above the prone hitboxes' top (0.44 m).
+    const low: GameMap = {
+      ...arena,
+      geometry: [
+        ...arena.geometry,
+        { kind: 'box', center: [0, 0.25, 5], size: [6, 0.5, 0.4], yawDeg: 0, material: 'prop' },
+      ],
+    };
+    const sim = newSim(low);
+    const prone = sim.addPlayer({ team: 0 });
+    const enemy = sim.addPlayer({ team: 1 });
+    place(prone, [0, 0, 6.5]);
+    place(enemy, [0, 0, -10]);
+    lie(sim, prone);
+    const eye = 0.02 + movement.proneEyeHeight;
+    // Prone shooter aims at the enemy's chest: the wall stops it.
+    const up = aimPitch(eye, 1.1, 16.5);
+    const out = feed(sim, prone, 2, Button.Fire, { pitch: up });
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((r) => r.hit === null)).toBe(true);
+    expect(enemy.health).toBe(MAX_HEALTH);
+    // The enemy aims down at the prone head (0.75 m in front of the feet): the wall stops it.
+    const shots = feed(sim, enemy, 2, Button.Fire, {
+      yaw: HALF_TURN,
+      pitch: aimPitch(1.67, 0.3, 15.75),
+    });
+    expect(shots.length).toBeGreaterThan(0);
+    expect(shots.every((r) => r.hit === null)).toBe(true);
+    expect(prone.health).toBe(MAX_HEALTH);
+  });
+
+  it('a lag-compensated shot hits the prone pose: the head lies in front of the feet', () => {
+    const sim = newSim(arena);
+    const shooter = sim.addPlayer({ team: 0 });
+    const target = sim.addPlayer({ team: 1 });
+    place(shooter, [0, 0, 12]);
+    place(target, [0, 0, 0]);
+    lie(sim, target, HALF_TURN); // facing +Z, toward the shooter: head at z = +0.75
+    const pitch = aimPitch(1.67, 0.3, 11.25);
+    aimIn(sim, shooter, pitch);
+    const shots = feed(sim, shooter, 2, AIM_FIRE, { pitch });
+    expect(shots.some((r) => r.hit?.zone === 'head')).toBe(true);
+  });
+
+  it("legs poking through a thin wall can't be hit from the other side", () => {
+    const thin: GameMap = {
+      ...arena,
+      geometry: [
+        ...arena.geometry,
+        { kind: 'box', center: [0, 1.5, 0], size: [6, 3, 0.2], yawDeg: 0, material: 'wall' },
+      ],
+    };
+    const sim = newSim(thin);
+    const shooter = sim.addPlayer({ team: 0 });
+    const target = sim.addPlayer({ team: 1 });
+    place(target, [0, 0, -0.6]); // lying facing -Z, legs reach back through the wall to +0.3
+    lie(sim, target);
+    place(shooter, [0, 0, 1.5]);
+    shooter.sim.move.yaw = 0;
+    feed(sim, shooter, 5, 0);
+    // Aim down at the leg end sticking out on this side (z ≈ +0.25, y ≈ 0.13).
+    const shots = feed(sim, shooter, 2, Button.Fire, { pitch: aimPitch(1.67, 0.13, 1.25) });
+    expect(shots.length).toBeGreaterThan(0);
+    expect(target.health).toBe(MAX_HEALTH);
+    expect(shots.every((r) => r.hit === null)).toBe(true);
+  });
+});
+
+describe('MatchSim: melee trades', () => {
+  it('a strike and a shot on the same tick both land, whoever joined first', () => {
+    for (const shooterFirst of [true, false]) {
+      const sim = newSim(arena);
+      const a = shooterFirst ? sim.addPlayer({ team: 1 }) : sim.addPlayer({ team: 0 });
+      const b = shooterFirst ? sim.addPlayer({ team: 0 }) : sim.addPlayer({ team: 1 });
+      const striker = shooterFirst ? b : a;
+      const shooter = shooterFirst ? a : b;
+      place(striker, [0, 0, 1.2]);
+      place(shooter, [0, 0, 0]);
+      shooter.sim.move.yaw = 0;
+      // Both inputs land on the same server tick: feed both queues in step.
+      const push = (p: SimPlayer, buttons: number, yaw = 0, pitch = 0) =>
+        p.queue.push({
+          seq: p.queue.lastProcessedSeq + p.queue.depth + 1,
+          buttons,
+          yaw,
+          pitch,
+          weaponSlot: 0,
+          viewTick: sim.tick,
+        });
+      const shooterYaw = 32768; // turned round toward the striker
+      for (let i = 0; i < 4; i++) {
+        push(striker, 0);
+        push(shooter, 0, shooterYaw);
+        sim.step();
+      }
+      push(striker, Button.Melee);
+      push(shooter, Button.Fire, shooterYaw, aimPitch(1.67, 1.1, 1.2));
+      sim.step();
+      push(striker, 0);
+      push(shooter, 0, shooterYaw);
+      sim.step();
+      sim.step();
+      // Facing each other: the strike's front damage and the shot both land.
+      expect(shooter.health).toBe(MAX_HEALTH - melee.damageFront);
+      expect(striker.health).toBeLessThan(MAX_HEALTH);
+    }
+  });
+});

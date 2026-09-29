@@ -31,7 +31,7 @@ import {
   buildWorld,
   createMovementContext,
   createPlayerBody,
-  capsuleHeight,
+  sightPoints,
   createPlayerState,
   createRng,
   compileWeapon,
@@ -424,6 +424,7 @@ export class MatchSim {
     this.events = [];
     this.lastShots = [];
     const shots: { shooter: SimPlayer; shot: ShotRequest; viewTick: number }[] = [];
+    const strikes: { attacker: SimPlayer; viewTick: number }[] = [];
 
     for (const p of this.players.values()) {
       // Always consumed, even while dead or frozen, so seqs keep flowing.
@@ -438,7 +439,7 @@ export class MatchSim {
       const r = stepSim(p.sim, input, p.ctx, p.body);
       p.sim = r.state;
       this.maybeThrow(p, before);
-      this.maybeMelee(p, before);
+      if (this.meleePressed(p, before)) strikes.push({ attacker: p, viewTick: p.viewTick });
       if (r.shot) {
         p.protectedUntil = 0; // firing ends spawn protection
         p.shotCount = (p.shotCount + 1) & 0xff;
@@ -454,6 +455,9 @@ export class MatchSim {
     // Every shot fired this tick counts, even if its shooter was killed by an earlier shot in
     // this same loop: both players pulled the trigger while alive (fair trades, not join order).
     for (const s of shots) this.resolveShot(s.shooter, s.shot, s.viewTick);
+    // Melee strikes, like shots, are resolved after everyone moved: a strike and a shot on the
+    // same tick both land (not whoever joined first).
+    for (const s of strikes) this.resolveMelee(s.attacker, s.viewTick);
     if (!this.frozen) for (const d of this.grenades.step()) this.detonate(d);
     this.updateLife();
     this.lastTickMicros = (performance.now() - start) * 1000;
@@ -600,6 +604,10 @@ export class MatchSim {
           maxDist,
           t.prone ? t.yaw : undefined,
         );
+        // Lying down, the body reaches ~1 m from the feet point and can poke through a thin
+        // wall: a hit only counts if the body's middle can see the spot that was hit.
+        if (hit && t.prone && !this.proneHitReachable(t.position, origin, dir, hit.distance))
+          continue;
         if (hit && (!best || hit.distance < best.distance)) best = { victim: t.victim, ...hit };
       }
 
@@ -892,20 +900,28 @@ export class MatchSim {
    * front it takes two. Like throwing, it doesn't lock the gun (no client prediction needed:
    * the client plays the swing at once, the hit arrives as a normal hit event).
    */
-  private maybeMelee(p: SimPlayer, before: SimState): void {
+  private meleePressed(p: SimPlayer, before: SimState): boolean {
     const held = p.sim.move.prevButtons;
     if (!p.meleeArmed) {
       if ((held & Button.Melee) === 0) p.meleeArmed = true;
-      return;
+      return false;
     }
     const pressed = held & ~before.move.prevButtons;
-    if ((pressed & Button.Melee) === 0 || this.tick < p.nextMeleeTick) return;
+    if ((pressed & Button.Melee) === 0 || this.tick < p.nextMeleeTick) return false;
+    // Not in the same moment as a shot (a shot and a strike together would stack their damage).
+    if (before.weapon.cooldownTicks > 0 || p.sim.weapon.cooldownTicks > 0) return false;
     p.nextMeleeTick = this.tick + Math.round(melee.cooldown * TICK_RATE);
     p.protectedUntil = 0; // attacking ends spawn protection
+    return true;
+  }
+
+  /** A strike queued this tick, resolved after the tick's movement (see step). */
+  private resolveMelee(p: SimPlayer, viewTick: number): void {
+    if (!p.alive) return; // killed by a shot resolved earlier this same tick: no strike
     const rewindTick = Math.max(
       this.tick - MAX_REWIND_TICKS,
       this.mapChangedTick,
-      Math.min(this.tick, p.viewTick),
+      Math.min(this.tick, viewTick),
     );
     const targets: MeleeTarget[] = [];
     for (const t of this.players.values()) {
@@ -964,11 +980,7 @@ export class MatchSim {
       const self = p === owner;
       if (!self && p.team === owner.team) continue;
       const m = p.sim.move;
-      const chest: Vec3 = [
-        m.position[0],
-        m.position[1] + capsuleHeight(this.tuning, m.crouching, m.prone) * 0.6,
-        m.position[2],
-      ];
+      const chest = sightPoints(m.position, m.crouching, m.prone, m.yaw, this.tuning)[1]!;
       const dist = Math.hypot(chest[0] - at[0], chest[1] - at[1], chest[2] - at[2]);
       if (dist > blast.outerRadius || !this.clearLine(at, chest)) continue;
       const t = Math.max(0, (dist - blast.innerRadius) / (blast.outerRadius - blast.innerRadius));
@@ -1002,11 +1014,10 @@ export class MatchSim {
       (this.tick - p.lastShotTick < PVS_SHOT_HEARD_TICKS && dist < PVS_SHOT_HEARD_METRES);
     let visible = heard;
     if (!visible) {
-      const h = capsuleHeight(this.tuning, m.crouching, m.prone);
       const v = m.velocity;
       const vv = viewer.sim.move.velocity;
-      const head: Vec3 = [m.position[0], m.position[1] + h * 0.9, m.position[2]];
-      const chest: Vec3 = [m.position[0], m.position[1] + h * 0.55, m.position[2]];
+      const points = sightPoints(m.position, m.crouching, m.prone, m.yaw, this.tuning);
+      const chest = points[1]!;
       const ahead: Vec3 = [
         chest[0] + v[0] * PVS_LEAD_S,
         chest[1] + v[1] * PVS_LEAD_S,
@@ -1018,8 +1029,7 @@ export class MatchSim {
         eye[2] + vv[2] * PVS_LEAD_S,
       ];
       visible =
-        this.clearLine(eye, head) ||
-        this.clearLine(eye, chest) ||
+        points.some((pt) => this.clearLine(eye, pt)) ||
         this.clearLine(eye, ahead) ||
         this.clearLine(eyeAhead, chest);
     }
@@ -1035,10 +1045,16 @@ export class MatchSim {
   private hiddenBySmoke(eye: Vec3, p: SimPlayer): boolean {
     if (!this.grenades.hasClouds) return false;
     const m = p.sim.move;
-    const h = capsuleHeight(this.tuning, m.crouching, m.prone);
-    const head: Vec3 = [m.position[0], m.position[1] + h * 0.9, m.position[2]];
-    const chest: Vec3 = [m.position[0], m.position[1] + h * 0.6, m.position[2]];
-    return this.grenades.smokeBlocks(eye, head) && this.grenades.smokeBlocks(eye, chest);
+    const points = sightPoints(m.position, m.crouching, m.prone, m.yaw, this.tuning);
+    return points.every((pt) => this.grenades.smokeBlocks(eye, pt));
+  }
+
+  private proneHitReachable(feet: Vec3, origin: Vec3, dir: Vec3, distance: number): boolean {
+    const mid: Vec3 = [feet[0], feet[1] + 0.3, feet[2]];
+    // Stop just short of the hit point (on the shooter's side of the body).
+    const d = Math.max(0, distance - 0.05);
+    const at: Vec3 = [origin[0] + dir[0] * d, origin[1] + dir[1] * d, origin[2] + dir[2] * d];
+    return this.clearLine(mid, at);
   }
 
   /** Map-only line check (smoke doesn't stop a blast). */

@@ -55,12 +55,17 @@ function run(opts: {
   loadout?: Partial<LoadoutChoice>;
   /** Hold the trigger every other stretch of 20 ticks (weapon state must match too). */
   fire?: boolean;
+  /** Extra buttons per tick on top of the recording. */
+  extraButtons?: (t: number) => number;
 }) {
-  const inputs = opts.fire
+  const fired = opts.fire
     ? INPUTS.map((i, t) =>
         Math.floor(t / 20) % 2 ? { ...i, buttons: i.buttons | Button.Fire } : i,
       )
     : INPUTS;
+  const inputs = opts.extraButtons
+    ? fired.map((i, t) => ({ ...i, buttons: i.buttons | opts.extraButtons!(t) }))
+    : fired;
   const built = opts.loadout ? buildLoadout(opts.loadout) : null;
   const random = createRng(opts.seed);
   const server = new MatchSim(rapier, maps.greybox!, movement, defaultLoadout);
@@ -191,6 +196,22 @@ describe('replay: 1,000 recorded inputs through client predictor and server simu
         attachments: ['light-stock', 'extended-mag', 'compensator'],
         perks: ['light-step', 'quick-hands', 'steady-hands'],
       },
+    });
+    expect(r.correctionsDuringInputs).toBe(0);
+    expect(r.client).toEqual(r.server);
+  });
+
+  it('matches exactly going prone and holding the breath through a scope', () => {
+    const r = run({
+      inputLoss: 0,
+      snapshotLoss: 0,
+      seed: 4,
+      fire: true,
+      loadout: { primary: 'halberd-mr' },
+      extraButtons: (t) =>
+        (t === 100 || t === 101 || t === 600 ? Button.Prone : 0) |
+        (t >= 200 && t < 700 ? Button.Aim : 0) |
+        (t >= 300 && t < 620 ? Button.Sprint : 0),
     });
     expect(r.correctionsDuringInputs).toBe(0);
     expect(r.client).toEqual(r.server);

@@ -178,6 +178,23 @@ describe('Snapshot', () => {
     expect(decodeSnapshot(encodeSnapshot(snap)).own).toEqual(own);
   });
 
+  it('round-trips the scoped and prone entity flags independently', () => {
+    for (const [scoped, prone] of [
+      [true, false],
+      [false, true],
+      [true, true],
+    ] as const) {
+      const e = { ...entity(2, [0, 0, 0]), alive: true, scoped, prone };
+      const back = decodeSnapshot(encodeSnapshot({ ...snap, entities: [e] })).entities[0]!;
+      expect(back).toMatchObject({ scoped, prone, alive: true, crouching: e.crouching });
+    }
+    const proneOwn = {
+      ...own,
+      sim: { ...own.sim, move: { ...own.sim.move, crouching: false, prone: true } },
+    };
+    expect(decodeSnapshot(encodeSnapshot({ ...snap, own: proneOwn })).own).toEqual(proneOwn);
+  });
+
   it('round-trips entities, positions within 1/128 m', () => {
     const back = decodeSnapshot(
       encodeSnapshot({ ...snap, entities: [entity(3, [0.123, 1.777, -9.99])] }),
